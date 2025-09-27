@@ -1,0 +1,15 @@
+# Kahoot Quiz Server - Python Requirements
+
+Flask==2.3.3
+Flask-CORS==4.0.0
+Werkzeug==2.3.7
+
+# Optional for production deployment
+gunicorn==21.2.0
+
+# Optional for enhanced features
+python-dotenv==1.0.0
+
+# WebSocket support
+flask-socketio==5.3.0
+

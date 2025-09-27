@@ -1,0 +1,39 @@
+# Kahoot Project .gitignore
+
+# Node modules (Add-in)
+add-in/node_modules/
+add-in/npm-debug.log*
+add-in/yarn-debug.log*
+add-in/yarn-error.log*
+
+# Office Add-in certificates
+add-in/certs/
+
+# Python virtual environment
+srv/venv/
+venv/
+
+# Server data and logs
+srv/data/
+srv/logs/
+*.log
+
+# Development files
+.env
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+*.tmp
+*.temp

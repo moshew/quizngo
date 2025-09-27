@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kahoot Quiz Manager</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    
+    <!-- Socket.IO for WebSocket support -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <!-- For Fabric UI -->
+    <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/9.6.1/css/fabric.min.css"/>
+    
+    <style>
+        body {
+            font-family: "Segoe UI", "Segoe UI Web (West European)", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+            padding: 20px;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .status-section {
+            background-color: #f3f2f1;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .control-section {
+            margin-bottom: 20px;
+        }
+        
+        .button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            min-width: 120px;
+        }
+        
+        .button:hover {
+            background-color: #106ebe;
+        }
+        
+        .button:disabled {
+            background-color: #a19f9d;
+            cursor: not-allowed;
+        }
+        
+        
+        .info-box {
+            background-color: #deecf9;
+            border: 1px solid #0078d4;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        
+        .warning-box {
+            background-color: #fff4ce;
+            border: 1px solid #ffb900;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #edebe9;
+            border-radius: 4px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0078d4;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #605e5c;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>🎯 Kahoot Quiz Manager</h2>
+        
+        <!-- Slide Type Selection Section -->
+        <div class="control-section">
+            <h3>סוג השקף</h3>
+            <div style="margin-bottom: 15px;">
+                <label for="slideType" style="display: block; margin-bottom: 5px; font-weight: bold;">בחר סוג שקף:</label>
+                <select id="slideType" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; direction: rtl;">
+                    <option value="מעבר">מעבר</option>
+                    <option value="פתיחה">פתיחה</option>
+                    <option value="שאלה">שאלה</option>
+                    <option value="סטטיסטיקת מענה">סטטיסטיקת מענה</option>
+                    <option value="מובילים">מובילים</option>
+                    <option value="סיכום">סיכום</option>
+                </select>
+            </div>
+            
+            <!-- Status Info Section -->
+            <div style="margin-bottom: 15px;">
+                <div id="detectedInfo" style="font-size: 12px; color: #0078d4; margin-top: 5px; padding: 8px; background: #f0f8ff; border-radius: 3px; display: none;"></div>
+            </div>
+        </div>
+        
+        <div class="status-section">
+            <div style="margin: 10px 0; text-align: center;">
+                <div style="font-size: 14px; color: #605e5c; margin-bottom: 5px;">מזהה משחק:</div>
+                <div id="gameId" style="font-size: 24px; font-weight: bold; color: #0078d4;">-</div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="userCount">-</div>
+                    <div class="stat-label">משתתפים</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="timeRemaining">-</div>
+                    <div class="stat-label">זמן נותר</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="currentSlide">-</div>
+                    <div class="stat-label">שקופית נוכחית</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3>בקרת משחק</h3>
+            <button class="button" id="initButton" onclick="initializeQuiz()">
+                🚀 התחל משחק
+            </button>
+            <button class="button" id="saveButton" onclick="savePresentationData()">
+                💾 שמור נתונים
+            </button>
+        </div>
+        
+        <div class="control-section">
+            <h3>טיימר ומשתתפים</h3>
+            <div style="margin-bottom: 10px;">
+                <label for="timerDuration">זמן בשניות:</label>
+                <input type="number" id="timerDuration" value="30" min="1" max="300" style="width: 60px; margin: 0 5px;">
+            </div>
+            <button class="button" id="startTimerButton" onclick="startTimer()">
+                ⏱️ התחל טיימר
+            </button>
+            <button class="button" id="stopTimerButton" onclick="stopTimer()" disabled>
+                ⏹️ עצור טיימר
+            </button>
+        </div>
+        
+        
+        
+        <div id="errorMessage" class="warning-box" style="display: none;"></div>
+        
+    </div>
+
+    <script type="text/javascript" src="taskpane.js"></script>
+</body>
+</html>

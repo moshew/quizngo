@@ -1,0 +1,9 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\WEF\Developer]
+"UseLocalhost"=dword:00000001
+
+[HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{12345678-1234-1234-1234-123456789012}]
+"Id"="{12345678-1234-1234-1234-123456789012}"
+"Url"="C:\\Users\\Moshe\\Documents\\Projects\\kahoot\\kahoot\\add-in"
+"Flags"=dword:00000001
