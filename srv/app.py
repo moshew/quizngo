@@ -24,26 +24,14 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'kahoot_quiz_secret_key_2024'
 
 # Initialize SocketIO
-socketio = SocketIO(app, cors_allowed_origins=[
-    'https://localhost:3000',
-    'https://localhost:3001', 
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://din-online.co.il',
-    'https://www.din-online.co.il',
-    '*'  # Remove in production for security
-])
+socketio = SocketIO(app, 
+    cors_allowed_origins="*",  # Allow all origins for development
+    logger=False,
+    engineio_logger=False
+)
 
 # Configure CORS
-CORS(app, origins=[
-    'https://localhost:3000',
-    'https://localhost:3001', 
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://din-online.co.il',
-    'https://www.din-online.co.il',
-    '*'  # Remove in production for security
-])
+CORS(app, origins="*")  # Allow all origins for development
 
 # Configuration
 DATA_DIR = Path(__file__).parent / 'data'
@@ -329,6 +317,214 @@ def handle_disconnect():
     connected_clients.discard(request.sid)
     game.log(f'Client disconnected: {request.sid}')
 
+@socketio.on('participant_update')
+def handle_participant_update(data):
+    """Handle participant add/remove updates"""
+    try:
+        game.log(f'Received participant_update: {data}')
+        
+        # Broadcast the participant update to all connected clients
+        socketio.emit('participant_update', data)
+        
+        # Also send a general user update for compatibility
+        if 'total' in data:
+            socketio.emit('user_update', {
+                'users': data['total'],
+                'total': data['total']
+            })
+        
+        game.log(f'Broadcasted participant update: {data["nick"]} {data["type"]}')
+        
+    except Exception as e:
+        game.log(f'Error handling participant update: {e}')
+
+@socketio.on('user_update')
+def handle_user_update(data):
+    """Handle general user count updates"""
+    try:
+        game.log(f'Received user_update: {data}')
+        
+        # Broadcast to all other clients
+        socketio.emit('user_update', data)
+        
+    except Exception as e:
+        game.log(f'Error handling user update: {e}')
+
+@app.route('/users_test.html')
+def users_test():
+    """Serve the users test page"""
+    return send_from_directory('.', 'users_test.html')
+
+@app.route('/participants_widget')
+def serve_participants_widget():
+    """Serve the participants widget HTML for embedding in PowerPoint slides"""
+    html_content = """
+    <!DOCTYPE html>
+    <html dir="rtl" lang="he">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>משתתפים פעילים</title>
+        <style>
+            body {
+                font-family: "Segoe UI", "Segoe UI Web (West European)", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+                background-color: #f3f2f1;
+                padding: 15px;
+                margin: 0;
+                direction: rtl;
+                border-radius: 4px;
+                border: 2px solid #0078d4;
+                height: 100vh;
+                box-sizing: border-box;
+                overflow: hidden;
+            }
+            
+            h4 {
+                margin: 0 0 10px 0;
+                text-align: center;
+                color: #0078d4;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            
+            .participants-container {
+                min-height: 80px;
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 6px;
+                align-items: flex-start;
+                margin-bottom: 10px;
+            }
+            
+            .participant-item {
+                background: linear-gradient(135deg, #0078d4, #106ebe);
+                color: white;
+                padding: 6px 10px;
+                border-radius: 18px;
+                font-size: 12px;
+                font-weight: bold;
+                box-shadow: 0 2px 6px rgba(0,120,212,0.3);
+                transition: all 0.3s ease;
+                animation: slideIn 0.3s ease-out;
+                white-space: nowrap;
+            }
+            
+            .stats {
+                text-align: center;
+                font-size: 11px;
+                color: #666;
+                font-weight: bold;
+            }
+            
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: scale(0.8) translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
+            }
+            
+            .no-participants {
+                color: #666;
+                font-style: italic;
+                text-align: center;
+                padding: 15px;
+                font-size: 12px;
+            }
+        </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    </head>
+    <body>
+        <h4>משתתפים פעילים</h4>
+        <div class="participants-container" id="participantsContainer">
+            <div class="no-participants">מחכים למשתתפים...</div>
+        </div>
+        <div class="stats">
+            סה"כ משתתפים: <span id="totalCount">0</span>
+        </div>
+
+        <script>
+            let participantsList = [];
+            
+            // Initialize Socket.IO connection
+            const socket = io('http://localhost:5000');
+            
+            socket.on('connect', function() {
+                console.log('🌐 Widget connected to server');
+            });
+            
+            socket.on('participant_update', function(data) {
+                console.log('👥 Widget participant update received:', data);
+                handleParticipantUpdate(data);
+            });
+            
+            function handleParticipantUpdate(data) {
+                const { nick, type, total } = data;
+                
+                if (type === 'add') {
+                    if (!participantsList.includes(nick)) {
+                        participantsList.push(nick);
+                        addParticipantToUI(nick);
+                    }
+                } else if (type === 'remove') {
+                    const index = participantsList.indexOf(nick);
+                    if (index > -1) {
+                        participantsList.splice(index, 1);
+                        removeParticipantFromUI(nick);
+                    }
+                }
+                
+                updateStats();
+            }
+            
+            function addParticipantToUI(nickname) {
+                const container = document.getElementById('participantsContainer');
+                
+                // Remove "no participants" message if present
+                const noParticipants = container.querySelector('.no-participants');
+                if (noParticipants) {
+                    noParticipants.remove();
+                }
+                
+                // Create participant element
+                const participantDiv = document.createElement('div');
+                participantDiv.className = 'participant-item';
+                participantDiv.textContent = nickname;
+                participantDiv.setAttribute('data-participant', nickname);
+                
+                container.appendChild(participantDiv);
+            }
+            
+            function removeParticipantFromUI(nickname) {
+                const container = document.getElementById('participantsContainer');
+                const participantDiv = container.querySelector('[data-participant="' + nickname + '"]');
+                
+                if (participantDiv) {
+                    participantDiv.remove();
+                }
+                
+                // Show "no participants" message if empty
+                if (participantsList.length === 0) {
+                    const noParticipants = document.createElement('div');
+                    noParticipants.className = 'no-participants';
+                    noParticipants.textContent = 'מחכים למשתתפים...';
+                    container.appendChild(noParticipants);
+                }
+            }
+            
+            function updateStats() {
+                document.getElementById('totalCount').textContent = participantsList.length;
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
+
 @app.route('/docs')
 def index():
     """API documentation page"""
@@ -413,6 +609,18 @@ def index():
             <h3>📂 טעינת מצגת</h3>
             <div class="url">POST /load</div>
             <p>טוען נתוני מצגת שמורים לפי ID</p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>🧪 דף בדיקת משתמשים</h3>
+            <div class="url"><a href="/users_test.html" target="_blank">GET /users_test.html</a></div>
+            <p>דף בדיקה עם 10 כפתורי משתמשים לסימולציה של הצטרפות/יציאה</p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>👥 עדכון משתמש דמו</h3>
+            <div class="url">GET /?users_demo&nick=USERNAME&type=add/remove&total=X</div>
+            <p>מוסיף/מסיר משתמש דמו ושולח הודעת WebSocket ל-add-in</p>
         </div>
         
         <h2>מידע נוכחי</h2>
@@ -545,6 +753,8 @@ def api_handler():
             action = 'start'
         elif 'stop' in request.args:
             action = 'stop'
+        elif 'users_demo' in request.args:
+            action = 'users_demo'
         else:
             return index()
         
@@ -620,6 +830,53 @@ def api_handler():
                 'users': game_data['users'],
                 'time_remaining': 0
             })
+        
+        elif action == 'users_demo':
+            # Handle participant update from demo page
+            try:
+                nick = request.args.get('nick', '')
+                user_action = request.args.get('type', '')  # 'add' or 'remove'
+                total = request.args.get('total', 0, type=int)
+                
+                game.log(f'Users demo request received - nick: {nick}, type: {user_action}, total: {total}')
+                
+                if not nick or not user_action:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing nick or type parameter'
+                    }), 400
+                
+                # Log the demo action
+                game.log(f'Demo action: {user_action} user {nick}, total: {total}')
+                
+                # Send WebSocket message to all connected clients (including add-in)
+                participant_data = {
+                    'nick': nick,
+                    'type': user_action,
+                    'total': total
+                }
+                
+                # Broadcast participant update
+                socketio.emit('participant_update', participant_data)
+                
+                # Also send general user update for compatibility
+                socketio.emit('user_update', {
+                    'users': total,
+                    'total': total
+                })
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': f'User {nick} {user_action}ed successfully',
+                    'data': participant_data
+                })
+                
+            except Exception as e:
+                game.log(f'Error in users_demo endpoint: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Server error in users_demo: {str(e)}'
+                }), 500
     
     except Exception as e:
         game.log(f'Error: {str(e)}')
@@ -633,6 +890,8 @@ if __name__ == '__main__':
     print("=" * 40)
     print("Server will run on: http://localhost:5000")
     print("API Documentation: http://localhost:5000/docs")
+    print("Users Test Page: http://localhost:5000/users_test.html")
+    print("Participants Widget: http://localhost:5000/participants_widget")
     print("WebSocket URL: ws://localhost:5000")
     print("")
     print("Available endpoints:")
@@ -644,10 +903,12 @@ if __name__ == '__main__':
     print("  /?reset         - Reset game")
     print("  /?start[&time=X] - Start timer (default 30s)")
     print("  /?stop          - Stop timer")
+    print("  /?users_demo    - Demo participant update (nick, type, total)")
     print("  /save           - Save presentation data (POST)")
     print("  /load           - Load presentation data (POST)")
     print("")
-    print("WebSocket Events:")
+    print("WebSocket Events (sent to add-in):")
+    print("  participant_update - Individual participant add/remove")
     print("  user_update     - Real-time user count updates")
     print("  timer_finished  - Timer completion")
     print("  timer_stopped   - Timer manual stop")

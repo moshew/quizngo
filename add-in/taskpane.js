@@ -144,6 +144,12 @@ async function initializeQuiz() {
         // Display game ID
         document.getElementById('gameId').textContent = response.game_id;
         
+        // Also update the opening section game ID if it exists
+        const gameIdOpening = document.getElementById('gameIdOpening');
+        if (gameIdOpening) {
+            gameIdOpening.textContent = response.game_id;
+        }
+        
          console.log('המשחק אותחל בהצלחה!');
         isInitialized = true;
         
@@ -245,6 +251,10 @@ async function getCurrentSlideNumber() {
             if (slideElement) {
                 slideElement.textContent = currentSlideNumber;
             }
+            const slideDisplayElement = document.getElementById('currentSlideDisplay');
+            if (slideDisplayElement) {
+                slideDisplayElement.textContent = currentSlideNumber;
+            }
             
             console.log(`📄 Final current slide number: ${currentSlideNumber}`);
         });
@@ -258,6 +268,10 @@ async function getCurrentSlideNumber() {
         const slideElement = document.getElementById('currentSlide');
         if (slideElement) {
             slideElement.textContent = currentSlideNumber;
+        }
+        const slideDisplayElement = document.getElementById('currentSlideDisplay');
+        if (slideDisplayElement) {
+            slideDisplayElement.textContent = currentSlideNumber;
         }
         console.log(`📄 Fallback current slide number: ${currentSlideNumber}`);
     }
@@ -337,6 +351,10 @@ async function onSlideChanged(eventArgs) {
                     if (slideElement) {
                         slideElement.textContent = currentSlideNumber;
                     }
+                    const slideDisplayElement = document.getElementById('currentSlideDisplay');
+                    if (slideDisplayElement) {
+                        slideDisplayElement.textContent = currentSlideNumber;
+                    }
                     
                      console.log(`✅ SLIDE CHANGED: ${oldSlideNumber} → ${currentSlideNumber}`);
                     
@@ -357,7 +375,676 @@ async function onSlideChanged(eventArgs) {
 }
 
 
-function initializeWebSocket() { console.log('initializeWebSocket called'); }
+// Participants management
+let participantsList = [];
+let participantsPositions = new Map(); // nickname -> position index
+
+function initializeWebSocket() {
+    try {
+        console.log('🔌 Initializing WebSocket connection to:', WEBSOCKET_URL);
+        
+        if (typeof io === 'undefined') {
+            console.error('Socket.io not loaded');
+            showError('Socket.io לא נטען');
+            return;
+        }
+        
+        socket = io(WEBSOCKET_URL, {
+            transports: ['websocket', 'polling'],
+            forceNew: true,
+            timeout: 5000
+        });
+        
+        socket.on('connect', () => {
+            console.log('✅ WebSocket connected successfully');
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('❌ WebSocket disconnected');
+            timerActive = false;
+        });
+        
+        socket.on('connect_error', (error) => {
+            console.error('WebSocket connection error:', error);
+            showError('שגיאה בחיבור WebSocket: ' + error.message);
+        });
+        
+        socket.on('error', (error) => {
+            console.error('WebSocket error:', error);
+            showError('שגיאת WebSocket: ' + error.message);
+        });
+        
+        // Handle user updates
+        socket.on('user_update', (data) => {
+            console.log('👥 User update received:', data);
+            currentUsers = data.users || data.total || 0;
+            window.currentUsers = currentUsers;
+            
+            // Update UI
+            const userCountElement = document.getElementById('userCount');
+            if (userCountElement) {
+                userCountElement.textContent = currentUsers;
+            }
+        });
+        
+        // Handle participant updates (new message type)
+        socket.on('participant_update', (data) => {
+            console.log('🆕 Participant update received:', data);
+            handleParticipantUpdate(data);
+        });
+        
+        // Handle status updates
+        socket.on('status_update', (data) => {
+            console.log('📊 Status update received:', data);
+            currentUsers = data.users || 0;
+            window.currentUsers = currentUsers;
+            
+            // Update UI
+            const userCountElement = document.getElementById('userCount');
+            if (userCountElement) {
+                userCountElement.textContent = currentUsers;
+            }
+            
+            if (data.status === 'running') {
+                timerActive = true;
+            } else {
+                timerActive = false;
+            }
+        });
+        
+        console.log('🎯 WebSocket event handlers set up successfully');
+        
+    } catch (error) {
+        console.error('WebSocket initialization failed:', error);
+        showError('שגיאה בחיבור WebSocket: ' + error.message);
+    }
+}
+
+// Handle participant updates from WebSocket
+function handleParticipantUpdate(data) {
+    // Expected data format:
+    // { nick: "username", type: "add"/"remove", total: 5 }
+    
+    const { nick, type, total } = data;
+    
+    if (!nick || !type) {
+        console.error('Invalid participant update data:', data);
+        return;
+    }
+    
+    console.log(`🔄 Processing ${type} for participant: ${nick}`);
+    
+    if (type === 'add') {
+        addParticipant(nick);
+    } else if (type === 'remove') {
+        removeParticipant(nick);
+    }
+    
+    // Update total count
+    if (total !== undefined) {
+        currentUsers = total;
+        window.currentUsers = currentUsers;
+        
+        // Update total count display
+        const totalCountElement = document.getElementById('totalParticipantsCount');
+        if (totalCountElement) {
+            totalCountElement.textContent = total;
+        }
+        
+        // Update main user count
+        const userCountElement = document.getElementById('userCount');
+        if (userCountElement) {
+            userCountElement.textContent = total;
+        }
+    }
+    
+    // Update any live participants areas in slides
+    updateLiveParticipantsInSlide();
+}
+
+// Add participant with smart positioning
+function addParticipant(nickname) {
+    // Check if participant already exists
+    if (participantsList.includes(nickname)) {
+        console.log(`Participant ${nickname} already exists`);
+        return;
+    }
+    
+    console.log(`➕ Adding participant: ${nickname}`);
+    
+    // Add to participants list
+    participantsList.push(nickname);
+    
+    // Calculate position using smart positioning logic
+    const position = calculateNewParticipantPosition();
+    participantsPositions.set(nickname, position);
+    
+    // Create and insert participant element
+    createParticipantElement(nickname, position);
+    
+    // Hide "no participants" message if it's the first participant
+    if (participantsList.length === 1) {
+        const noParticipants = document.getElementById('noParticipants');
+        if (noParticipants) {
+            noParticipants.style.display = 'none';
+        }
+    }
+    
+    console.log(`✅ Participant ${nickname} added at position ${position}`);
+    
+    // Update live participants areas in slides
+    updateLiveParticipantsInSlide();
+}
+
+// Remove participant and reposition others
+function removeParticipant(nickname) {
+    const index = participantsList.indexOf(nickname);
+    if (index === -1) {
+        console.log(`Participant ${nickname} not found`);
+        return;
+    }
+    
+    console.log(`➖ Removing participant: ${nickname}`);
+    
+    // Get the element and animate removal
+    const participantElement = document.querySelector(`[data-participant="${nickname}"]`);
+    if (participantElement) {
+        participantElement.classList.add('removing');
+        
+        // Remove after animation
+        setTimeout(() => {
+            participantElement.remove();
+            
+            // Remove from data structures
+            participantsList.splice(index, 1);
+            participantsPositions.delete(nickname);
+            
+            // Reposition remaining participants
+            repositionAllParticipants();
+            
+            // Show "no participants" message if list is empty
+            if (participantsList.length === 0) {
+                const noParticipants = document.getElementById('noParticipants');
+                if (noParticipants) {
+                    noParticipants.style.display = 'block';
+                }
+            }
+            
+            console.log(`✅ Participant ${nickname} removed`);
+            
+            // Update live participants areas in slides
+            updateLiveParticipantsInSlide();
+        }, 300); // Wait for animation
+    }
+}
+
+// Calculate position for new participant
+function calculateNewParticipantPosition() {
+    const count = participantsList.length;
+    
+    if (count === 0) {
+        return 0; // Center position
+    }
+    
+    // Smart positioning: center first, then alternate left/right
+    // Position 0 = center
+    // Position 1 = right of center
+    // Position 2 = left of center  
+    // Position 3 = right of position 1
+    // Position 4 = left of position 2
+    // etc.
+    
+    return count;
+}
+
+// Create participant DOM element
+function createParticipantElement(nickname, position) {
+    const container = document.getElementById('participantsContainer');
+    if (!container) return;
+    
+    const participantDiv = document.createElement('div');
+    participantDiv.className = 'participant-item';
+    participantDiv.setAttribute('data-participant', nickname);
+    participantDiv.setAttribute('data-position', position);
+    participantDiv.textContent = nickname;
+    
+    // Insert in the right position
+    insertParticipantAtPosition(participantDiv, position);
+}
+
+// Insert participant at correct visual position
+function insertParticipantAtPosition(element, position) {
+    const container = document.getElementById('participantsContainer');
+    if (!container) return;
+    
+    // Get all current participant elements (excluding noParticipants)
+    const existingParticipants = Array.from(container.children).filter(
+        child => child.classList.contains('participant-item')
+    );
+    
+    // Simple append for now - visual positioning handled by CSS flexbox with center justify
+    container.appendChild(element);
+}
+
+// Reposition all participants after removal
+function repositionAllParticipants() {
+    // Clear current positions
+    participantsPositions.clear();
+    
+    // Recalculate positions for all remaining participants
+    participantsList.forEach((nickname, index) => {
+        participantsPositions.set(nickname, index);
+        
+        // Update data-position attribute
+        const element = document.querySelector(`[data-participant="${nickname}"]`);
+        if (element) {
+            element.setAttribute('data-position', index);
+        }
+    });
+    
+    console.log('🔄 Repositioned all participants');
+}
+
+// Insert live participants area into slide (copy panel content directly)
+async function insertLiveParticipantsArea() {
+    await PowerPoint.run(async (context) => {
+        // קבל את השקף הנוכחי
+        const slides = context.presentation.getSelectedSlides();
+        slides.load('items');
+        await context.sync();
+        
+        if (slides.items.length === 0) {
+            console.error('אין שקף נבחר');
+            showError('אנא בחר שקף תחילה');
+            return;
+        }
+        
+        const currentSlide = slides.items[0];
+        
+        console.log('🔄 יוצר אזור משתתפים חי שמחקה את הפאנל...');
+        
+        // קבל את המשתתפים הנוכחיים מהפאנל
+        const panelParticipants = Array.from(document.querySelectorAll('#participantsContainer .participant-item'))
+            .map(item => item.textContent.trim());
+        
+        console.log('📋 משתתפים בפאנל:', panelParticipants);
+        
+        // צור את הקונטיינר הראשי שנראה כמו הפאנל
+        const containerArea = currentSlide.shapes.addTextBox('', {
+            left: 50,
+            top: 300,
+            width: 400,
+            height: 250
+        });
+        
+        containerArea.load(['tags', 'fill', 'line', 'textFrame']);
+        await context.sync();
+        
+        // סטייל כמו הפאנל
+        try {
+            containerArea.fill.setSolidColor('#f3f2f1'); // רקע אפור בהיר כמו בפאנל
+            containerArea.line.color = '#0078d4'; // גבול כחול כמו בפאנל
+            containerArea.line.weight = 2;
+        } catch (styleError) {
+            console.log('לא הצלחתי לסטייל את הקונטיינר:', styleError);
+        }
+        
+        // הוסף כותרת וטקסט
+        const textRange = containerArea.textFrame.textRange;
+        let content = '👥 משתתפים פעילים\n\n';
+        
+        if (panelParticipants.length === 0) {
+            content += 'מחכים למשתתפים...';
+        } else {
+            content += `משתתפים:\n${panelParticipants.join(' • ')}\n\n`;
+            content += `סה"כ: ${panelParticipants.length}`;
+        }
+        
+        textRange.text = content;
+        
+        // סטייל הטקסט
+        textRange.load(['font', 'paragraphFormat']);
+        await context.sync();
+        textRange.font.name = 'Segoe UI';
+        textRange.font.size = 12;
+        textRange.font.color = '#0078d4';
+        textRange.font.bold = true;
+        
+        // הוסף תג לעדכונים דינמיים
+        containerArea.tags.add('kahoot-participants-area', 'true');
+        await context.sync();
+        
+        // עכשיו צור pills בודדים אם יש משתתפים
+        if (panelParticipants.length > 0) {
+            await createParticipantPillShapes(context, currentSlide, panelParticipants);
+        }
+        
+        console.log('✅ אזור משתתפים חי נוצר בהצלחה!');
+        showError('✅ אזור משתתפים חי נוסף לשקף! יתעדכן אוטומטית עם הפאנל.');
+    });
+}
+
+// Create participant pills as shapes in the slide (like the panel)
+async function createParticipantPillShapes(context, slide, participants) {
+    try {
+        console.log('🔵 יוצר pills כחולים למשתתפים...');
+        
+        const startX = 70;
+        const startY = 400; // מתחת לקונטיינר הטקסט
+        const pillWidth = 80;
+        const pillHeight = 30;
+        const gapX = 10;
+        const gapY = 10;
+        const pillsPerRow = 4;
+        
+        for (let i = 0; i < participants.length; i++) {
+            const participant = participants[i];
+            const row = Math.floor(i / pillsPerRow);
+            const col = i % pillsPerRow;
+            
+            const x = startX + col * (pillWidth + gapX);
+            const y = startY + row * (pillHeight + gapY);
+            
+            // צור רקע כחול (רקע מעוגל)
+            const pillBg = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle, {
+                left: x,
+                top: y,
+                width: pillWidth,
+                height: pillHeight
+            });
+            
+            pillBg.load(['fill', 'line', 'tags']);
+            await context.sync();
+            
+            // סטייל הרקע כמו בפאנל
+            try {
+                pillBg.fill.setSolidColor('#0078d4'); // כחול כמו בפאנל
+                pillBg.line.color = '#0078d4';
+                pillBg.line.weight = 1;
+            } catch (bgStyleError) {
+                console.log('לא הצלחתי לסטייל רקע pill:', bgStyleError);
+            }
+            
+            // תג לזיהוי
+            pillBg.tags.add('kahoot-participant-pill', 'true');
+            pillBg.tags.add('participant-name', participant);
+            
+            // צור טקסט לבן על הרקע
+            const pillText = slide.shapes.addTextBox(participant, {
+                left: x + 2,
+                top: y + 2,
+                width: pillWidth - 4,
+                height: pillHeight - 4
+            });
+            
+            pillText.load(['textFrame', 'tags']);
+            await context.sync();
+            
+            // סטייל הטקסט
+            const nameRange = pillText.textFrame.textRange;
+            nameRange.load(['font', 'paragraphFormat']);
+            await context.sync();
+            
+            nameRange.font.size = 10;
+            nameRange.font.color = '#ffffff'; // לבן כמו בפאנל
+            nameRange.font.bold = true;
+            nameRange.font.name = 'Segoe UI';
+            
+            try {
+                nameRange.paragraphFormat.alignment = PowerPoint.ParagraphAlignment.center;
+            } catch (alignError) {
+                console.log('לא הצלחתי למרכז טקסט:', alignError);
+            }
+            
+            // תג לטקסט
+            pillText.tags.add('kahoot-participant-pill', 'true');
+            pillText.tags.add('participant-name', participant);
+            
+            await context.sync();
+            console.log(`✅ נוצר pill עבור: ${participant}`);
+        }
+        
+        console.log('✅ כל ה-pills נוצרו בהצלחה!');
+    } catch (error) {
+        console.error('❌ שגיאה ביצירת pills:', error);
+    }
+}
+
+// Update synchronized area content to mirror the panel
+async function updateSyncAreaContent(context, syncArea) {
+    try {
+        syncArea.load(['textFrame']);
+        await context.sync();
+        
+        const textRange = syncArea.textFrame.textRange;
+        textRange.load(['text']);
+        await context.sync();
+        
+        // Mirror the panel's current state exactly
+        let content = '👥 משתתפים פעילים\n\n';
+        
+        if (participantsList.length === 0) {
+            content += 'מחכים למשתתפים...';
+        } else {
+            // Display participants as pills-like text (since we can't do real pills in text box)
+            const participantsText = participantsList.map(p => `[${p}]`).join(' ');
+            content += participantsText + '\n\n';
+            content += `סה"כ: ${participantsList.length} משתתפים`;
+        }
+        
+        textRange.text = content;
+        
+        // Style the text to match panel
+        textRange.load(['font', 'paragraphFormat']);
+        await context.sync();
+        textRange.font.name = 'Segoe UI';
+        textRange.font.size = 12;
+        textRange.font.color = '#0078d4';
+        
+        await context.sync();
+    } catch (error) {
+        console.error('Error updating sync area content:', error);
+    }
+}
+
+// Update live participants area in slide (called from WebSocket updates)
+async function updateLiveParticipantsInSlide() {
+    console.log('🔍 Starting updateLiveParticipantsInSlide with participants:', participantsList);
+    
+    try {
+        await PowerPoint.run(async (context) => {
+            // Find slides with participants area
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            console.log(`📊 Found ${slides.items.length} slides to check`);
+            
+            let foundAreas = 0;
+            
+            for (let i = 0; i < slides.items.length; i++) {
+                const slide = slides.items[i];
+                const shapes = slide.shapes;
+                shapes.load('items');
+                await context.sync();
+                
+                console.log(`📄 Slide ${i + 1} has ${shapes.items.length} shapes`);
+                
+                // Look for shapes with participants area tag
+                for (let j = 0; j < shapes.items.length; j++) {
+                    const shape = shapes.items[j];
+                    shape.load(['tags']);
+                    await context.sync();
+                    
+                    // Check if this shape has the participants area tag
+                    const tags = shape.tags;
+                    tags.load('items');
+                    await context.sync();
+                    
+                    console.log(`🏷️ Shape ${j + 1} has ${tags.items.length} tags`);
+                    
+                    let isParticipantsArea = false;
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        console.log(`   Tag: ${tag.key} = ${tag.value}`);
+                        
+                        if (tag.key === 'kahoot-participants-area' && tag.value === 'true') {
+                            isParticipantsArea = true;
+                            console.log('✅ Found participants area!');
+                            break;
+                        } else if (tag.key === 'KAHOOT-PARTICIPANTS-AREA' && tag.value === 'true') {
+                            // PowerPoint might uppercase the tag key
+                            isParticipantsArea = true;
+                            console.log('✅ Found participants area (uppercase)!');
+                            break;
+                        } else if (tag.key === 'kahoot-participants-web-area' && tag.value === 'true') {
+                            isParticipantsArea = true;
+                            console.log('✅ Found participants web area!');
+                            break;
+                        } else if (tag.key === 'KAHOOT-PARTICIPANTS-WEB-AREA' && tag.value === 'true') {
+                            // PowerPoint might uppercase the tag key
+                            isParticipantsArea = true;
+                            console.log('✅ Found participants web area (uppercase)!');
+                            break;
+                        } else if (tag.key === 'kahoot-participants-sync-area' && tag.value === 'true') {
+                            isParticipantsArea = true;
+                            console.log('✅ Found participants sync area!');
+                            break;
+                        } else if (tag.key === 'KAHOOT-PARTICIPANTS-SYNC-AREA' && tag.value === 'true') {
+                            // PowerPoint might uppercase the tag key
+                            isParticipantsArea = true;
+                            console.log('✅ Found participants sync area (uppercase)!');
+                            break;
+                        }
+                    }
+                    
+                    if (isParticipantsArea) {
+                        foundAreas++;
+                        console.log('🔄 Updating participants area content...');
+                        try {
+                            // Update this participants area
+                            await updateParticipantsAreaContent(context, slide, shape);
+                            console.log('✅ Successfully updated participants area');
+                        } catch (updateError) {
+                            console.error('❌ Error updating participants area:', updateError);
+                        }
+                    }
+                    
+                    // Also check for participants count text boxes
+                    let isParticipantsCount = false;
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        if ((tag.key === 'kahoot-participants-count' || tag.key === 'KAHOOT-PARTICIPANTS-COUNT') && tag.value === 'true') {
+                            isParticipantsCount = true;
+                            console.log('✅ Found participants count text box!');
+                            break;
+                        }
+                    }
+                    
+                    if (isParticipantsCount) {
+                        console.log('🔄 Updating participants count text...');
+                        try {
+                            // Update the participants count text
+                            shape.load(['textFrame']);
+                            await context.sync();
+                            
+                            const countTextRange = shape.textFrame.textRange;
+                            countTextRange.load(['text']);
+                            await context.sync();
+                            
+                            const newCountText = `משתתפים: ${participantsList.length}`;
+                            countTextRange.text = newCountText;
+                            
+                            await context.sync();
+                            console.log(`✅ Updated participants count to: ${participantsList.length}`);
+                        } catch (countError) {
+                            console.error('❌ Error updating participants count:', countError);
+                        }
+                    }
+                }
+            }
+            
+            console.log(`📋 Total participants areas found and updated: ${foundAreas}`);
+        });
+    } catch (error) {
+        console.error('Error updating live participants in slide:', error);
+    }
+}
+
+// Update content of a specific participants area (web object or text fallback)
+async function updateParticipantsAreaContent(context, slide, participantsArea) {
+    try {
+        console.log('🔄 Updating participants area with current list:', participantsList);
+        
+        // Check what type of area this is by looking at tags
+        participantsArea.load(['tags']);
+        await context.sync();
+        
+        const tags = participantsArea.tags;
+        tags.load('items');
+        await context.sync();
+        
+        let areaType = 'text'; // default
+        for (let i = 0; i < tags.items.length; i++) {
+            const tag = tags.items[i];
+            tag.load(['key', 'value']);
+            await context.sync();
+            
+            if ((tag.key === 'kahoot-participants-web-area' || tag.key === 'KAHOOT-PARTICIPANTS-WEB-AREA') && tag.value === 'true') {
+                areaType = 'web';
+                break;
+            } else if ((tag.key === 'kahoot-participants-sync-area' || tag.key === 'KAHOOT-PARTICIPANTS-SYNC-AREA') && tag.value === 'true') {
+                areaType = 'sync';
+                break;
+            }
+        }
+        
+        if (areaType === 'web') {
+            // For web objects, the HTML widget handles its own updates via WebSocket
+            console.log('🌐 Web object found - content updates automatically via WebSocket');
+            // No need to manually update - the widget HTML has its own Socket.IO connection
+        } else if (areaType === 'sync') {
+            // Update synchronized area to mirror the panel exactly
+            console.log('🔗 Updating synchronized area to mirror panel...');
+            await updateSyncAreaContent(context, participantsArea);
+        } else {
+            // Update text area (fallback)
+            console.log('📝 Updating text area content...');
+            participantsArea.load(['textFrame']);
+            await context.sync();
+            
+            const textRange = participantsArea.textFrame.textRange;
+            textRange.load(['text']);
+            await context.sync();
+            
+            let content = '🔄 אזור משתתפים פעילים\n\n';
+            
+            if (participantsList.length === 0) {
+                content += '👥 מחכים למשתתפים...';
+            } else {
+                content += `👥 משתתפים פעילים (${participantsList.length}):\n\n`;
+                participantsList.forEach(participant => {
+                    content += `• ${participant}\n`;
+                });
+            }
+            
+            textRange.text = content;
+            await context.sync();
+        }
+        
+        console.log('✅ Updated participants area content');
+        
+    } catch (error) {
+        console.error('❌ Error updating participants area content:', error);
+    }
+}
 
 // Load presentation data function
 async function loadPresentationData() {
@@ -437,6 +1124,7 @@ function handleSlideTypeChange() {
     const slideType = document.getElementById('slideType').value;
     console.log(`🔄 Slide type changed to: ${slideType} for slide ${currentSlideNumber}`);
     saveSlideType(slideType);
+    updateUIForSlideType(slideType);
 }
 
 function saveSlideType(slideType) {
@@ -452,6 +1140,173 @@ function loadSlideType() {
     const slideType = slideTypeData[currentSlideNumber] || 'מעבר'; // Default to מעבר
     document.getElementById('slideType').value = slideType;
     console.log(`Loaded slide type: ${slideType} for slide ${currentSlideNumber}`);
+    updateUIForSlideType(slideType);
+}
+
+// Update UI based on slide type
+function updateUIForSlideType(slideType) {
+    const defaultStatusSection = document.getElementById('defaultStatusSection');
+    const openingStatusSection = document.getElementById('openingStatusSection');
+    const defaultControlSections = document.getElementById('defaultControlSections');
+    const dynamicParticipantsArea = document.getElementById('dynamicParticipantsArea');
+    
+    if (slideType === 'פתיחה') {
+        // Show opening-specific UI
+        defaultStatusSection.style.display = 'none';
+        openingStatusSection.style.display = 'block';
+        defaultControlSections.style.display = 'none';
+        dynamicParticipantsArea.style.display = 'block';
+        
+        // Sync game ID between sections
+        const gameId = document.getElementById('gameId').textContent;
+        document.getElementById('gameIdOpening').textContent = gameId;
+    } else {
+        // Show default UI
+        defaultStatusSection.style.display = 'block';
+        openingStatusSection.style.display = 'none';
+        defaultControlSections.style.display = 'block';
+        dynamicParticipantsArea.style.display = 'none';
+    }
+}
+
+// Show participants count in slide (dynamic)
+async function showParticipantsCount() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const slides = context.presentation.getSelectedSlides();
+            slides.load('items');
+            await context.sync();
+            
+            if (slides.items.length > 0) {
+                const slide = slides.items[0];
+                
+                // Add a text box with participant count and dynamic tag
+                const textBox = slide.shapes.addTextBox(`משתתפים: ${currentUsers}`, {
+                    left: 50,
+                    top: 50,
+                    width: 200,
+                    height: 50
+                });
+                
+                // Load text properties and tags
+                textBox.load(['textFrame', 'tags']);
+                await context.sync();
+                
+                // Add tag for dynamic updates
+                textBox.tags.add('kahoot-participants-count', 'true');
+                
+                const textRange = textBox.textFrame.textRange;
+                textRange.load(['font']);
+                await context.sync();
+                
+                textRange.font.size = 24;
+                textRange.font.color = '#0078d4';
+                textRange.font.bold = true;
+                
+                await context.sync();
+                console.log('✅ Dynamic participants count added to slide');
+            }
+        });
+    } catch (error) {
+        console.error('Error adding participants count:', error);
+        showError('שגיאה בהוספת מספר המשתתפים');
+    }
+}
+
+// Insert participants display into slide
+async function insertParticipantsDisplay() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const slides = context.presentation.getSelectedSlides();
+            slides.load('items');
+            await context.sync();
+            
+            if (slides.items.length > 0) {
+                const slide = slides.items[0];
+                
+                // Add Game PIN
+                const gameId = document.getElementById('gameId').textContent || 
+                              document.getElementById('gameIdOpening').textContent || 
+                              '528 8478';
+                
+                const gamePinBox = slide.shapes.addTextBox(`Game PIN: ${gameId}`, {
+                    left: 100,
+                    top: 50,
+                    width: 400,
+                    height: 80
+                });
+                
+                // Load text properties and sync before accessing
+                gamePinBox.load(['textFrame']);
+                await context.sync();
+                
+                const gamePinText = gamePinBox.textFrame.textRange;
+                gamePinText.load(['font', 'paragraphFormat']);
+                await context.sync();
+                
+                gamePinText.font.size = 32;
+                gamePinText.font.bold = true;
+                
+                // Add participants title
+                const titleBox = slide.shapes.addTextBox('משתתפים פעילים', {
+                    left: 100,
+                    top: 150,
+                    width: 400,
+                    height: 50
+                });
+                
+                titleBox.load(['textFrame']);
+                await context.sync();
+                
+                const titleText = titleBox.textFrame.textRange;
+                titleText.load(['font', 'paragraphFormat']);
+                await context.sync();
+                
+                titleText.font.size = 24;
+                titleText.font.bold = true;
+                
+                // Add participant names in a grid-like layout
+                const participants = ['Joe', 'Ttt', 'moshe', 'Sarah', 'David', 'Lisa', 'Alex'];
+                const participantBoxes = [];
+                
+                for (let i = 0; i < participants.length; i++) {
+                    const name = participants[i];
+                    const row = Math.floor(i / 3);
+                    const col = i % 3;
+                    const x = 50 + (col * 200);
+                    const y = 220 + (row * 80);
+                    
+                    const participantBox = slide.shapes.addTextBox(`👤 ${name}`, {
+                        left: x,
+                        top: y,
+                        width: 180,
+                        height: 60
+                    });
+                    
+                    participantBoxes.push(participantBox);
+                }
+                
+                // Load all participant boxes
+                participantBoxes.forEach(box => {
+                    box.load(['textFrame']);
+                });
+                await context.sync();
+                
+                // Set text formatting for all participant boxes
+                participantBoxes.forEach(box => {
+                    const textRange = box.textFrame.textRange;
+                    textRange.load(['font']);
+                    textRange.font.size = 18;
+                });
+                
+                await context.sync();
+                console.log('✅ Participants display added to slide');
+            }
+        });
+    } catch (error) {
+        console.error('Error inserting participants display:', error);
+        showError('שגיאה בהכנסת תצוגת המשתתפים');
+    }
 }
 
 
