@@ -7,9 +7,9 @@ Run locally for testing: python app.py
 Deploy to server: see deployment instructions
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import json
 import os
 import time
@@ -18,6 +18,8 @@ import threading
 from datetime import datetime
 import logging
 from pathlib import Path
+import qrcode
+from io import BytesIO
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -39,6 +41,9 @@ LOG_DIR = Path(__file__).parent / 'logs'
 GAME_DATA_FILE = DATA_DIR / 'game_data.json'
 LOG_FILE = LOG_DIR / 'kahoot.log'
 
+# Note: Hash generation is now done client-side in add-in
+# The server only receives and validates the hash ID
+
 # Game settings
 DEFAULT_SLIDE_TIME = 30
 MIN_USERS = 1
@@ -51,6 +56,32 @@ timer_thread = None
 timer_duration = 30
 timer_start_time = None
 connected_clients = set()
+
+# Hash-based room system: maps session_id -> hash_id
+client_rooms = {}  # e.g., {'session123': 'a65445f6664e', 'session456': 'f049ebb08096'}
+
+# Game sessions: maps hash_id -> session info
+game_sessions = {}  # e.g., {'a65445f6664e': {'sessionId': '123456', 'timestamp': 1234567890}}
+
+def emit_to_room(event, data, target_hash_id):
+    """
+    Emit a message only to clients in a specific room (hash ID).
+    
+    Args:
+        event: The event name
+        data: The data to send
+        target_hash_id: The hash ID of the room to send to
+    """
+    # Count clients in this room
+    sent_count = sum(1 for hash_id in client_rooms.values() if hash_id == target_hash_id)
+    
+    if sent_count > 0:
+        game.log(f'📤 Sending {event} to room {target_hash_id} ({sent_count} client(s))')
+        socketio.emit(event, data, room=target_hash_id)
+    else:
+        game.log(f'⚠️ No clients in room {target_hash_id} to send {event}')
+    
+    return sent_count
 
 # Create directories if they don't exist
 DATA_DIR.mkdir(exist_ok=True)
@@ -137,16 +168,24 @@ class GameManager:
         """Move to next slide"""
         data = self.load_game_data()
         
+        # If not initialized, just use basic defaults without full initialization
         if not data['initialized']:
-            raise Exception('Game not initialized')
+            data['current_slide'] = data.get('current_slide', 0)
+            data['users'] = data.get('users', 10)  # Default user count
+            data['time_remaining'] = DEFAULT_SLIDE_TIME
+            data['slide_start_time'] = time.time()
         
         data['current_slide'] += 1
         data['slide_start_time'] = time.time()
         data['time_remaining'] = DEFAULT_SLIDE_TIME
         
-        # Simulate user changes
-        change = random.randint(-USER_FLUCTUATION_RANGE, USER_FLUCTUATION_RANGE * 2)
-        data['users'] = max(MIN_USERS, min(MAX_USERS, data['users'] + change))
+        # Keep user count stable or slight change
+        if 'users' not in data or data['users'] == 0:
+            data['users'] = 10  # Default
+        else:
+            # Small user fluctuation
+            change = random.randint(-2, 3)
+            data['users'] = max(1, data['users'] + change)
         
         self.save_game_data(data)
         self.log(f"Moved to slide {data['current_slide']}, Users: {data['users']}")
@@ -311,41 +350,92 @@ def handle_connect():
         'current_slide': game_data['current_slide']
     })
 
+@socketio.on('register_room')
+def handle_register_room(data):
+    """Register client with a specific hash ID (room)"""
+    hash_id = data.get('hashId')
+    if hash_id:
+        # Join Socket.IO room
+        join_room(hash_id)
+        
+        # Track in our mapping
+        client_rooms[request.sid] = hash_id
+        
+        game.log(f'✅ Client {request.sid} joined room (hash): {hash_id}')
+        emit('room_registered', {'hashId': hash_id, 'status': 'success'})
+    else:
+        game.log(f'❌ Client {request.sid} failed to register - no hashId provided')
+        emit('room_registered', {'status': 'error', 'message': 'No hashId provided'})
+
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
     connected_clients.discard(request.sid)
-    game.log(f'Client disconnected: {request.sid}')
+    
+    # Leave Socket.IO room and remove from mapping
+    if request.sid in client_rooms:
+        hash_id = client_rooms[request.sid]
+        leave_room(hash_id)
+        del client_rooms[request.sid]
+        game.log(f'Client disconnected from room {hash_id}: {request.sid}')
+    else:
+        game.log(f'Client disconnected: {request.sid}')
 
 @socketio.on('participant_update')
 def handle_participant_update(data):
-    """Handle participant add/remove updates"""
+    """Handle participant add/remove updates - room-aware"""
     try:
         game.log(f'Received participant_update: {data}')
         
-        # Broadcast the participant update to all connected clients
-        socketio.emit('participant_update', data)
+        # Get hash ID from data or from sender's room
+        hash_id = data.get('hashId')
+        if not hash_id and request.sid in client_rooms:
+            hash_id = client_rooms[request.sid]
         
-        # Also send a general user update for compatibility
-        if 'total' in data:
-            socketio.emit('user_update', {
-                'users': data['total'],
-                'total': data['total']
-            })
-        
-        game.log(f'Broadcasted participant update: {data["nick"]} {data["type"]}')
+        if hash_id:
+            # Broadcast to specific room only
+            emit_to_room('participant_update', data, hash_id)
+            
+            # Also send a general user update for compatibility
+            if 'total' in data:
+                emit_to_room('user_update', {
+                    'users': data['total'],
+                    'total': data['total']
+                }, hash_id)
+            
+            game.log(f'Sent participant update to room {hash_id}: {data["nick"]} {data["type"]}')
+        else:
+            # Fallback: broadcast to all if no hash ID
+            game.log(f'Warning: No hash ID for participant_update, broadcasting to all')
+            socketio.emit('participant_update', data)
+            if 'total' in data:
+                socketio.emit('user_update', {
+                    'users': data['total'],
+                    'total': data['total']
+                })
         
     except Exception as e:
         game.log(f'Error handling participant update: {e}')
 
 @socketio.on('user_update')
 def handle_user_update(data):
-    """Handle general user count updates"""
+    """Handle general user count updates - room-aware"""
     try:
         game.log(f'Received user_update: {data}')
         
-        # Broadcast to all other clients
-        socketio.emit('user_update', data)
+        # Get hash ID from data or from sender's room
+        hash_id = data.get('hashId')
+        if not hash_id and request.sid in client_rooms:
+            hash_id = client_rooms[request.sid]
+        
+        if hash_id:
+            # Broadcast to specific room only
+            emit_to_room('user_update', data, hash_id)
+            game.log(f'Sent user_update to room {hash_id}')
+        else:
+            # Fallback: broadcast to all if no hash ID
+            game.log(f'Warning: No hash ID for user_update, broadcasting to all')
+            socketio.emit('user_update', data)
         
     except Exception as e:
         game.log(f'Error handling user update: {e}')
@@ -354,6 +444,11 @@ def handle_user_update(data):
 def users_test():
     """Serve the users test page"""
     return send_from_directory('.', 'users_test.html')
+
+@app.route('/debug_save_location.html')
+def debug_save_location():
+    """Serve the save location debug page"""
+    return send_from_directory('.', 'debug_save_location.html')
 
 @app.route('/participants_widget')
 def serve_participants_widget():
@@ -571,8 +666,14 @@ def index():
         
         <div class="endpoint">
             <h3>➡️ מעבר לעמוד הבא</h3>
-            <div class="url">GET /?next_page</div>
-            <p>מעדכן שרת על מעבר לשקף הבא במצגת</p>
+            <div class="url">GET /?next_page או GET /?next_slide</div>
+            <p>מעדכן שרת על מעבר לשקף הבא במצגת ושולח הודעת WebSocket ל-add-in</p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>⌨️ סימולציית מקש רווח</h3>
+            <div class="url">GET /?click_action</div>
+            <p>שולח פקודה ל-add-in לסימולציית לחיצה על מקש רווח (התקדמות באנימציה או מעבר לשקף הבא)</p>
         </div>
         
         <div class="endpoint">
@@ -602,13 +703,25 @@ def index():
         <div class="endpoint">
             <h3>💾 שמירת מצגת</h3>
             <div class="url">POST /save</div>
-            <p>שומר נתוני מצגת כ-JSON עם ID ייחודי</p>
+            <p>שומר נתוני מצגת כ-JSON עם Window ID ייחודי</p>
         </div>
         
         <div class="endpoint">
             <h3>📂 טעינת מצגת</h3>
             <div class="url">POST /load</div>
-            <p>טוען נתוני מצגת שמורים לפי ID</p>
+            <p>טוען נתוני מצגת שמורים לפי Window ID</p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>📋 רשימת קבצים שמורים</h3>
+            <div class="url"><a href="/list_saved_files" target="_blank">GET /list_saved_files</a></div>
+            <p>מציג את כל המצגות השמורות ומיקומן המדויק</p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>🔍 בדיקת מיקום שמירה</h3>
+            <div class="url"><a href="/debug_save_location.html" target="_blank">GET /debug_save_location.html</a></div>
+            <p>דף בדיקה אינטראקטיבי - מאשר שהקבצים נשמרים בשרת ולא ליד ה-pptx</p>
         </div>
         
         <div class="endpoint">
@@ -635,7 +748,20 @@ def index():
 
 @app.route('/save', methods=['POST'])
 def save_presentation():
-    """Save presentation data"""
+    """
+    Save presentation data by presentation path.
+    
+    The client sends the full presentation path, and the server creates
+    a unique hash ID from it. This ensures:
+    - Consistency: Same path always gets same hash
+    - Security: Hash generation controlled by server
+    - Uniqueness: Different paths get different hashes
+    
+    IMPORTANT: This server does NOT cache presentation data in memory.
+    All data is saved directly to files (data/saved_presentations/{hash_id}.json).
+    The slideTypeData is stored with slide IDs (UUIDs) as keys, NOT slide numbers.
+    This ensures slide types persist even if slides are reordered.
+    """
     try:
         data = request.get_json()
         
@@ -645,88 +771,349 @@ def save_presentation():
         print(json.dumps(data, indent=2, ensure_ascii=False))
         print("=" * 50)
         
-        if not data or 'id' not in data or 'data' not in data:
-            print("❌ ERROR: Missing id or data in request")
+        # Check for required fields - now expecting hashId instead of presentationPath
+        if not data or 'hashId' not in data or 'data' not in data:
+            print("❌ ERROR: Missing hashId or data in request")
             return jsonify({
                 'status': 'error',
-                'message': 'Missing id or data in request'
+                'message': 'Missing hashId or data in request'
             }), 400
         
-        file_id = data['id']
+        hash_id = data['hashId']
         presentation_data = data['data']
         
         print(f"📋 Extracted data:")
-        print(f"  File ID: {file_id}")
+        print(f"  Hash ID (from client): {hash_id}")
+        
+        # VALIDATION: Check if hash ID is valid
+        if not hash_id or not isinstance(hash_id, str) or hash_id.strip() == '':
+            print("❌ ERROR: Invalid hash ID")
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid hash ID'
+            }), 400
+        
+        # Additional sanitization for extra safety
+        import re
+        hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+        
+        if len(hash_id) < 8 or len(hash_id) > 20:
+            print(f"❌ ERROR: Hash ID length out of range: {len(hash_id)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid hash ID length'
+            }), 400
+        
+        print(f"  Hash ID (sanitized): {hash_id}")
         print(f"  Presentation data keys: {list(presentation_data.keys()) if presentation_data else 'None'}")
         if 'gameState' in presentation_data:
             print(f"  Game state keys: {list(presentation_data['gameState'].keys())}")
             if 'slideTypeData' in presentation_data['gameState']:
-                print(f"  📝 Slide type data: {presentation_data['gameState']['slideTypeData']}")
+                slide_type_data = presentation_data['gameState']['slideTypeData']
+                print(f"  📝 Slide type data (keyed by UUID):")
+                print(f"     Total slides with types: {len(slide_type_data)}")
+                print(f"     Slide IDs: {list(slide_type_data.keys())}")
+                print(f"     Full data: {json.dumps(slide_type_data, indent=4, ensure_ascii=False)}")
         
         # Ensure the saved files directory exists
         saved_files_dir = DATA_DIR / 'saved_presentations'
         saved_files_dir.mkdir(exist_ok=True)
         
-        # Save the data as id.json
-        save_file = saved_files_dir / f'{file_id}.json'
+        # Save the data as hash_id.json (NO CACHE - direct to file)
+        # IMPORTANT: saved_files_dir is ALWAYS srv/data/saved_presentations/
+        # hash_id is generated by server from path (secure)
+        save_file = saved_files_dir / f'{hash_id}.json'
+        
+        # Final safety check: make sure save_file is inside saved_files_dir
+        if not str(save_file.resolve()).startswith(str(saved_files_dir.resolve())):
+            print(f"❌ SECURITY ERROR: Attempted path traversal!")
+            print(f"   Attempted path: {save_file}")
+            print(f"   Allowed directory: {saved_files_dir}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid file path'
+            }), 400
+        
+        # Update presentation_data with hash_id
+        if isinstance(presentation_data, dict):
+            presentation_data['hashId'] = hash_id
         
         with open(save_file, 'w', encoding='utf-8') as f:
             json.dump(presentation_data, f, indent=2, ensure_ascii=False)
         
-        game.log(f'Saved presentation data to {save_file}')
+        game.log(f'✅ Saved presentation data to {save_file}')
+        game.log(f'   Hash ID (from client): {hash_id}')
+        game.log(f'   No cache used - data saved directly to file')
         
         return jsonify({
             'status': 'success',
             'message': 'Presentation saved successfully',
-            'id': file_id,
-            'filename': presentation_data.get('filename', 'Unknown')
+            'hashId': hash_id,
+            'file': str(save_file)
         })
         
     except Exception as e:
-        game.log(f'Error saving presentation: {str(e)}')
+        game.log(f'❌ Error saving presentation: {str(e)}')
         return jsonify({
             'status': 'error',
             'message': f'Error saving presentation: {str(e)}'
         }), 500
 
+@app.route('/list_saved_files', methods=['GET'])
+def list_saved_files():
+    """List all saved presentation files"""
+    try:
+        saved_files_dir = DATA_DIR / 'saved_presentations'
+        
+        # Ensure directory exists
+        if not saved_files_dir.exists():
+            return jsonify({
+                'status': 'info',
+                'files': [],
+                'directory': str(saved_files_dir),
+                'message': 'Directory does not exist yet'
+            })
+        
+        # Get all JSON files
+        files = list(saved_files_dir.glob('*.json'))
+        
+        # Get file details
+        file_details = []
+        for file in files:
+            file_info = {
+                'name': file.name,
+                'size': file.stat().st_size,
+                'modified': file.stat().st_mtime
+            }
+            
+            # Try to read file content for more info
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if 'gameState' in data and 'slideTypeData' in data['gameState']:
+                        file_info['slides'] = len(data['gameState']['slideTypeData'])
+            except:
+                file_info['slides'] = 'unknown'
+            
+            file_details.append(file_info)
+        
+        return jsonify({
+            'status': 'success',
+            'count': len(files),
+            'files': [f['name'] for f in file_details],
+            'details': file_details,
+            'directory': str(saved_files_dir.absolute()),
+            'message': f'Found {len(files)} saved presentation(s)'
+        })
+        
+    except Exception as e:
+        game.log(f'Error listing saved files: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'Error listing files: {str(e)}'
+        }), 500
+
+
+@app.route('/game-info/<hash_id>', methods=['GET'])
+def get_game_info(hash_id):
+    """
+    Get game information including QR code for a specific game hash.
+    This supports multiple games running in parallel by hash ID.
+    
+    Args:
+        hash_id: The game hash ID
+        
+    Returns:
+        JSON with game URL and QR code data
+    """
+    try:
+        print("=" * 50)
+        print(f"📋 GAME INFO REQUEST for hash: {hash_id}")
+        
+        # Validate hash ID
+        if not hash_id or not isinstance(hash_id, str) or hash_id.strip() == '':
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid hash ID'
+            }), 400
+        
+        # Sanitize hash ID
+        import re
+        hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+        
+        if len(hash_id) < 8 or len(hash_id) > 20:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid hash ID length'
+            }), 400
+        
+        # Build admin URL
+        # TODO: Make this configurable via environment variable
+        admin_url = f'http://192.168.31.22:3002/{hash_id}'
+        
+        game.log(f'✅ Generated game info for hash: {hash_id}')
+        game.log(f'   Admin URL: {admin_url}')
+        
+        return jsonify({
+            'status': 'success',
+            'hashId': hash_id,
+            'adminUrl': admin_url,
+            'qrCodeUrl': f'/qr-code/{hash_id}'
+        })
+        
+    except Exception as e:
+        game.log(f'❌ Error generating game info: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/qr-code/<hash_id>', methods=['GET'])
+def get_qr_code(hash_id):
+    """
+    Generate and return QR code image for a specific game hash.
+    
+    Args:
+        hash_id: The game hash ID
+        
+    Returns:
+        PNG image of QR code
+    """
+    try:
+        # Validate and sanitize hash ID
+        import re
+        hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+        
+        if len(hash_id) < 8 or len(hash_id) > 20:
+            return "Invalid hash ID", 400
+        
+        # Build admin URL
+        admin_url = f'http://192.168.31.22:3002/{hash_id}'
+        
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(admin_url)
+        qr.make(fit=True)
+        
+        # Create image
+        img = qr.make_image(fill_color="#0078d4", back_color="white")
+        
+        # Save to BytesIO
+        img_io = BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        
+        game.log(f'✅ Generated QR code for hash: {hash_id}')
+        
+        return send_file(img_io, mimetype='image/png', as_attachment=False)
+        
+    except Exception as e:
+        game.log(f'❌ Error generating QR code: {str(e)}')
+        return f"Error generating QR code: {str(e)}", 500
+
 @app.route('/load', methods=['POST'])
 def load_presentation():
-    """Load presentation data"""
+    """
+    Load presentation data by hash ID.
+    
+    The client generates the hash ID from the presentation path and sends it directly.
+    
+    IMPORTANT: This server does NOT cache presentation data in memory.
+    All data is loaded directly from files (data/saved_presentations/{hash_id}.json).
+    The slideTypeData will be loaded with slide IDs (UUIDs) as keys, NOT slide numbers.
+    This ensures the client can restore slide types by ID regardless of slide order.
+    """
     try:
         data = request.get_json()
         
-        if not data or 'id' not in data:
+        if not data or 'hashId' not in data:
             return jsonify({
                 'status': 'error',
-                'message': 'Missing id in request'
+                'message': 'Missing hashId in request'
             }), 400
         
-        file_id = data['id']
+        hash_id = data['hashId']
         
-        # Look for the saved file
+        print("=" * 50)
+        print("📂 LOAD REQUEST RECEIVED:")
+        print(f"  Hash ID (from client): {hash_id}")
+        
+        # VALIDATION: Check if hash ID is valid
+        if not hash_id or not isinstance(hash_id, str) or hash_id.strip() == '':
+            print("❌ ERROR: Invalid hash ID")
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid hash ID'
+            }), 400
+        
+        # Additional sanitization for extra safety
+        import re
+        hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+        
+        if len(hash_id) < 8 or len(hash_id) > 20:
+            print(f"❌ ERROR: Hash ID length out of range: {len(hash_id)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid hash ID length'
+            }), 400
+        
+        print(f"  Hash ID (sanitized): {hash_id}")
+        
+        # Look for the saved file by Hash ID (NO CACHE - direct from file)
         saved_files_dir = DATA_DIR / 'saved_presentations'
-        save_file = saved_files_dir / f'{file_id}.json'
+        save_file = saved_files_dir / f'{hash_id}.json'
+        
+        # Final safety check: make sure save_file is inside saved_files_dir
+        if not str(save_file.resolve()).startswith(str(saved_files_dir.resolve())):
+            print(f"❌ SECURITY ERROR: Attempted path traversal!")
+            print(f"   Attempted path: {save_file}")
+            print(f"   Allowed directory: {saved_files_dir}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid file path'
+            }), 400
         
         if not save_file.exists():
+            print(f"❌ No saved file found: {save_file}")
+            game.log(f'No saved data found for hash ID: {hash_id}')
             return jsonify({
                 'status': 'error',
                 'message': 'No saved data found for this presentation'
             }), 404
         
-        # Load the data
+        # Load the data directly from file (NO CACHE)
         with open(save_file, 'r', encoding='utf-8') as f:
             presentation_data = json.load(f)
         
-        game.log(f'Loaded presentation data from {save_file}')
+        # Log what we loaded
+        if 'gameState' in presentation_data and 'slideTypeData' in presentation_data['gameState']:
+            slide_type_data = presentation_data['gameState']['slideTypeData']
+            print(f"  📝 Loaded slide type data (keyed by UUID):")
+            print(f"     Total slides with types: {len(slide_type_data)}")
+            print(f"     Slide IDs: {list(slide_type_data.keys())}")
+            print(f"     Full data: {json.dumps(slide_type_data, indent=4, ensure_ascii=False)}")
+        
+        print("=" * 50)
+        
+        game.log(f'✅ Loaded presentation data from {save_file}')
+        game.log(f'   Hash ID (from client): {hash_id}')
+        game.log(f'   No cache used - data loaded directly from file')
         
         return jsonify({
             'status': 'success',
             'message': 'Presentation loaded successfully',
-            'data': presentation_data
+            'hashId': hash_id,
+            'data': presentation_data,
+            'file': str(save_file)
         })
         
     except Exception as e:
-        game.log(f'Error loading presentation: {str(e)}')
+        game.log(f'❌ Error loading presentation: {str(e)}')
         return jsonify({
             'status': 'error',
             'message': f'Error loading presentation: {str(e)}'
@@ -739,8 +1126,14 @@ def api_handler():
         # Determine action from query parameters
         if 'init' in request.args:
             action = 'init'
+        elif 'register_session' in request.args:
+            action = 'register_session'
+        elif 'reset_to_first' in request.args:
+            action = 'reset_to_first'
         elif 'next_page' in request.args:
             action = 'next_page'
+        elif 'next_slide' in request.args:
+            action = 'next_slide'
         elif 'get_users' in request.args:
             action = 'get_users'
         elif 'get_time' in request.args:
@@ -755,6 +1148,10 @@ def api_handler():
             action = 'stop'
         elif 'users_demo' in request.args:
             action = 'users_demo'
+        elif 'click_action' in request.args:
+            action = 'click_action'
+        elif 'reset_animations' in request.args:
+            action = 'reset_animations'
         else:
             return index()
         
@@ -766,16 +1163,181 @@ def api_handler():
                 'game_id': game_id
             })
         
-        elif action == 'next_page':
+        elif action == 'register_session':
+            # Admin registers a new game session
             try:
-                game_data = game.next_slide()
+                hash_id = request.args.get('hash_id')
+                game_pin = request.args.get('game_pin')
+                
+                if not hash_id or not game_pin:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing hash_id or game_pin'
+                    }), 400
+                
+                # Validate and sanitize hash_id
+                import re
+                hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+                game_pin = re.sub(r'[^0-9]', '', game_pin)
+                
+                if len(hash_id) < 8 or len(hash_id) > 20:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid hash_id length'
+                    }), 400
+                
+                if len(game_pin) != 6:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Game PIN must be 6 digits'
+                    }), 400
+                
+                # Store session
+                game_sessions[hash_id] = {
+                    'gamePin': game_pin,
+                    'timestamp': time.time(),
+                    'active': True
+                }
+                
+                game.log(f'✅ Session registered: hash={hash_id}, PIN={game_pin}')
+                game.log(f'📊 Current client_rooms: {client_rooms}')
+                
+                # Notify add-in in this game room
+                clients_in_room = sum(1 for h in client_rooms.values() if h == hash_id)
+                game.log(f'🔍 Clients in room {hash_id}: {clients_in_room}')
+                
+                sent = emit_to_room('game_pin_registered', {
+                    'gamePin': game_pin,
+                    'hashId': hash_id,
+                    'timestamp': time.time()
+                }, hash_id)
+                
+                game.log(f'📤 Sent game_pin_registered to {sent} client(s)')
+                
                 return jsonify({
                     'status': 'success',
-                    'slide': game_data['current_slide'],
-                    'users': game_data['users'],
-                    'time': game_data['time_remaining']
+                    'message': 'Session registered successfully',
+                    'hashId': hash_id,
+                    'gamePin': game_pin
                 })
+                
             except Exception as e:
+                game.log(f'❌ Error in register_session: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+        
+        elif action == 'reset_to_first':
+            # Admin resets presentation to first slide
+            try:
+                hash_id = request.args.get('hash_id')
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing hash_id'
+                    }), 400
+                
+                # Validate and sanitize hash_id
+                import re
+                hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+                
+                if len(hash_id) < 8 or len(hash_id) > 20:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid hash_id length'
+                    }), 400
+                
+                game.log(f'📍 Resetting to first slide for game: {hash_id}')
+                
+                # Send WebSocket message to add-ins in this specific game room
+                reset_command = {
+                    'action': 'go_to_first_slide',
+                    'timestamp': time.time(),
+                    'hashId': hash_id
+                }
+                
+                sent_count = emit_to_room('slide_navigation', reset_command, hash_id)
+                
+                if sent_count > 0:
+                    return jsonify({
+                        'status': 'success',
+                        'message': f'Reset command sent to {sent_count} client(s) in game {hash_id}',
+                        'action': 'go_to_first_slide'
+                    })
+                else:
+                    return jsonify({
+                        'status': 'warning',
+                        'message': f'No clients connected to game {hash_id}'
+                    }), 404
+                    
+            except Exception as e:
+                game.log(f'❌ Error in reset_to_first: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+        
+        elif action == 'next_page' or action == 'next_slide':
+            try:
+                # Get hash_id from request (sent by admin)
+                hash_id = request.args.get('hash_id')
+                
+                if not hash_id:
+                    game.log('⚠️ Next slide request without hash_id - broadcasting to all')
+                    # Fallback: broadcast to all if no hash_id (for backwards compatibility)
+                    slide_command = {
+                        'action': 'go_to_next_slide',
+                        'timestamp': time.time()
+                    }
+                    socketio.emit('slide_navigation', slide_command)
+                    
+                    return jsonify({
+                        'status': 'success',
+                        'message': 'Next slide command sent to all clients',
+                        'action': 'go_to_next_slide'
+                    })
+                
+                # Validate and sanitize hash_id
+                import re
+                hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+                
+                if len(hash_id) < 8 or len(hash_id) > 20:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid hash ID length'
+                    }), 400
+                
+                # Send WebSocket message ONLY to add-ins in this specific game room
+                slide_command = {
+                    'action': 'go_to_next_slide',
+                    'timestamp': time.time(),
+                    'hashId': hash_id
+                }
+                
+                # Use emit_to_room to send only to clients in this game
+                sent_count = emit_to_room('slide_navigation', slide_command, hash_id)
+                
+                if sent_count > 0:
+                    game.log(f'✅ Next slide command sent to {sent_count} client(s) in game {hash_id}')
+                    return jsonify({
+                        'status': 'success',
+                        'message': f'Next slide command sent to {sent_count} client(s) in game {hash_id}',
+                        'action': 'go_to_next_slide',
+                        'hashId': hash_id,
+                        'clientsNotified': sent_count
+                    })
+                else:
+                    game.log(f'⚠️ No clients found in game {hash_id}')
+                    return jsonify({
+                        'status': 'warning',
+                        'message': f'No clients connected to game {hash_id}',
+                        'hashId': hash_id
+                    }), 404
+                    
+            except Exception as e:
+                game.log(f'❌ Error in next_slide: {str(e)}')
                 return jsonify({'status': 'error', 'message': str(e)}), 400
         
         elif action == 'get_users':
@@ -877,6 +1439,62 @@ def api_handler():
                     'status': 'error',
                     'message': f'Server error in users_demo: {str(e)}'
                 }), 500
+        
+        elif action == 'click_action':
+            try:
+                game.log('Spacebar simulation request received')
+                
+                # Send WebSocket message to add-in to simulate spacebar press
+                spacebar_command = {
+                    'action': 'simulate_click',
+                    'timestamp': time.time()
+                }
+                
+                # Broadcast spacebar command to all connected clients (including add-in)
+                socketio.emit('click_navigation', spacebar_command)
+                
+                game.log('Spacebar simulation command sent to add-in via WebSocket')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Spacebar simulation command sent to add-in',
+                    'action': 'simulate_click'
+                })
+                
+            except Exception as e:
+                game.log(f'Error in click_action endpoint: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Server error in click_action: {str(e)}'
+                }), 500
+        
+        elif action == 'reset_animations':
+            try:
+                game.log('Reset animations request received')
+                
+                # Send WebSocket message to add-in to reset animation state
+                reset_command = {
+                    'action': 'reset_animations',
+                    'timestamp': time.time()
+                }
+                
+                # Broadcast reset command to all connected clients (including add-in)
+                socketio.emit('animation_reset', reset_command)
+                
+                game.log('Animation reset command sent to add-in via WebSocket')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Animation reset command sent to add-in',
+                    'action': 'reset_animations'
+                })
+                
+            except Exception as e:
+                game.log(f'Error in reset_animations endpoint: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Server error in reset_animations: {str(e)}'
+                }), 500
     
     except Exception as e:
         game.log(f'Error: {str(e)}')
@@ -896,7 +1514,8 @@ if __name__ == '__main__':
     print("")
     print("Available endpoints:")
     print("  /?init          - Initialize game")
-    print("  /?next_page     - Next slide")
+    print("  /?next_page     - Next slide (also /?next_slide)")
+    print("  /?click_action  - Simulate spacebar press (animations/next slide)")
     print("  /?get_users     - Get user count")
     print("  /?get_time      - Get time remaining")
     print("  /?status        - Get full status")
@@ -904,12 +1523,15 @@ if __name__ == '__main__':
     print("  /?start[&time=X] - Start timer (default 30s)")
     print("  /?stop          - Stop timer")
     print("  /?users_demo    - Demo participant update (nick, type, total)")
-    print("  /save           - Save presentation data (POST)")
-    print("  /load           - Load presentation data (POST)")
+    print("  /save           - Save presentation data by Window ID (POST)")
+    print("  /load           - Load presentation data by Window ID (POST)")
     print("")
     print("WebSocket Events (sent to add-in):")
     print("  participant_update - Individual participant add/remove")
     print("  user_update     - Real-time user count updates")
+    print("  slide_navigation - Next slide navigation commands")
+    print("  click_navigation - Click simulation commands")
+    print("  slide_change    - Slide navigation events (legacy)")
     print("  timer_finished  - Timer completion")
     print("  timer_stopped   - Timer manual stop")
     print("")

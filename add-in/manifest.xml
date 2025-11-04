@@ -13,7 +13,7 @@
   <DisplayName DefaultValue="Kahoot Quiz Manager" />
   <Description DefaultValue="Quiz trivia add-in with central server management" />
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+<HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png"/>
   <SupportUrl DefaultValue="https://din-online.co.il" />
   <AppDomains>
     <AppDomain>https://din-online.co.il</AppDomain>
@@ -76,70 +76,6 @@
                     <SourceLocation resid="Taskpane.Url"/>
                   </Action>
                 </Control>
-
-                <Control xsi:type="Button" id="InsertUsersButton">
-                  <Label resid="InsertUsersButton.Label" />
-                  <Supertip>
-                    <Title resid="InsertUsersButton.Label" />
-                    <Description resid="InsertUsersButton.Tooltip" />
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>insertUsersPlaceholder</FunctionName>
-                  </Action>
-                </Control>
-
-                <Control xsi:type="Button" id="InsertTimeButton">
-                  <Label resid="InsertTimeButton.Label" />
-                  <Supertip>
-                    <Title resid="InsertTimeButton.Label" />
-                    <Description resid="InsertTimeButton.Tooltip" />
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>insertTimePlaceholder</FunctionName>
-                  </Action>
-                </Control>
-
-                <Control xsi:type="Button" id="SaveButton">
-                  <Label resid="SaveButton.Label" />
-                  <Supertip>
-                    <Title resid="SaveButton.Label" />
-                    <Description resid="SaveButton.Tooltip" />
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>savePresentationFromToolbar</FunctionName>
-                  </Action>
-                </Control>
-
-                <Control xsi:type="Button" id="LoadButton">
-                  <Label resid="LoadButton.Label" />
-                  <Supertip>
-                    <Title resid="LoadButton.Label" />
-                    <Description resid="LoadButton.Tooltip" />
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>loadPresentationFromToolbar</FunctionName>
-                  </Action>
-                </Control>
               </Group>
             </OfficeTab>
           </ExtensionPoint>
@@ -162,18 +98,10 @@
         <bt:String id="GetStarted.Title" DefaultValue="Get Started with Kahoot Quiz Manager"/>
         <bt:String id="CommandsGroup.Label" DefaultValue="Kahoot Controls"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Control Panel"/>
-        <bt:String id="InsertUsersButton.Label" DefaultValue="👥 Add Users Counter"/>
-        <bt:String id="InsertTimeButton.Label" DefaultValue="⏰ Add Timer Display"/>
-        <bt:String id="SaveButton.Label" DefaultValue="💾 Save Presentation"/>
-        <bt:String id="LoadButton.Label" DefaultValue="📂 Load Presentation"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Add-in for managing trivia quiz with central server"/>
         <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open the control panel to manage the quiz"/>
-        <bt:String id="InsertUsersButton.Tooltip" DefaultValue="Insert a text box that will show the current number of participants in real-time"/>
-        <bt:String id="InsertTimeButton.Tooltip" DefaultValue="Insert a text box that will show the remaining time in real-time"/>
-        <bt:String id="SaveButton.Tooltip" DefaultValue="Save the current presentation state and quiz data to the server"/>
-        <bt:String id="LoadButton.Tooltip" DefaultValue="Load previously saved presentation state and quiz data from the server"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>

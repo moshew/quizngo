@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>בדיקת מיקום שמירה</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            direction: rtl;
+        }
+        .test-section {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        button {
+            background: #0078d4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #106ebe;
+        }
+        .result {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            border: 1px solid #ddd;
+        }
+        .success { color: #2ea44f; }
+        .error { color: #d73a49; }
+        .info { color: #0969da; }
+    </style>
+</head>
+<body>
+    <h1>🔍 בדיקת מיקום שמירת קבצים</h1>
+    
+    <div class="test-section">
+        <h2>בדיקה 1: שמירת קובץ בדיקה</h2>
+        <p>שמור קובץ בדיקה ובדוק איפה הוא נשמר</p>
+        <button onclick="testSave()">שמור קובץ בדיקה</button>
+        <div id="saveResult" class="result" style="display:none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>בדיקה 2: טעינת קובץ</h2>
+        <p>נסה לטעון את קובץ הבדיקה</p>
+        <button onclick="testLoad()">טען קובץ בדיקה</button>
+        <div id="loadResult" class="result" style="display:none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>בדיקה 3: רשימת כל הקבצים</h2>
+        <p>הצג את כל הקבצים השמורים</p>
+        <button onclick="listFiles()">הצג קבצים</button>
+        <div id="listResult" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/';
+        
+        async function testSave() {
+            const resultDiv = document.getElementById('saveResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '⏳ שומר קובץ בדיקה...';
+            
+            try {
+                const testData = {
+                    id: 'DEBUG_TEST',
+                    data: {
+                        windowId: 'DEBUG_TEST',
+                        savedAt: new Date().toISOString(),
+                        gameState: {
+                            test: true,
+                            timestamp: Date.now(),
+                            slideTypeData: {
+                                'test-uuid-123': 'פתיחה',
+                                'test-uuid-456': 'שאלה'
+                            }
+                        }
+                    }
+                };
+                
+                const response = await fetch(API_BASE + 'save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<span class="success">✅ שמירה הצליחה!</span>\n\n` +
+                        `סטטוס: ${result.status}\n` +
+                        `הודעה: ${result.message}\n` +
+                        `ID: ${result.id}\n` +
+                        `קובץ: ${result.file || 'לא צוין'}\n\n` +
+                        `<span class="info">📁 הקובץ אמור להיות ב:</span>\n` +
+                        `srv/data/saved_presentations/DEBUG_TEST.json`;
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ שגיאה בשמירה</span>\n\n` +
+                        JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ שגיאה</span>\n\n${error.message}\n${error.stack}`;
+            }
+        }
+        
+        async function testLoad() {
+            const resultDiv = document.getElementById('loadResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '⏳ טוען קובץ בדיקה...';
+            
+            try {
+                const response = await fetch(API_BASE + 'load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: 'DEBUG_TEST' })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<span class="success">✅ טעינה הצליחה!</span>\n\n` +
+                        `סטטוס: ${result.status}\n` +
+                        `הודעה: ${result.message}\n` +
+                        `קובץ: ${result.file || 'לא צוין'}\n\n` +
+                        `<span class="info">📄 נתונים:</span>\n` +
+                        JSON.stringify(result.data, null, 2);
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ שגיאה בטעינה</span>\n\n` +
+                        JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ שגיאה</span>\n\n${error.message}`;
+            }
+        }
+        
+        async function listFiles() {
+            const resultDiv = document.getElementById('listResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '⏳ מחפש קבצים...';
+            
+            try {
+                // Try to get list of files via a custom endpoint
+                const response = await fetch(API_BASE + 'list_saved_files', {
+                    method: 'GET'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    if (result.files && result.files.length > 0) {
+                        resultDiv.innerHTML = `<span class="success">✅ נמצאו ${result.files.length} קבצים:</span>\n\n` +
+                            result.files.map((f, i) => `${i+1}. ${f}`).join('\n') +
+                            `\n\n<span class="info">📁 מיקום: ${result.directory}</span>`;
+                    } else {
+                        resultDiv.innerHTML = `<span class="info">ℹ️ לא נמצאו קבצים שמורים</span>\n\n` +
+                            `מיקום: ${result.directory}`;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ Endpoint לא זמין</span>\n\n` +
+                        `הוסף את ה-endpoint הזה לשרת:\n\n` +
+                        `@app.route('/list_saved_files')\n` +
+                        `def list_saved_files():\n` +
+                        `    saved_dir = DATA_DIR / 'saved_presentations'\n` +
+                        `    files = list(saved_dir.glob('*.json'))\n` +
+                        `    return jsonify({\n` +
+                        `        'files': [f.name for f in files],\n` +
+                        `        'directory': str(saved_dir)\n` +
+                        `    })`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ שגיאה</span>\n\n${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,141 @@
+<!-- תשובה נכונה -->
+<div class="status-section">
+    <div style="margin: 20px 0;">
+        <label for="correctAnswer" style="display: block; font-size: 16px; font-weight: 600; color: #495057; margin-bottom: 10px;">
+            ✅ תשובה נכונה:
+        </label>
+        <select id="correctAnswer" style="width: 100%; padding: 12px; font-size: 16px; border: 2px solid #dee2e6; border-radius: 8px; background-color: white; cursor: pointer; transition: border-color 0.3s;">
+            <option value="1">🔴 תשובה 1</option>
+            <option value="2">🔵 תשובה 2</option>
+            <option value="3">🟡 תשובה 3</option>
+            <option value="4">🟢 תשובה 4</option>
+        </select>
+    </div>
+</div>
+
+<!-- כפתורי הוספת אלמנטים דינמיים לשקף -->
+<div class="status-section">
+    <div style="margin: 20px 0;">
+        <label style="display: block; font-size: 16px; font-weight: 600; color: #495057; margin-bottom: 10px;">
+            🎯 הוסף לשקף:
+        </label>
+        <div style="display: flex; gap: 10px; flex-direction: column;">
+            <button class="button" onclick="addQuestionTime()" style="padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: transform 0.2s;">
+                ⏱️ זמן שאלה
+            </button>
+            <button class="button" onclick="addRespondentsCount()" style="padding: 10px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: transform 0.2s;">
+                👥 מספר עונים
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    console.log('🎬 question.html script starting...');
+    
+    const correctAnswerSelect = document.getElementById('correctAnswer');
+    
+    if (!correctAnswerSelect) {
+        console.error('❌ correctAnswer select element NOT FOUND!');
+        return;
+    }
+    
+    console.log('✅ correctAnswer select element found');
+    
+    // פונקציה לטעינת תשובה שמורה
+    function loadSavedAnswer() {
+        if (window.currentSlideId && window.slideTypeData && window.slideTypeData[window.currentSlideId]) {
+            const slideData = window.slideTypeData[window.currentSlideId];
+            
+            // אם יש תשובה שמורה - טען אותה
+            if (slideData.correctAnswer) {
+                correctAnswerSelect.value = slideData.correctAnswer;
+                console.log('📖 נטענה תשובה שמורה:', slideData.correctAnswer);
+            } else {
+                // אם אין תשובה שמורה, שמור את ברירת המחדל (תשובה 1)
+                console.log('💾 שומר ברירת מחדל - תשובה 1');
+                saveAnswer();
+            }
+        }
+    }
+    
+    // פונקציה לשמירת תשובה
+    function saveAnswer() {
+        if (!window.currentSlideId) {
+            console.error('❌ אין currentSlideId!');
+            return;
+        }
+        
+        if (!window.slideTypeData) {
+            console.error('❌ אין slideTypeData!');
+            return;
+        }
+        
+        const answerValue = correctAnswerSelect.value;
+        const slideId = window.currentSlideId;
+        
+        console.log('💾 Starting saveAnswer...');
+        console.log('   slideId:', slideId);
+        console.log('   answerValue:', answerValue);
+        console.log('   Current data:', window.slideTypeData[slideId]);
+        
+        // שמירה ב-slideTypeData
+        if (!window.slideTypeData[slideId]) {
+            console.log('   Creating new object');
+            window.slideTypeData[slideId] = {
+                type: 'שאלה',
+                correctAnswer: answerValue
+            };
+        } else if (typeof window.slideTypeData[slideId] === 'string') {
+            console.log('   Converting string to object');
+            const slideType = window.slideTypeData[slideId];
+            window.slideTypeData[slideId] = {
+                type: slideType,
+                correctAnswer: answerValue
+            };
+        } else {
+            console.log('   Updating existing object');
+            // אם זה כבר אובייקט - עדכן את correctAnswer
+            window.slideTypeData[slideId].correctAnswer = answerValue;
+            
+            // ודא שיש type
+            if (!window.slideTypeData[slideId].type) {
+                window.slideTypeData[slideId].type = 'שאלה';
+            }
+        }
+        
+        console.log('✅ תשובה נכונה נשמרה:', answerValue);
+        console.log('📋 slideTypeData[' + slideId + ']:', window.slideTypeData[slideId]);
+        console.log('📋 Full slideTypeData:', JSON.stringify(window.slideTypeData, null, 2));
+        
+        // סמן שיש שינוי לשמירה (auto-save)
+        if (typeof window.markUnsavedChanges === 'function') {
+            console.log('🔔 Calling markUnsavedChanges...');
+            window.markUnsavedChanges();
+        } else {
+            console.error('❌ markUnsavedChanges is not a function!');
+        }
+    }
+    
+    // שמירה מיידית בעת שינוי בחירה
+    if (correctAnswerSelect) {
+        console.log('🎯 Adding change event listener to correctAnswer select...');
+        
+        correctAnswerSelect.addEventListener('change', function() {
+            console.log('🔔 CHANGE EVENT FIRED!');
+            console.log('✅ תשובה נכונה נבחרה:', this.value);
+            saveAnswer();
+        });
+        
+        console.log('✅ Event listener added successfully');
+    } else {
+        console.error('❌ Cannot add event listener - element not found');
+    }
+    
+    // טען תשובה שמורה (או שמור ברירת מחדל) בעת טעינת השקף
+    // Call immediately - no delay needed since window variables are ready when script executes
+    loadSavedAnswer();
+})();
+</script>
+

@@ -18,13 +18,51 @@
     <style>
         body {
             font-family: "Segoe UI", "Segoe UI Web (West European)", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
-            padding: 20px;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
             direction: rtl;
         }
         
         .container {
             max-width: 400px;
             margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        /* Header קבוע - סוג השקף */
+        .header-section {
+            flex-shrink: 0;
+            padding: 20px 20px 0px 20px;
+            background: white;
+            border-bottom: 1px solid #edebe9;
+            z-index: 20;
+        }
+        
+        /* Content גולל - החלק האמצעי בלבד */
+        .scrollable-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 15px 20px;
+        }
+        
+        /* Footer קבוע - פעולות משותפות */
+        .footer-section {
+            flex-shrink: 0;
+            background: white;
+            border-top: 2px solid #dee2e6;
+            padding: 10px 20px;
+            z-index: 20;
+        }
+        
+        #slideContentArea {
+            display: flex;
+            flex-direction: column;
         }
         
         .status-section {
@@ -151,121 +189,62 @@
 
 <body>
     <div class="container">
-        <!-- Slide Type Selection Section -->
-        <div class="control-section">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-                <span style="font-weight: bold; min-width: 80px;">סוג שקף:</span>
-                <select id="slideType" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; direction: rtl;">
-                    <option value="מעבר">מעבר</option>
-                    <option value="פתיחה">פתיחה</option>
-                    <option value="שאלה">שאלה</option>
-                    <option value="סטטיסטיקת מענה">סטטיסטיקת מענה</option>
-                    <option value="מובילים">מובילים</option>
-                    <option value="סיכום">סיכום</option>
-                </select>
-            </div>
-            
-            <!-- Status Info Section -->
-            <div style="margin-bottom: 15px;">
-                <div id="detectedInfo" style="font-size: 12px; color: #0078d4; margin-top: 5px; padding: 8px; background: #f0f8ff; border-radius: 3px; display: none;"></div>
-            </div>
-        </div>
-        
-        <!-- Default status section for all slide types except פתיחה -->
-        <div class="status-section" id="defaultStatusSection">
-            <div style="margin: 10px 0; text-align: center;">
-                <div style="font-size: 14px; color: #605e5c; margin-bottom: 5px;">מזהה משחק:</div>
-                <div id="gameId" style="font-size: 24px; font-weight: bold; color: #0078d4;">-</div>
-            </div>
-            
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value" id="userCount">-</div>
-                    <div class="stat-label">משתתפים</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="timeRemaining">-</div>
-                    <div class="stat-label">זמן נותר</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="currentSlide">-</div>
-                    <div class="stat-label">שקופית נוכחית</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Special section for פתיחה slide type -->
-        <div class="status-section" id="openingStatusSection" style="display: none;">
-            <div style="margin: 10px 0; text-align: center;">
-                <div style="font-size: 14px; color: #605e5c; margin-bottom: 5px;">מזהה משחק:</div>
-                <div id="gameIdOpening" style="font-size: 24px; font-weight: bold; color: #0078d4;">-</div>
-            </div>
-            
-            <div style="margin-top: 20px;">
-                <button class="button" id="initButtonOpening" onclick="initializeQuiz()" style="width: 100%; margin-bottom: 15px;">
-                    🚀 התחל משחק
-                </button>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                    <button class="button" id="showParticipantsCountBtn" onclick="showParticipantsCount()">
-                        👥 מספר משתתפים
-                    </button>
-                    <button class="button" id="insertParticipantsDisplayBtn" onclick="insertParticipantsDisplay()">
-                        📋 הצג משתתפים פעילים
-                    </button>
+        <!-- Header קבוע - סוג השקף -->
+        <div class="header-section">
+            <!-- Slide Type Selection Section -->
+            <div class="control-section" id="slideTypeControl">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0;">
+                    <span style="font-weight: bold; min-width: 80px;">סוג שקף:</span>
+                    <select id="slideType" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; direction: rtl;">
+                        <option value="opening">פתיחה</option>
+                        <option value="transition">מעבר</option>
+                        <option value="question">שאלה</option>
+                        <option value="statistics">סטטיסטיקת מענה</option>
+                        <option value="leaderboard">מובילים</option>
+                        <option value="summary">סיכום</option>
+                    </select>
                 </div>
                 
-                <button class="button" onclick="insertLiveParticipantsArea()" style="width: 100%; background-color: #16a085;">
-                    🔄 הכנס אזור משתתפים חי
-                </button>
+                <!-- Status Info Section -->
+                <div>
+                    <div id="detectedInfo" style="font-size: 12px; color: #0078d4; padding: 8px; background: #f0f8ff; border-radius: 3px; display: none; margin-top: 8px;"></div>
+                </div>
             </div>
         </div>
         
-        <div class="control-section" id="defaultControlSections">
-            <div style="margin-bottom: 20px;">
-                <h3>בקרת משחק</h3>
-                <button class="button" id="initButton" onclick="initializeQuiz()">
-                    🚀 התחל משחק
-                </button>
-                <button class="button" id="saveButton" onclick="savePresentationData()">
-                    💾 שמור נתונים
-                </button>
+        <!-- Content גולל - רק החלק האמצעי -->
+        <div class="scrollable-content">
+            <!-- Dynamic content area - loads different HTML based on slide type -->
+            <div id="slideContentArea">
+                <!-- Content will be loaded dynamically based on slide type -->
+                <div style="text-align: center; padding: 40px 20px; color: #6c757d;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">⏳</div>
+                    <p>טוען ממשק...</p>
+                </div>
             </div>
             
-            <div>
-                <h3>טיימר ומשתתפים</h3>
-                <div style="margin-bottom: 10px;">
-                    <label for="timerDuration">זמן בשניות:</label>
-                    <input type="number" id="timerDuration" value="30" min="1" max="300" style="width: 60px; margin: 0 5px;">
-                </div>
-                <button class="button" id="startTimerButton" onclick="startTimer()">
-                    ⏱️ התחל טיימר
-                </button>
-                <button class="button" id="stopTimerButton" onclick="stopTimer()" disabled>
-                    ⏹️ עצור טיימר
-                </button>
-            </div>
-        </div>
-        
-        
-        
-        <div id="errorMessage" class="warning-box" style="display: none;"></div>
-        
-        <!-- Dynamic Participants Display Area (only visible for פתיחה slides) -->
-        <div id="dynamicParticipantsArea" style="display: none; margin-top: 20px;">
-            <div style="background-color: #f3f2f1; padding: 15px; border-radius: 4px; border: 2px solid #0078d4;">
-                <h4 style="margin: 0 0 15px 0; text-align: center; color: #0078d4;">משתתפים פעילים</h4>
-                <div id="participantsContainer" data-kahoot-participants-area="true" style="min-height: 100px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: flex-start;">
-                    <div id="noParticipants" style="color: #666; font-style: italic; width: 100%; text-align: center; padding: 20px;">
-                        מחכים למשתתפים...
+            <div id="errorMessage" class="warning-box" style="display: none;"></div>
+            
+            <!-- Dynamic Participants Display Area (only visible for פתיחה slides) -->
+            <div id="dynamicParticipantsArea" style="display: none; margin-top: 20px;">
+                <div style="background-color: #f3f2f1; padding: 15px; border-radius: 4px; border: 2px solid #0078d4;">
+                    <h4 style="margin: 0 0 15px 0; text-align: center; color: #0078d4;">משתתפים פעילים</h4>
+                    <div id="participantsContainer" data-kahoot-participants-area="true" style="min-height: 100px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: flex-start;">
+                        <div id="noParticipants" style="color: #666; font-style: italic; width: 100%; text-align: center; padding: 20px;">
+                            מחכים למשתתפים...
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">
+                        סה"כ משתתפים: <span id="totalParticipantsCount">0</span>
                     </div>
                 </div>
-                <div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">
-                    סה"כ משתתפים: <span id="totalParticipantsCount">0</span>
-                </div>
             </div>
         </div>
         
+        <!-- Footer קבוע - פעולות משותפות (ייטען דינמית מ-shared-actions.html) -->
+        <div class="footer-section" id="sharedActionsContainer">
+            <!-- Will be populated by shared-actions.html -->
+        </div>
     </div>
 
     <script type="text/javascript" src="taskpane.js"></script>

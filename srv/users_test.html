@@ -140,6 +140,21 @@
             color: white;
         }
 
+        .next-slide {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+        }
+
+        .click-action {
+            background: linear-gradient(135deg, #fd7e14, #e55a00);
+            color: white;
+        }
+
+        .reset-animations {
+            background: linear-gradient(135deg, #6f42c1, #5a32a3);
+            color: white;
+        }
+
         .control-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -185,6 +200,15 @@
             </button>
             <button class="control-button remove-all" onclick="removeAllUsers()">
                 ➖ הסר את כולם
+            </button>
+            <button class="control-button next-slide" onclick="nextSlide()">
+                ➡️ שקף הבא
+            </button>
+            <button class="control-button click-action" onclick="clickAction()">
+                ⌨️ רווח
+            </button>
+            <button class="control-button reset-animations" onclick="resetAnimations()">
+                🔄 איפוס אנימציות
             </button>
         </div>
 
@@ -336,6 +360,129 @@
                     toggleUser(username);
                 }
             });
+        }
+
+        // Next slide function
+        async function nextSlide() {
+            try {
+                const url = `${API_BASE}?next_slide`;
+                
+                console.log(`📤 Sending next slide request to:`, url);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log(`✅ Next slide response:`, result);
+                    updateConnectionStatus(true);
+                    
+                    // Show success message with slide info
+                    const statusElement = document.getElementById('connectionStatus');
+                    statusElement.className = 'status connected';
+                    statusElement.innerHTML = `✅ עבר לשקף ${result.slide || 'הבא'} בהצלחה`;
+                    
+                    // Reset to ready state after 3 seconds
+                    setTimeout(() => {
+                        statusElement.innerHTML = '✅ מוכן לסימולציה';
+                    }, 3000);
+                } else {
+                    console.error('Next slide request failed:', response.status);
+                    updateConnectionStatus(false);
+                    alert(`שגיאה במעבר לשקף הבא: ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('Error sending next slide request:', error);
+                updateConnectionStatus(false);
+                alert('שגיאה במעבר לשקף הבא! בדוק שהשרת פועל.');
+            }
+        }
+
+        // Spacebar action function
+        async function clickAction() {
+            try {
+                const url = `${API_BASE}?click_action`;
+                
+                console.log(`📤 Sending spacebar action request to:`, url);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log(`✅ Spacebar action response:`, result);
+                    updateConnectionStatus(true);
+                    
+                    // Show success message
+                    const statusElement = document.getElementById('connectionStatus');
+                    statusElement.className = 'status connected';
+                    statusElement.innerHTML = `✅ מקש רווח נשלח בהצלחה`;
+                    
+                    // Reset to ready state after 2 seconds
+                    setTimeout(() => {
+                        statusElement.innerHTML = '✅ מוכן לסימולציה';
+                    }, 2000);
+                } else {
+                    console.error('Spacebar action request failed:', response.status);
+                    updateConnectionStatus(false);
+                    alert(`שגיאה בשליחת מקש רווח: ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('Error sending spacebar action request:', error);
+                updateConnectionStatus(false);
+                alert('שגיאה בשליחת מקש רווח! בדוק שהשרת פועל.');
+            }
+        }
+
+        // Reset animations function
+        async function resetAnimations() {
+            try {
+                const url = `${API_BASE}?reset_animations`;
+                
+                console.log(`📤 Sending reset animations request to:`, url);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log(`✅ Reset animations response:`, result);
+                    updateConnectionStatus(true);
+                    
+                    // Show success message
+                    const statusElement = document.getElementById('connectionStatus');
+                    statusElement.className = 'status connected';
+                    statusElement.innerHTML = `✅ מצב אנימציות אופס`;
+                    
+                    // Reset to ready state after 2 seconds
+                    setTimeout(() => {
+                        statusElement.innerHTML = '✅ מוכן לסימולציה';
+                    }, 2000);
+                } else {
+                    console.error('Reset animations request failed:', response.status);
+                    updateConnectionStatus(false);
+                    alert(`שגיאה באיפוס אנימציות: ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('Error sending reset animations request:', error);
+                updateConnectionStatus(false);
+                alert('שגיאה באיפוס אנימציות! בדוק שהשרת פועל.');
+            }
         }
 
         // Update active count display

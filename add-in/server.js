@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 // Enable CORS for Office Add-ins
 app.use(cors({
-    origin: ['https://www.office.com', 'https://office.com', 'https://outlook.office.com', 'https://outlook.office365.com'],
+    origin: ['https://www.office.com', 'https://office.com', 'https://outlook.office.com', 'https://outlook.office365.com', 'https://localhost:3000'],
     credentials: true
 }));
 

@@ -1,0 +1,180 @@
+<!-- Start Game Screen with QR Code -->
+<style>
+    .start-container {
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .game-title {
+        font-size: 24px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 20px;
+    }
+    
+    .qr-section {
+        background: white;
+        border: 2px solid #0078d4;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+    }
+    
+    .qr-code-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 20px 0;
+        min-height: 200px;
+    }
+    
+    #qrcode, #qrCanvas {
+        display: inline-block;
+        border: 2px solid #0078d4;
+        border-radius: 8px;
+        background: white;
+    }
+    
+    .url-display {
+        background-color: #f3f2f1;
+        padding: 12px;
+        border-radius: 4px;
+        margin: 15px 0;
+        font-family: monospace;
+        font-size: 14px;
+        word-break: break-all;
+        color: #0078d4;
+    }
+    
+    .instructions {
+        font-size: 16px;
+        color: #605e5c;
+        margin: 15px 0;
+        line-height: 1.6;
+    }
+    
+    .loading {
+        color: #666;
+        font-style: italic;
+    }
+</style>
+
+<div class="start-container">
+    <div class="game-title">🎮 התחל משחק</div>
+    
+    <div class="qr-section">
+        <h3 style="margin: 0 0 15px 0; color: #0078d4;">סרוק קוד QR לכניסה למשחק</h3>
+        
+        <div class="qr-code-container" id="qrCodeArea">
+            <div class="loading">טוען קוד QR...</div>
+        </div>
+        
+        <div class="instructions">
+            סרוק את הקוד עם מכשיר נייד או היכנס לכתובת:
+        </div>
+        
+        <div class="url-display" id="adminUrl">
+            טוען כתובת...
+        </div>
+    </div>
+    
+    <div style="margin-top: 20px; font-size: 12px; color: #999;">
+        💡 המשתתפים יכולים להיכנס דרך הקוד או הכתובת
+    </div>
+</div>
+
+<script>
+// Get hash ID and generate QR code
+async function initializeStartScreen() {
+    console.log('🎮 Initializing start screen...');
+    
+    try {
+        // Wait a bit for parent window to be ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Get the hash ID from the presentation
+        console.log('🔍 Checking parent.getGameHashId availability:', typeof parent?.getGameHashId);
+        
+        const hashId = await getGameHashId();
+        
+        if (!hashId) {
+            document.getElementById('qrCodeArea').innerHTML = 
+                '<div style="color: #d13438;">⚠️ לא נמצא מזהה משחק. אנא שמור את המצגת תחילה.</div>';
+            document.getElementById('adminUrl').textContent = 'שגיאה: לא נמצא מזהה משחק';
+            return;
+        }
+        
+        console.log('✅ Hash ID received:', hashId);
+        
+        // Build the admin URL
+        const adminUrl = `http://192.168.31.22:3002/${hashId}`;
+        
+        // Display the URL
+        document.getElementById('adminUrl').textContent = adminUrl;
+        
+        // Use Google Charts API directly (simplest and most reliable)
+        const qrCodeUrl = `https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(adminUrl)}&choe=UTF-8`;
+        
+        console.log('📸 QR Code URL:', qrCodeUrl);
+        
+        // Display QR code as image
+        document.getElementById('qrCodeArea').innerHTML = `
+            <img src="${qrCodeUrl}" 
+                 alt="QR Code למשחק" 
+                 style="width: 220px; height: 220px; border: 3px solid #0078d4; border-radius: 8px; background: white; padding: 10px;"
+                 onload="console.log('✅ QR code image loaded successfully')"
+                 onerror="console.error('❌ Failed to load QR image'); handleQRError();" />
+        `;
+        
+        console.log('✅ QR code element created')
+        
+        console.log('📍 Admin URL:', adminUrl);
+        
+    } catch (error) {
+        console.error('❌ Error initializing start screen:', error);
+        console.error('❌ Error stack:', error.stack);
+        document.getElementById('qrCodeArea').innerHTML = 
+            `<div style="color: #d13438;">⚠️ שגיאה ביצירת קוד QR<br><small>${error.message}</small></div>`;
+        document.getElementById('adminUrl').textContent = 'שגיאה: ' + error.message;
+    }
+}
+
+// Handle QR code image load error
+function handleQRError() {
+    console.error('❌ Failed to load QR code image');
+    document.getElementById('qrCodeArea').innerHTML = 
+        '<div style="color: #d13438;">⚠️ שגיאה בטעינת קוד QR<br><small>בדוק חיבור לאינטרנט</small></div>';
+}
+
+// Get the game hash ID from parent window
+async function getGameHashId() {
+    console.log('🔑 Getting game hash ID from parent...');
+    
+    // Check if parent window exists
+    if (!parent || parent === window) {
+        console.error('❌ No parent window found');
+        throw new Error('חלון אב לא נמצא');
+    }
+    
+    // Check if function exists
+    if (typeof parent.getGameHashId !== 'function') {
+        console.error('❌ parent.getGameHashId is not a function:', typeof parent.getGameHashId);
+        throw new Error('פונקציית Hash ID לא זמינה');
+    }
+    
+    // Call the parent window's function
+    try {
+        const hashId = await parent.getGameHashId();
+        console.log('✅ Hash ID from parent:', hashId);
+        return hashId;
+    } catch (error) {
+        console.error('❌ Error calling parent.getGameHashId:', error);
+        throw error;
+    }
+}
+
+// Initialize when loaded
+console.log('📄 start.html script loaded');
+initializeStartScreen();
+</script>
+
