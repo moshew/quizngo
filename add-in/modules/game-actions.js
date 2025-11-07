@@ -8,6 +8,7 @@
 import { API_BASE } from './api.js';
 import { getGameHashId } from './presentation-state.js';
 import { showStatus, showError, updateUIForSlideType, initializeStartScreen } from './ui-manager.js';
+import { updateCurrentSlideQuestionTime } from './powerpoint-shapes.js';
 
 /**
  * Start presentation mode (game start screen)
@@ -129,55 +130,15 @@ export async function stopTimer() {
 }
 
 /**
- * Update kahoot-question-time elements in PowerPoint
+ * Update kahoot-question-time elements in current slide
  * @param {number} timeValue - Time in seconds to display
  */
 async function updateQuestionTimeDisplay(timeValue) {
     try {
-        await PowerPoint.run(async (context) => {
-            const presentation = context.presentation;
-            const slides = presentation.slides;
-            slides.load('items');
-            await context.sync();
-            
-            // Search all slides for kahoot-question-time tags
-            for (let i = 0; i < slides.items.length; i++) {
-                const slide = slides.items[i];
-                const shapes = slide.shapes;
-                shapes.load(['items']);
-                await context.sync();
-                
-                for (let j = 0; j < shapes.items.length; j++) {
-                    const shape = shapes.items[j];
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
-                    // Check if this shape has kahoot-question-time tag
-                    let hasQuestionTimeTag = false;
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
-                        
-                        if (tag.key.toLowerCase() === 'kahoot-question-time' && tag.value === 'true') {
-                            hasQuestionTimeTag = true;
-                            break;
-                        }
-                    }
-                    
-                    if (hasQuestionTimeTag) {
-                        // Update the text
-                        shape.load(['textFrame']);
-                        await context.sync();
-                        
-                        const textRange = shape.textFrame.textRange;
-                        textRange.text = timeValue.toString();
-                        await context.sync();
-                    }
-                }
-            }
-        });
+        // Use the slide number from window (updated by processSlideChange)
+        const slideNumber = window.currentSlideNumber || null;
+        
+        await updateCurrentSlideQuestionTime(timeValue, slideNumber);
     } catch (error) {
         console.error('❌ Error updating question time display:', error);
     }

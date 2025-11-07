@@ -70,8 +70,12 @@ export async function processSlideChange(htmlCache, fromWebSocket = false) {
         console.log('🔄 Processing slide change...');
         console.log(`   Source: ${fromWebSocket ? 'WebSocket' : 'Manual/Event'}`);
         
-        // Get current slide number and ID
-        await getCurrentSlideNumber();
+        // For WebSocket navigation: window.currentSlideNumber and window.currentSlideId 
+        // are already set by navigateToSlideByIndex
+        // For manual navigation: get current slide info
+        if (!fromWebSocket) {
+            await getCurrentSlideNumber();
+        }
         
         console.log(`📍 Detected slide: ${window.currentSlideNumber} (ID: ${window.currentSlideId})`);
         

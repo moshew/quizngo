@@ -198,10 +198,15 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
     // For question slides, remember the position for return after statistics/leaderboard
     if (currentSlideType === 'question') {
         console.log(`   ❓ On question slide - saving position ${currentIndex}`);
-        window.lastQuestionSlideIndex = currentIndex;
         
         const showStatistics = settings.afterQuestionStatistics || false;
-        console.log(`   📊 showStatistics=${showStatistics}`);
+        const showLeaderboard = settings.afterQuestionLeaderboard || false;
+        console.log(`   📊 showStatistics=${showStatistics}, showLeaderboard=${showLeaderboard}`);
+        
+        // Only save position if we're going to show statistics or leaderboard
+        if (showStatistics || showLeaderboard) {
+            window.lastQuestionSlideIndex = currentIndex;
+        }
         
         if (showStatistics) {
             // Look for ANY statistics slide in the presentation
@@ -212,14 +217,31 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
                 }
             }
             console.log(`   ⚠️ No statistics slide found, continuing normally`);
+        } else if (showLeaderboard) {
+            // No statistics, but show leaderboard - jump directly to leaderboard
+            for (let i = 0; i < totalSlides; i++) {
+                if (slideTypesByIndex[i] === 'leaderboard') {
+                    console.log(`   🏆 Found leaderboard slide at index ${i}`);
+                    return { nextIndex: i, reason: 'Going to leaderboard after question (no statistics)' };
+                }
+            }
+            console.log(`   ⚠️ No leaderboard slide found, continuing normally`);
         }
         
-        // No statistics or not showing - just go to next slide normally
+        // No statistics or leaderboard to show - just go to next slide normally and skip them
         let nextIndex = currentIndex + 1;
+        while (nextIndex < totalSlides) {
+            const nextType = slideTypesByIndex[nextIndex];
+            if (nextType === 'statistics' || nextType === 'leaderboard') {
+                nextIndex++;
+            } else {
+                break;
+            }
+        }
         if (nextIndex >= totalSlides) {
             nextIndex = totalSlides - 1;
         }
-        return { nextIndex: nextIndex, reason: 'Normal flow from question (no statistics)' };
+        return { nextIndex: nextIndex, reason: 'Normal flow from question (no statistics/leaderboard)' };
     }
     
     // Default: go to next slide

@@ -354,12 +354,16 @@ export function loadSettingsIntoUI() {
     });
     
     if (questionWaitTime) {
-        questionWaitTime.value = window.presentationSettings.questionWaitTime || 30;
+        questionWaitTime.value = window.presentationSettings.questionWaitTime !== undefined 
+            ? window.presentationSettings.questionWaitTime 
+            : 30;
         console.log('⏱️ Set questionWaitTime to:', questionWaitTime.value);
     }
     
     if (clockActivationDelay) {
-        clockActivationDelay.value = window.presentationSettings.clockActivationDelay || 5;
+        clockActivationDelay.value = window.presentationSettings.clockActivationDelay !== undefined 
+            ? window.presentationSettings.clockActivationDelay 
+            : 5;
         console.log('⏱️ Set clockActivationDelay to:', clockActivationDelay.value);
     }
     

@@ -995,11 +995,12 @@ export async function addStatisticsImage() {
 }
 
 /**
- * Update all kahoot-question-time elements to initial value
+ * Update all kahoot-question-time elements to initial value (ALL slides)
+ * Used for initialization/reset
  * @param {number} timeValue - Initial time value to set
  */
 export async function updateAllQuestionTimeElements(timeValue) {
-    console.log(`🔄 Resetting all question time elements to: ${timeValue}`);
+    console.log(`🔄 Resetting ALL question time elements to: ${timeValue}`);
     
     try {
         await PowerPoint.run(async (context) => {
@@ -1010,7 +1011,7 @@ export async function updateAllQuestionTimeElements(timeValue) {
             
             let updatedCount = 0;
             
-            // Search all slides for kahoot-question-time tags
+            // Search ALL slides for kahoot-question-time tags
             for (let i = 0; i < slides.items.length; i++) {
                 const slide = slides.items[i];
                 const shapes = slide.shapes;
@@ -1050,10 +1051,94 @@ export async function updateAllQuestionTimeElements(timeValue) {
                 }
             }
             
-            console.log(`✅ Reset ${updatedCount} question time element(s) to: ${timeValue}`);
+            console.log(`✅ Reset ${updatedCount} question time element(s) across all slides to: ${timeValue}`);
         });
     } catch (error) {
         console.error('❌ Error resetting question time elements:', error);
+        throw error;
+    }
+}
+
+/**
+ * Update kahoot-question-time in CURRENT slide only
+ * Used during timer countdown
+ * @param {number} timeValue - Time value to display
+ * @param {number} [slideNumber] - Optional: specific slide number to update (1-based). If not provided, uses selected slide.
+ */
+export async function updateCurrentSlideQuestionTime(timeValue, slideNumber = null) {
+    try {
+        await PowerPoint.run(async (context) => {
+            let currentSlide;
+            
+            if (slideNumber !== null) {
+                // Use specific slide number (for presentation mode)
+                const presentation = context.presentation;
+                const slides = presentation.slides;
+                slides.load('items');
+                await context.sync();
+                
+                const slideIndex = slideNumber - 1; // Convert to 0-based index
+                if (slideIndex >= 0 && slideIndex < slides.items.length) {
+                    currentSlide = slides.items[slideIndex];
+                } else {
+                    console.error(`❌ Invalid slide number: ${slideNumber}`);
+                    return;
+                }
+            } else {
+                // Use selected slide (for edit mode)
+                const slides = context.presentation.getSelectedSlides();
+                slides.load('items');
+                await context.sync();
+                
+                if (slides.items.length === 0) {
+                    console.log('⚠️ No slide selected');
+                    return;
+                }
+                
+                currentSlide = slides.items[0];
+            }
+            
+            const shapes = currentSlide.shapes;
+            shapes.load(['items']);
+            await context.sync();
+            
+            let updatedCount = 0;
+            
+            // Search only current slide for kahoot-question-time tags
+            for (let j = 0; j < shapes.items.length; j++) {
+                const shape = shapes.items[j];
+                const tags = shape.tags;
+                tags.load(['items']);
+                await context.sync();
+                
+                // Check if this shape has kahoot-question-time tag
+                let hasQuestionTimeTag = false;
+                for (let k = 0; k < tags.items.length; k++) {
+                    const tag = tags.items[k];
+                    tag.load(['key', 'value']);
+                    await context.sync();
+                    
+                    if (tag.key.toLowerCase() === 'kahoot-question-time' && tag.value === 'true') {
+                        hasQuestionTimeTag = true;
+                        break;
+                    }
+                }
+                
+                if (hasQuestionTimeTag) {
+                    // Update the text
+                    shape.load(['textFrame']);
+                    await context.sync();
+                    
+                    const textRange = shape.textFrame.textRange;
+                    textRange.text = timeValue.toString();
+                    await context.sync();
+                    
+                    updatedCount++;
+                }
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error updating current slide timer:', error);
         throw error;
     }
 }
