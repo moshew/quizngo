@@ -440,11 +440,6 @@ def handle_user_update(data):
     except Exception as e:
         game.log(f'Error handling user update: {e}')
 
-@app.route('/users_test.html')
-def users_test():
-    """Serve the users test page"""
-    return send_from_directory('.', 'users_test.html')
-
 @app.route('/debug_save_location.html')
 def debug_save_location():
     """Serve the save location debug page"""
@@ -722,18 +717,6 @@ def index():
             <h3>🔍 בדיקת מיקום שמירה</h3>
             <div class="url"><a href="/debug_save_location.html" target="_blank">GET /debug_save_location.html</a></div>
             <p>דף בדיקה אינטראקטיבי - מאשר שהקבצים נשמרים בשרת ולא ליד ה-pptx</p>
-        </div>
-        
-        <div class="endpoint">
-            <h3>🧪 דף בדיקת משתמשים</h3>
-            <div class="url"><a href="/users_test.html" target="_blank">GET /users_test.html</a></div>
-            <p>דף בדיקה עם 10 כפתורי משתמשים לסימולציה של הצטרפות/יציאה</p>
-        </div>
-        
-        <div class="endpoint">
-            <h3>👥 עדכון משתמש דמו</h3>
-            <div class="url">GET /?users_demo&nick=USERNAME&type=add/remove&total=X</div>
-            <p>מוסיף/מסיר משתמש דמו ושולח הודעת WebSocket ל-add-in</p>
         </div>
         
         <h2>מידע נוכחי</h2>
@@ -1199,8 +1182,6 @@ def api_handler():
             action = 'start'
         elif 'stop' in request.args:
             action = 'stop'
-        elif 'users_demo' in request.args:
-            action = 'users_demo'
         elif 'click_action' in request.args:
             action = 'click_action'
         elif 'reset_animations' in request.args:
@@ -1446,53 +1427,6 @@ def api_handler():
                 'time_remaining': 0
             })
         
-        elif action == 'users_demo':
-            # Handle participant update from demo page
-            try:
-                nick = request.args.get('nick', '')
-                user_action = request.args.get('type', '')  # 'add' or 'remove'
-                total = request.args.get('total', 0, type=int)
-                
-                game.log(f'Users demo request received - nick: {nick}, type: {user_action}, total: {total}')
-                
-                if not nick or not user_action:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Missing nick or type parameter'
-                    }), 400
-                
-                # Log the demo action
-                game.log(f'Demo action: {user_action} user {nick}, total: {total}')
-                
-                # Send WebSocket message to all connected clients (including add-in)
-                participant_data = {
-                    'nick': nick,
-                    'type': user_action,
-                    'total': total
-                }
-                
-                # Broadcast participant update
-                socketio.emit('participant_update', participant_data)
-                
-                # Also send general user update for compatibility
-                socketio.emit('user_update', {
-                    'users': total,
-                    'total': total
-                })
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': f'User {nick} {user_action}ed successfully',
-                    'data': participant_data
-                })
-                
-            except Exception as e:
-                game.log(f'Error in users_demo endpoint: {str(e)}')
-                return jsonify({
-                    'status': 'error',
-                    'message': f'Server error in users_demo: {str(e)}'
-                }), 500
-        
         elif action == 'click_action':
             try:
                 game.log('Spacebar simulation request received')
@@ -1561,7 +1495,6 @@ if __name__ == '__main__':
     print("=" * 40)
     print("Server will run on: http://localhost:5000")
     print("API Documentation: http://localhost:5000/docs")
-    print("Users Test Page: http://localhost:5000/users_test.html")
     print("Participants Widget: http://localhost:5000/participants_widget")
     print("WebSocket URL: ws://localhost:5000")
     print("")
@@ -1575,7 +1508,6 @@ if __name__ == '__main__':
     print("  /?reset         - Reset game")
     print("  /?start[&time=X] - Start timer (default 30s)")
     print("  /?stop          - Stop timer")
-    print("  /?users_demo    - Demo participant update (nick, type, total)")
     print("  /save           - Save presentation data by Window ID (POST)")
     print("  /load           - Load presentation data by Window ID (POST)")
     print("")

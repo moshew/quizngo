@@ -389,9 +389,12 @@ export function attachSettingsEventListeners() {
     const afterQuestionLeaderboard = document.getElementById('afterQuestionLeaderboard');
     
     const saveSettings = () => {
+        const questionWaitValue = parseInt(questionWaitTime?.value);
+        const clockDelayValue = parseInt(clockActivationDelay?.value);
+        
         window.presentationSettings = {
-            questionWaitTime: parseInt(questionWaitTime?.value) || 30,
-            clockActivationDelay: parseInt(clockActivationDelay?.value) || 5,
+            questionWaitTime: !isNaN(questionWaitValue) ? questionWaitValue : 30,
+            clockActivationDelay: !isNaN(clockDelayValue) ? clockDelayValue : 5,
             afterQuestionStatistics: afterQuestionStatistics?.checked !== false,
             afterQuestionLeaderboard: afterQuestionLeaderboard?.checked === true
         };

@@ -1,9 +1,11 @@
 /**
  * Navigation Module
- * Handles all PowerPoint slide navigation and animation
+ * Handles all PowerPoint navigation logic
  */
 
-/* global PowerPoint */
+/* global PowerPoint, Office */
+
+import { processSlideChange, setWebSocketNavigationFlag } from './event-handlers.js';
 
 /**
  * Navigate to first slide in PowerPoint
@@ -282,6 +284,31 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
     window.currentSlideId = targetSlideId;
     
     console.log(`   Updated tracking: slideNumber=${window.currentSlideNumber}, slideId=${window.currentSlideId}`);
+    
+    // Trigger slide change processing (timer, UI updates, etc.)
+    if (navigationSucceeded) {
+        console.log('🔄 Triggering processSlideChange after WebSocket navigation...');
+        
+        // Set flag to prevent duplicate processing from DocumentSelectionChanged event
+        setWebSocketNavigationFlag(true);
+        
+        // Small delay to ensure PowerPoint navigation completes
+        // This ensures the presentation has fully rendered the new slide
+        setTimeout(async () => {
+            try {
+                await processSlideChange(window.htmlCache, true); // fromWebSocket = true
+                console.log('✅ processSlideChange completed');
+            } catch (error) {
+                console.error('❌ Error in processSlideChange:', error);
+            } finally {
+                // Clear flag after processing (with extra delay to ensure event is ignored)
+                setTimeout(() => {
+                    setWebSocketNavigationFlag(false);
+                }, 100);
+            }
+        }, 300); // 300ms = typical slide transition time
+    }
+    
     console.log('═'.repeat(80));
     
     return navigationSucceeded;

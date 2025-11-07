@@ -69,7 +69,8 @@ import {
     insertQrCodeButton,
     addQuestionTime,
     addRespondentsCount,
-    addStatisticsImage
+    addStatisticsImage,
+    updateAllQuestionTimeElements
 } from './modules/powerpoint-shapes.js';
 import { 
     showStatus, 
@@ -144,8 +145,9 @@ let localTimerRemaining = 0;
 localStorage.clear();
 sessionStorage.clear();
 
-// HTML files cache
+// HTML files cache (global for access from other modules)
 const htmlCache = new Map();
+window.htmlCache = htmlCache;
 
 // Setup slide change listener
 // setupSlideChangeListener, onSlideChanged, processSlideChange moved to event-handlers.js
@@ -220,6 +222,13 @@ Office.onReady((info) => {
                 const gameIdElements = document.querySelectorAll('[id^="gameId"]');
                 gameIdElements.forEach(el => {
                     el.textContent = formattedPin;
+                });
+                
+                // Reset timer to initial value from settings
+                console.log('🔄 Resetting timer to initial value from settings...');
+                const initialTime = window.presentationSettings?.questionWaitTime || 30;
+                updateAllQuestionTimeElements(initialTime).catch(err => {
+                    console.error('❌ Failed to reset timer elements:', err);
                 });
                 
                 // Update kahoot-game-id tags in PowerPoint slides

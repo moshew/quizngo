@@ -9,7 +9,12 @@
 PowerPoint Tags are **invisible key-value pairs** attached to shapes/textboxes:
 - Searchable via Office.js API
 - Persist with the presentation file
-- Used to identify and update elements dynamically
+- Used to identify and update elements dynamically **across all slides**
+
+**Key concept:** When you update elements by tag, the system searches **ALL slides** in the presentation and updates **EVERY element** that has the matching tag. This means:
+- ✅ Add a QR Code placeholder to slide 5 → it will be updated when the game starts
+- ✅ Add participant count to slides 2, 4, and 7 → all three will update simultaneously
+- ✅ One tag, one update function → updates everywhere automatically
 
 ```javascript
 // Add tag
@@ -78,6 +83,9 @@ async function showParticipantsCount() {
 
 ### 3. Update Function (finds by tag and updates)
 `add-in/taskpane.js`:
+
+**Important:** This function searches **ALL slides** and updates **ALL elements** with the matching tag, not just the current slide.
+
 ```javascript
 async function updateLiveParticipantsInSlide() {
     try {
@@ -87,21 +95,21 @@ async function updateLiveParticipantsInSlide() {
             slides.load('items');
             await context.sync();
             
-            // Loop through all slides
+            // ⭐ Loop through ALL slides in the presentation
             for (let i = 0; i < slides.items.length; i++) {
                 const slide = slides.items[i];
                 const shapes = slide.shapes;
                 shapes.load(['items']);
                 await context.sync();
                 
-                // Loop through all shapes
+                // ⭐ Loop through all shapes in this slide
                 for (let j = 0; j < shapes.items.length; j++) {
                     const shape = shapes.items[j];
                     const tags = shape.tags;
                     tags.load(['items']);
                     await context.sync();
                     
-                    // Search for our tag
+                    // ⭐ Search for our tag
                     let isParticipantsCount = false;
                     for (let k = 0; k < tags.items.length; k++) {
                         const tag = tags.items[k];
@@ -114,7 +122,7 @@ async function updateLiveParticipantsInSlide() {
                         }
                     }
                     
-                    // Update if found
+                    // ⭐ Update if found (this element will be updated regardless of which slide it's on)
                     if (isParticipantsCount) {
                         shape.load(['textFrame']);
                         await context.sync();
@@ -198,6 +206,9 @@ async function insertMyDynamicElement() {
 ```
 
 ### Step 3: Create Update Function
+
+**Important:** This function searches **ALL slides** and updates **ALL tagged elements**, not just the current slide.
+
 ```javascript
 async function updateMyDynamicElements() {
     try {
@@ -206,12 +217,15 @@ async function updateMyDynamicElements() {
             slides.load('items');
             await context.sync();
             
+            // ⭐ Loop through ALL slides
+            // ⭐ Loop through ALL slides
             for (let i = 0; i < slides.items.length; i++) {
                 const slide = slides.items[i];
                 const shapes = slide.shapes;
                 shapes.load(['items']);
                 await context.sync();
                 
+                // ⭐ Check every shape in this slide
                 for (let j = 0; j < shapes.items.length; j++) {
                     const shape = shapes.items[j];
                     const tags = shape.tags;
@@ -230,6 +244,7 @@ async function updateMyDynamicElements() {
                         }
                     }
                     
+                    // ⭐ Update wherever found (could be slide 1, 5, 10, etc.)
                     if (isMyElement) {
                         shape.load(['textFrame']);
                         await context.sync();
@@ -461,6 +476,9 @@ async function insertQrCodeButton() {
 
 ### 3. Update Function (finds by tag and replaces with QR image from server)
 `add-in/taskpane.js`:
+
+**Important:** This function searches **ALL slides** and updates **ALL QR placeholders** with the matching tag. If you have QR codes on slides 1, 5, and 10, all three will be replaced with the actual QR image when the game starts.
+
 ```javascript
 async function updateQrCodeInSlides(hashId) {
     const qrCodeUrl = `${API_BASE}qr-code/${hashId}`;
@@ -470,6 +488,7 @@ async function updateQrCodeInSlides(hashId) {
         slides.load('items');
         await context.sync();
         
+        // ⭐ Search ALL slides for QR code placeholders
         for (let i = 0; i < slides.items.length; i++) {
             const slide = slides.items[i];
             const shapes = slide.shapes;
@@ -496,6 +515,9 @@ async function updateQrCodeInSlides(hashId) {
                 }
                 
                 if (hasQrCodeTag) {
+                    // ⭐ Found a QR placeholder - replace it with the actual QR image
+                    // This happens on whichever slide the placeholder is on
+                    
                     // Save position and size
                     shape.load(['left', 'top', 'width', 'height']);
                     await context.sync();
@@ -504,6 +526,12 @@ async function updateQrCodeInSlides(hashId) {
                     const top = shape.top;
                     const width = shape.width;
                     const height = shape.height;
+                    
+                    // Navigate to this slide before inserting the image
+                    slide.load('id');
+                    await context.sync();
+                    context.presentation.goToSlideById(slide.id);
+                    await context.sync();
                     
                     // Delete placeholder
                     shape.delete();
@@ -520,6 +548,7 @@ async function updateQrCodeInSlides(hashId) {
                     });
                     
                     // Insert image using Office Common API
+                    // ⭐ The image will be inserted into the slide we navigated to above
                     await new Promise((resolve, reject) => {
                         Office.context.document.setSelectedDataAsync(
                             base64Image,
@@ -539,6 +568,25 @@ async function updateQrCodeInSlides(hashId) {
                             }
                         );
                     });
+                    
+                    // ⭐ Tag the new image so it can be updated again if needed
+                    await context.sync();
+                    const shapesAfter = slide.shapes;
+                    shapesAfter.load(['items']);
+                    await context.sync();
+                    
+                    for (let m = shapesAfter.items.length - 1; m >= 0; m--) {
+                        const potentialImage = shapesAfter.items[m];
+                        potentialImage.load(['left', 'top', 'tags']);
+                        await context.sync();
+                        
+                        if (Math.abs(potentialImage.left - left) < 1 && 
+                            Math.abs(potentialImage.top - top) < 1) {
+                            potentialImage.tags.add('kahoot-qr-code', 'true');
+                            await context.sync();
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -546,7 +594,10 @@ async function updateQrCodeInSlides(hashId) {
 }
 ```
 
-**Key technique:** Using `Office.context.document.setSelectedDataAsync` with `Office.CoercionType.Image` to insert Base64-encoded images into PowerPoint.
+**Key technique for image placeholders:**
+1. **Navigate to the slide** using `presentation.goToSlideById(slide.id)` BEFORE inserting the image
+2. This ensures `Office.context.document.setSelectedDataAsync` inserts the image **into that specific slide**, not the currently visible slide
+3. **Re-tag the new image** with the same tag so it can be updated again later
 
 ### 4. Trigger Update on Game Registration
 ```javascript
@@ -565,7 +616,12 @@ socket.on('game_pin_registered', (data) => {
 
 ---
 
-**Pattern:** CREATE (with tag) → EVENT → SEARCH (by tag) → UPDATE → REPEAT
+**Pattern:** CREATE (with tag) → EVENT → SEARCH (by tag in ALL slides) → UPDATE (all matching elements) → REPEAT
+
+**Remember:** 
+- ✅ One tag update = all slides updated
+- ✅ Add placeholders to any slide - they all update together
+- ✅ For images: navigate to the slide first with `presentation.goToSlideById(slide.id)` before using `setSelectedDataAsync`
 
 📝 **File:** `instructions/DYNAMIC_BUTTONS_TAGS_GUIDE.md`  
 🔗 **Related:** `taskpane.js`, `slide-types/*.html`
