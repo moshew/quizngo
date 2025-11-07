@@ -1505,6 +1505,24 @@ function initializeWebSocket() {
                 console.error('❌ updateGameIdInSlides error:', err);
             });
             
+            // Update QR Code in slides with game PIN (for players)
+            console.log('🔍 DEBUG - window.currentHashId:', window.currentHashId);
+            console.log('🔍 DEBUG - gamePin:', gamePin);
+            
+            if (window.currentHashId && gamePin) {
+                console.log('📱 Calling updateQrCodeInSlides with hash ID:', window.currentHashId, 'game PIN:', gamePin);
+                updateQrCodeInSlides(window.currentHashId, gamePin).then(() => {
+                    console.log('✅ updateQrCodeInSlides completed');
+                }).catch(err => {
+                    console.error('❌ updateQrCodeInSlides error:', err);
+                    console.error('   Error stack:', err.stack);
+                });
+            } else {
+                console.warn('⚠️ No hash ID or game PIN available for QR code update');
+                console.warn('   window.currentHashId:', window.currentHashId);
+                console.warn('   gamePin:', gamePin);
+            }
+            
             showStatus(`🎮 משחק פעיל - Game PIN: ${formattedPin}`, 'success');
         });
         
@@ -2076,6 +2094,232 @@ async function updateGameIdInSlides(gamePin) {
         });
     } catch (error) {
         console.error('❌ Error updating game ID in slides:', error);
+        console.error('Error details:', error.message, error.stack);
+    }
+}
+
+// Update QR Code in slides with image from server
+async function updateQrCodeInSlides(hashId, gamePin) {
+    console.log(`📱 Starting updateQrCodeInSlides with hash ID: ${hashId}, game PIN: ${gamePin}`);
+    
+    if (!gamePin) {
+        console.error('❌ No game PIN provided to updateQrCodeInSlides');
+        return;
+    }
+    
+    try {
+        // Build QR code URL for PLAYERS (port 8080)
+        // Remove any dashes from game PIN for URL
+        const cleanPin = gamePin.replace(/-/g, '');
+        const qrCodeUrl = `${API_BASE}qr-code-player/${cleanPin}`;
+        console.log('📸 Player QR Code URL:', qrCodeUrl);
+        
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            console.log(`🔍 Searching for kahoot-qr-code tags in ${slides.items.length} slides...`);
+            
+            let foundElements = 0;
+            
+            for (let i = 0; i < slides.items.length; i++) {
+                const slide = slides.items[i];
+                const shapes = slide.shapes;
+                shapes.load(['items']);
+                await context.sync();
+                
+                console.log(`📄 Checking slide ${i + 1} with ${shapes.items.length} shapes`);
+                
+                for (let j = 0; j < shapes.items.length; j++) {
+                    const shape = shapes.items[j];
+                    const tags = shape.tags;
+                    tags.load(['items']);
+                    await context.sync();
+                    
+                    let hasQrCodeTag = false;
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        console.log(`  🏷️ Tag: ${tag.key} = ${tag.value}`);
+                        
+                        // Case-insensitive comparison (PowerPoint stores tags in uppercase)
+                        if (tag.key.toLowerCase() === 'kahoot-qr-code' && tag.value === 'true') {
+                            hasQrCodeTag = true;
+                            console.log('  ✅ Found kahoot-qr-code tag!');
+                            break;
+                        }
+                    }
+                    
+                    if (hasQrCodeTag) {
+                        console.log(`📝 Updating QR code in slide ${i + 1}`);
+                        
+                        try {
+                            // Format game PIN for display
+                            const formattedPin = gamePin.includes('-') ? gamePin : `${gamePin.slice(0, 3)}-${gamePin.slice(3)}`;
+                            
+                            // Load placeholder properties
+                            shape.load(['left', 'top', 'width', 'height', 'name', 'tags']);
+                            await context.sync();
+                            
+                            const left = shape.left;
+                            const top = shape.top;
+                            const width = shape.width;
+                            const height = shape.height;
+                            
+                            console.log(`   Placeholder position: ${left}, ${top}, Size: ${width}x${height}`);
+                            
+                            // Check if there's already a QR image from previous update
+                            // Look for a shape with tag 'kahoot-qr-image'
+                            const allShapes = slide.shapes;
+                            allShapes.load(['items']);
+                            await context.sync();
+                            
+                            for (let m = 0; m < allShapes.items.length; m++) {
+                                const testShape = allShapes.items[m];
+                                const testTags = testShape.tags;
+                                testTags.load(['items']);
+                                await context.sync();
+                                
+                                for (let n = 0; n < testTags.items.length; n++) {
+                                    const testTag = testTags.items[n];
+                                    testTag.load(['key', 'value']);
+                                    await context.sync();
+                                    
+                                    if (testTag.key.toLowerCase() === 'kahoot-qr-image' && testTag.value === 'true') {
+                                        console.log('🗑️ Deleting old QR image from previous update');
+                                        testShape.delete();
+                                        await context.sync();
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Update placeholder tags (keep it as anchor)
+                            try {
+                                shape.tags.add('kahoot-qr-url', qrCodeUrl);
+                                shape.tags.add('kahoot-qr-gamepin', gamePin);
+                                await context.sync();
+                            } catch (tagError) {
+                                console.log('⚠️ Tags may already exist');
+                            }
+                            
+                            // Download QR code image
+                            console.log('📥 Downloading QR code image from:', qrCodeUrl);
+                            const imageResponse = await fetch(qrCodeUrl);
+                            
+                            if (!imageResponse.ok) {
+                                throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+                            }
+                            
+                            const imageBlob = await imageResponse.blob();
+                            console.log(`📦 Image size: ${imageBlob.size} bytes`);
+                            
+                            // Convert to base64
+                            const base64Image = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                    let result = reader.result;
+                                    if (result.includes(',')) {
+                                        result = result.split(',')[1];
+                                    }
+                                    resolve(result);
+                                };
+                                reader.onerror = reject;
+                                reader.readAsDataURL(imageBlob);
+                            });
+                            
+                            console.log('🖼️ Inserting QR image on top of placeholder...');
+                            
+                            // Insert image at the same position as placeholder
+                            await new Promise((resolve, reject) => {
+                                Office.context.document.setSelectedDataAsync(
+                                    base64Image,
+                                    {
+                                        coercionType: Office.CoercionType.Image,
+                                        imageLeft: left,
+                                        imageTop: top,
+                                        imageWidth: width,
+                                        imageHeight: height
+                                    },
+                                    function(asyncResult) {
+                                        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+                                            console.log('✅ Image inserted successfully');
+                                            resolve();
+                                        } else {
+                                            reject(new Error(asyncResult.error.message));
+                                        }
+                                    }
+                                );
+                            });
+                            
+                            // Now find the newly inserted image and tag it
+                            console.log('🔍 Looking for the newly inserted image to tag it...');
+                            await context.sync(); // Refresh
+                            
+                            const shapesAfter = slide.shapes;
+                            shapesAfter.load(['items']);
+                            await context.sync();
+                            
+                            // The new image should be the last one added or the one without tags
+                            for (let m = shapesAfter.items.length - 1; m >= 0; m--) {
+                                const potentialImage = shapesAfter.items[m];
+                                potentialImage.load(['type', 'left', 'top', 'tags']);
+                                await context.sync();
+                                
+                                // Check if it's at the same position as our QR
+                                if (Math.abs(potentialImage.left - left) < 1 && 
+                                    Math.abs(potentialImage.top - top) < 1) {
+                                    
+                                    // Check if it doesn't have the placeholder tag
+                                    const imgTags = potentialImage.tags;
+                                    imgTags.load(['items']);
+                                    await context.sync();
+                                    
+                                    let isPlaceholder = false;
+                                    for (let n = 0; n < imgTags.items.length; n++) {
+                                        const imgTag = imgTags.items[n];
+                                        imgTag.load(['key', 'value']);
+                                        await context.sync();
+                                        
+                                        if (imgTag.key.toLowerCase() === 'kahoot-qr-code' && imgTag.value === 'true') {
+                                            isPlaceholder = true;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if (!isPlaceholder) {
+                                        // This is the new image! Tag it
+                                        console.log('🏷️ Found new image, adding tag...');
+                                        potentialImage.tags.add('kahoot-qr-image', 'true');
+                                        potentialImage.tags.add('kahoot-qr-gamepin', gamePin);
+                                        await context.sync();
+                                        console.log('✅ Image tagged successfully');
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            foundElements++;
+                            console.log(`✅ QR Code image inserted in slide ${i + 1}`);
+                            console.log(`   Game PIN: ${formattedPin}`);
+                            console.log(`   💡 Placeholder kept as anchor with tags`);
+                            
+                        } catch (updateError) {
+                            console.error(`❌ Error updating QR code in slide ${i + 1}:`, updateError);
+                            console.error('   Details:', updateError.message);
+                        }
+                    }
+                }
+            }
+            
+            console.log(`✅ Total QR Code elements updated: ${foundElements}`);
+        });
+    } catch (error) {
+        console.error('❌ Error updating QR code in slides:', error);
         console.error('Error details:', error.message, error.stack);
     }
 }
@@ -3119,6 +3363,78 @@ async function insertParticipantsNumButton() {
     } catch (error) {
         console.error('Error adding participants number:', error);
         showError('שגיאה בהוספת מספר המשתתפים');
+    }
+}
+
+// Insert QR Code placeholder (dynamic - updates from server)
+async function insertQrCodeButton() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const slides = context.presentation.getSelectedSlides();
+            slides.load('items');
+            await context.sync();
+            
+            if (slides.items.length === 0) {
+                showError('אנא בחר שקף תחילה');
+                return;
+            }
+            
+            const slide = slides.items[0];
+            
+            // QR code dimensions - standard size
+            const qrSize = 200; // 200x200 points
+            const qrLeft = 500; // Right side of slide
+            const qrTop = 100;  // Top area
+            
+            // Create a placeholder shape with QR code tag
+            const placeholder = slide.shapes.addTextBox('📱 QR Code\n\nיתעדכן בזמן המשחק', {
+                left: qrLeft,
+                top: qrTop,
+                width: qrSize,
+                height: qrSize
+            });
+            
+            placeholder.load(['textFrame', 'tags']);
+            await context.sync();
+            
+            // Add tag for dynamic updates
+            placeholder.tags.add('kahoot-qr-code', 'true');
+            await context.sync();
+            
+            // Style the text
+            const textRange = placeholder.textFrame.textRange;
+            textRange.load(['font']);
+            await context.sync();
+            
+            textRange.font.size = 20;
+            textRange.font.color = '#9b59b6';
+            textRange.font.bold = true;
+            
+            await context.sync();
+            
+            // Try to style the placeholder (border and fill) - optional
+            try {
+                placeholder.load(['fill', 'line']);
+                await context.sync();
+                
+                placeholder.fill.setSolidColor('#f0e6ff'); // Light purple background
+                placeholder.line.color = '#9b59b6'; // Purple border
+                placeholder.line.weight = 3;
+                
+                await context.sync();
+                console.log('✅ Border and fill applied');
+            } catch (styleError) {
+                console.log('⚠️ Could not apply border/fill (not critical):', styleError.message);
+            }
+            
+            console.log('✅ QR Code placeholder added to slide');
+            console.log(`   Position: ${qrLeft}, ${qrTop}`);
+            console.log(`   Size: ${qrSize} x ${qrSize}`);
+            showError('✅ QR Code נוסף לשקף!');
+        });
+    } catch (error) {
+        console.error('Error adding QR code placeholder:', error);
+        showError('שגיאה בהוספת QR Code');
     }
 }
 

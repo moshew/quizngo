@@ -947,7 +947,8 @@ def get_game_info(hash_id):
                 'message': 'Invalid hash ID length'
             }), 400
         
-        # Build admin URL
+        # Build admin URL (for QR code in "Start Game" button)
+        # Admin joins via port 3002 with hashId
         # TODO: Make this configurable via environment variable
         admin_url = f'http://192.168.31.22:3002/{hash_id}'
         
@@ -958,7 +959,7 @@ def get_game_info(hash_id):
             'status': 'success',
             'hashId': hash_id,
             'adminUrl': admin_url,
-            'qrCodeUrl': f'/qr-code/{hash_id}'
+            'qrCodeUrl': f'/qr-code/{hash_id}'  # QR for admin (port 3002)
         })
         
     except Exception as e:
@@ -971,7 +972,7 @@ def get_game_info(hash_id):
 @app.route('/qr-code/<hash_id>', methods=['GET'])
 def get_qr_code(hash_id):
     """
-    Generate and return QR code image for a specific game hash.
+    Generate and return QR code image for admin (uses hash_id).
     
     Args:
         hash_id: The game hash ID
@@ -987,7 +988,7 @@ def get_qr_code(hash_id):
         if len(hash_id) < 8 or len(hash_id) > 20:
             return "Invalid hash ID", 400
         
-        # Build admin URL
+        # Build admin URL (port 3002)
         admin_url = f'http://192.168.31.22:3002/{hash_id}'
         
         # Generate QR code
@@ -1008,12 +1009,64 @@ def get_qr_code(hash_id):
         img.save(img_io, 'PNG')
         img_io.seek(0)
         
-        game.log(f'✅ Generated QR code for hash: {hash_id}')
+        game.log(f'✅ Generated QR code for admin with hash: {hash_id}')
         
         return send_file(img_io, mimetype='image/png', as_attachment=False)
         
     except Exception as e:
         game.log(f'❌ Error generating QR code: {str(e)}')
+        return f"Error generating QR code: {str(e)}", 500
+
+@app.route('/qr-code-player/<game_pin>', methods=['GET'])
+def get_qr_code_player(game_pin):
+    """
+    Generate and return QR code image for players (uses game_pin).
+    This is for the opening slide - players scan to join the game.
+    
+    Args:
+        game_pin: The 6-digit game PIN (e.g., "123456" or "123-456")
+        
+    Returns:
+        PNG image of QR code
+    """
+    try:
+        # Validate and sanitize game PIN
+        import re
+        game_pin_clean = re.sub(r'[^0-9]', '', game_pin)
+        
+        if len(game_pin_clean) != 6:
+            return "Invalid game PIN - must be 6 digits", 400
+        
+        # Format as XXX-XXX
+        formatted_pin = f'{game_pin_clean[:3]}-{game_pin_clean[3:]}'
+        
+        # Build player URL (port 8080)
+        player_url = f'http://192.168.31.22:8080/{formatted_pin}'
+        
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(player_url)
+        qr.make(fit=True)
+        
+        # Create image with different color for player QR (green)
+        img = qr.make_image(fill_color="#16a085", back_color="white")
+        
+        # Save to BytesIO
+        img_io = BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        
+        game.log(f'✅ Generated player QR code for game PIN: {formatted_pin}')
+        
+        return send_file(img_io, mimetype='image/png', as_attachment=False)
+        
+    except Exception as e:
+        game.log(f'❌ Error generating player QR code: {str(e)}')
         return f"Error generating QR code: {str(e)}", 500
 
 @app.route('/load', methods=['POST'])

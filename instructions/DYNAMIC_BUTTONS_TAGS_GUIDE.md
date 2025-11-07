@@ -323,6 +323,7 @@ for (let i = 0; i < tags.items.length; i++) {
 | `kahoot-participants-count` | Participants counter | `taskpane.js` |
 | `kahoot-participants-area` | Live participants area | `taskpane.js` |
 | `kahoot-participants-display` | Participants display | `taskpane.js` |
+| `kahoot-qr-code` | QR Code for game entry | `taskpane.js` |
 
 ---
 
@@ -409,6 +410,158 @@ async function updateStatisticsImages() {
     // (See full example in taskpane.js lines 2765-2821)
 }
 ```
+
+---
+
+## Example: QR Code for Game Entry (Dynamic Image from Server)
+
+### 1. HTML Button
+`add-in/slide-types/opening.html`:
+```html
+<button class="button" onclick="insertQrCodeButton()" style="width: 100%; background-color: #9b59b6;">
+    📱 הוסף QR Code
+</button>
+```
+
+### 2. Create Function (adds placeholder with tag)
+`add-in/taskpane.js`:
+```javascript
+async function insertQrCodeButton() {
+    await PowerPoint.run(async (context) => {
+        const slide = context.presentation.getSelectedSlides().items[0];
+        
+        // QR code dimensions - standard size
+        const qrSize = 200; // 200x200 points
+        const qrLeft = 500; // Right side of slide
+        const qrTop = 100;  // Top area
+        
+        const placeholder = slide.shapes.addTextBox('📱 QR Code\n\nיתעדכן בזמן המשחק', {
+            left: qrLeft,
+            top: qrTop,
+            width: qrSize,
+            height: qrSize
+        });
+        
+        placeholder.load(['textFrame', 'tags', 'fill', 'line']);
+        await context.sync();
+        
+        // ⭐ Tag for dynamic updates
+        placeholder.tags.add('kahoot-qr-code', 'true');
+        
+        // Style the placeholder
+        placeholder.fill.setSolidColor('#f0e6ff'); // Light purple background
+        placeholder.line.color = '#9b59b6'; // Purple border
+        placeholder.line.weight = 3;
+        placeholder.line.dashStyle = 'Dash';
+        
+        await context.sync();
+    });
+}
+```
+
+### 3. Update Function (finds by tag and replaces with QR image from server)
+`add-in/taskpane.js`:
+```javascript
+async function updateQrCodeInSlides(hashId) {
+    const qrCodeUrl = `${API_BASE}qr-code/${hashId}`;
+    
+    await PowerPoint.run(async (context) => {
+        const slides = context.presentation.slides;
+        slides.load('items');
+        await context.sync();
+        
+        for (let i = 0; i < slides.items.length; i++) {
+            const slide = slides.items[i];
+            const shapes = slide.shapes;
+            shapes.load(['items']);
+            await context.sync();
+            
+            for (let j = 0; j < shapes.items.length; j++) {
+                const shape = shapes.items[j];
+                const tags = shape.tags;
+                tags.load(['items']);
+                await context.sync();
+                
+                // Search for QR code tag (case-insensitive)
+                let hasQrCodeTag = false;
+                for (let k = 0; k < tags.items.length; k++) {
+                    const tag = tags.items[k];
+                    tag.load(['key', 'value']);
+                    await context.sync();
+                    
+                    if (tag.key.toLowerCase() === 'kahoot-qr-code' && tag.value === 'true') {
+                        hasQrCodeTag = true;
+                        break;
+                    }
+                }
+                
+                if (hasQrCodeTag) {
+                    // Save position and size
+                    shape.load(['left', 'top', 'width', 'height']);
+                    await context.sync();
+                    
+                    const left = shape.left;
+                    const top = shape.top;
+                    const width = shape.width;
+                    const height = shape.height;
+                    
+                    // Delete placeholder
+                    shape.delete();
+                    await context.sync();
+                    
+                    // Download and convert QR code image to Base64
+                    const imageResponse = await fetch(qrCodeUrl);
+                    const imageBlob = await imageResponse.blob();
+                    const base64Image = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(imageBlob);
+                    });
+                    
+                    // Insert image using Office Common API
+                    await new Promise((resolve, reject) => {
+                        Office.context.document.setSelectedDataAsync(
+                            base64Image,
+                            {
+                                coercionType: Office.CoercionType.Image,
+                                imageLeft: left,
+                                imageTop: top,
+                                imageWidth: width,
+                                imageHeight: height
+                            },
+                            function(asyncResult) {
+                                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                                    reject(new Error(asyncResult.error.message));
+                                } else {
+                                    resolve();
+                                }
+                            }
+                        );
+                    });
+                }
+            }
+        }
+    });
+}
+```
+
+**Key technique:** Using `Office.context.document.setSelectedDataAsync` with `Office.CoercionType.Image` to insert Base64-encoded images into PowerPoint.
+
+### 4. Trigger Update on Game Registration
+```javascript
+socket.on('game_pin_registered', (data) => {
+    const gamePin = data.gamePin;
+    updateGameIdInSlides(gamePin);
+    
+    // Update QR Code when hash ID is available
+    if (window.currentHashId) {
+        updateQrCodeInSlides(window.currentHashId);
+    }
+});
+```
+
+**Server endpoint:** `/qr-code/<hash_id>` returns PNG image with QR code pointing to `http://192.168.31.22:3002/{hash_id}` (Admin app)
 
 ---
 
