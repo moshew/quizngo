@@ -1,4 +1,4 @@
-/* global Office */
+﻿/* global Office */
 
 /*
  * Kahoot Quiz Manager - Add-in Client
@@ -2172,43 +2172,8 @@ async function updateQrCodeInSlides(hashId, gamePin) {
                             
                             console.log(`   Placeholder position: ${left}, ${top}, Size: ${width}x${height}`);
                             
-                            // Check if there's already a QR image from previous update
-                            // Look for a shape with tag 'kahoot-qr-image'
-                            const allShapes = slide.shapes;
-                            allShapes.load(['items']);
-                            await context.sync();
-                            
-                            for (let m = 0; m < allShapes.items.length; m++) {
-                                const testShape = allShapes.items[m];
-                                const testTags = testShape.tags;
-                                testTags.load(['items']);
-                                await context.sync();
-                                
-                                for (let n = 0; n < testTags.items.length; n++) {
-                                    const testTag = testTags.items[n];
-                                    testTag.load(['key', 'value']);
-                                    await context.sync();
-                                    
-                                    if (testTag.key.toLowerCase() === 'kahoot-qr-image' && testTag.value === 'true') {
-                                        console.log('🗑️ Deleting old QR image from previous update');
-                                        testShape.delete();
-                                        await context.sync();
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            // Update placeholder tags (keep it as anchor)
-                            try {
-                                shape.tags.add('kahoot-qr-url', qrCodeUrl);
-                                shape.tags.add('kahoot-qr-gamepin', gamePin);
-                                await context.sync();
-                            } catch (tagError) {
-                                console.log('⚠️ Tags may already exist');
-                            }
-                            
-                            // Download QR code image
-                            console.log('📥 Downloading QR code image from:', qrCodeUrl);
+                            // Download QR code image FIRST (before any deletion)
+                            console.log('� Downloading QR code image from:', qrCodeUrl);
                             const imageResponse = await fetch(qrCodeUrl);
                             
                             if (!imageResponse.ok) {
@@ -2232,9 +2197,16 @@ async function updateQrCodeInSlides(hashId, gamePin) {
                                 reader.readAsDataURL(imageBlob);
                             });
                             
-                            console.log('🖼️ Inserting QR image on top of placeholder...');
+                            console.log('✅ QR image downloaded and ready');
                             
-                            // Insert image at the same position as placeholder
+                            // Now delete the placeholder shape
+                            console.log('�️ Deleting placeholder shape...');
+                            shape.delete();
+                            await context.sync();
+                            console.log('✅ Placeholder deleted');
+                            
+                            // Insert new QR image at the same position
+                            console.log('🖼️ Inserting new QR image...');
                             await new Promise((resolve, reject) => {
                                 Office.context.document.setSelectedDataAsync(
                                     base64Image,
@@ -2256,57 +2228,39 @@ async function updateQrCodeInSlides(hashId, gamePin) {
                                 );
                             });
                             
-                            // Now find the newly inserted image and tag it
-                            console.log('🔍 Looking for the newly inserted image to tag it...');
+                            // Now find the newly inserted image and tag it as the NEW placeholder
+                            console.log('🔍 Looking for the newly inserted image to tag it as QR placeholder...');
                             await context.sync(); // Refresh
                             
                             const shapesAfter = slide.shapes;
                             shapesAfter.load(['items']);
                             await context.sync();
                             
-                            // The new image should be the last one added or the one without tags
+                            // Find the new image at the same position
                             for (let m = shapesAfter.items.length - 1; m >= 0; m--) {
                                 const potentialImage = shapesAfter.items[m];
                                 potentialImage.load(['type', 'left', 'top', 'tags']);
                                 await context.sync();
                                 
-                                // Check if it's at the same position as our QR
+                                // Check if it's at the same position as our old placeholder
                                 if (Math.abs(potentialImage.left - left) < 1 && 
                                     Math.abs(potentialImage.top - top) < 1) {
                                     
-                                    // Check if it doesn't have the placeholder tag
-                                    const imgTags = potentialImage.tags;
-                                    imgTags.load(['items']);
+                                    // Tag it as the QR code placeholder for next update
+                                    console.log('🏷️ Tagging new QR image as placeholder...');
+                                    potentialImage.tags.add('kahoot-qr-code', 'true');
+                                    potentialImage.tags.add('kahoot-qr-url', qrCodeUrl);
+                                    potentialImage.tags.add('kahoot-qr-gamepin', gamePin);
                                     await context.sync();
-                                    
-                                    let isPlaceholder = false;
-                                    for (let n = 0; n < imgTags.items.length; n++) {
-                                        const imgTag = imgTags.items[n];
-                                        imgTag.load(['key', 'value']);
-                                        await context.sync();
-                                        
-                                        if (imgTag.key.toLowerCase() === 'kahoot-qr-code' && imgTag.value === 'true') {
-                                            isPlaceholder = true;
-                                            break;
-                                        }
-                                    }
-                                    
-                                    if (!isPlaceholder) {
-                                        // This is the new image! Tag it
-                                        console.log('🏷️ Found new image, adding tag...');
-                                        potentialImage.tags.add('kahoot-qr-image', 'true');
-                                        potentialImage.tags.add('kahoot-qr-gamepin', gamePin);
-                                        await context.sync();
-                                        console.log('✅ Image tagged successfully');
-                                        break;
-                                    }
+                                    console.log('✅ QR image tagged as new placeholder');
+                                    break;
                                 }
                             }
                             
                             foundElements++;
-                            console.log(`✅ QR Code image inserted in slide ${i + 1}`);
+                            console.log(`✅ QR Code replaced placeholder in slide ${i + 1}`);
                             console.log(`   Game PIN: ${formattedPin}`);
-                            console.log(`   💡 Placeholder kept as anchor with tags`);
+                            console.log(`   💡 QR image is now the placeholder for next update`);
                             
                         } catch (updateError) {
                             console.error(`❌ Error updating QR code in slide ${i + 1}:`, updateError);
