@@ -653,70 +653,122 @@ def index():
         
         <h2>נקודות קצה זמינות (Endpoints)</h2>
         
+        <div class="note" style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+            <h4 style="margin-top: 0;">� הערה חשובה - מבנה המערכת</h4>
+            <p><strong>מזהה משחק (Hash ID):</strong> מזהה ייחודי המחושב מנתיב קובץ המצגת (12 תווים הקסדצימליים)</p>
+            <p><strong>קוד משחק (Game PIN):</strong> קוד בן 6 ספרות שמשתתפים משתמשים בו כדי להצטרף למשחק</p>
+            <p><strong>מזהה משתתף (UID):</strong> מזהה ייחודי שהשרת מייצר לכל משתתף בעת ההצטרפות</p>
+        </div>
+        
+        <h3>🎮 ניהול משחק</h3>
+        
         <div class="endpoint">
-            <h3>🚀 אתחול משחק</h3>
-            <div class="url">GET /?init</div>
-            <p>מאתחל משחק חדש ומגדיר נתוני התחלה</p>
+            <h3>🎯 רישום סשן משחק</h3>
+            <div class="url">GET /?register_session&amp;hash_id=HASH&amp;game_pin=PIN</div>
+            <p>רושם סשן משחק חדש עם hash_id (מזהה מצגת) ו-game_pin (קוד כניסה למשחק)</p>
+            <p><strong>מבצע גם:</strong> איפוס המצגת לשקף הראשון אוטומטית</p>
+            <p><strong>דוגמה:</strong> <code>/?register_session&hash_id=00007236196d&game_pin=123456</code></p>
+        </div>
+        
+        <h3>👥 ניהול משתתפים</h3>
+        
+        <div class="endpoint">
+            <h3>🚪 התחל קבלת משתתפים</h3>
+            <div class="url">GET /?start_accepting_participants&amp;hash_id=HASH</div>
+            <p><strong>נקרא אוטומטית:</strong> כשנכנסים לשקף "פתיחה"</p>
+            <p>מאפשר קבלת משתתפים חדשים למשחק</p>
         </div>
         
         <div class="endpoint">
-            <h3>➡️ מעבר לעמוד הבא</h3>
-            <div class="url">GET /?next_page או GET /?next_slide</div>
-            <p>מעדכן שרת על מעבר לשקף הבא במצגת ושולח הודעת WebSocket ל-add-in</p>
+            <h3>🚫 הפסק קבלת משתתפים</h3>
+            <div class="url">GET /?stop_accepting_participants&amp;hash_id=HASH</div>
+            <p><strong>נקרא אוטומטית:</strong> כשעוברים לשקף הבא אחרי "פתיחה"</p>
+            <p>חוסם קבלת משתתפים חדשים (מחזיר שגיאה 403)</p>
         </div>
         
         <div class="endpoint">
-            <h3>⌨️ סימולציית מקש רווח</h3>
-            <div class="url">GET /?click_action</div>
-            <p>שולח פקודה ל-add-in לסימולציית לחיצה על מקש רווח (התקדמות באנימציה או מעבר לשקף הבא)</p>
+            <h3>➕ הצטרפות משתתף</h3>
+            <div class="url">POST /?join_player</div>
+            <p><strong>JSON Body:</strong> <code>{{"game_pin": "123456", "name": "שם"}}</code></p>
+            <p><strong>מחזיר:</strong> <code>{{"status": "success", "uid": "unique-id-123"}}</code></p>
+            <p>ה-uid מיוצר על-ידי השרת ונשלח בכל בקשה עתידית ב-header: <code>access_token: uid</code></p>
+            <p>מוסיף משתתף למשחק (רק אם המשחק בשקף "פתיחה")</p>
         </div>
         
         <div class="endpoint">
-            <h3>👥 קבלת מספר משתמשים</h3>
-            <div class="url">GET /?get_users</div>
-            <p>מחזיר את מספר המשתתפים הנוכחי</p>
+            <h3>➖ ניתוק משתתף</h3>
+            <div class="url">POST /?leave_player</div>
+            <p><strong>Headers:</strong> <code>access_token: uid</code></p>
+            <p><strong>Body:</strong> לא נדרש (השרת מזהה את המשתתף לפי ה-access_token)</p>
+            <p>מסיר משתתף מהמשחק ומוחק את ה-uid מהמערכת</p>
         </div>
         
-        <div class="endpoint">
-            <h3>⏰ קבלת זמן נותר</h3>
-            <div class="url">GET /?get_time</div>
-            <p>מחזיר את הזמן הנותר בשניות</p>
-        </div>
+        <h3>🧭 ניווט ובקרה</h3>
         
         <div class="endpoint">
-            <h3>📊 סטטוס מלא</h3>
+            <h3>➡️ מעבר לשקף הבא</h3>
+            <div class="url">GET /?next_page&amp;hash_id=HASH (או /?next_slide)</div>
+            <p>שולח פקודת WebSocket ל-add-in לעבור לשקף הבא במצגת</p>
+            <p><strong>דוגמה:</strong> <code>/?next_slide&hash_id=00007236196d</code></p>
+        </div>
+        
+        <h3>📊 מידע ונתונים</h3>
+        
+        <div class="endpoint">
+            <h3>� סטטוס מלא</h3>
             <div class="url">GET /?status</div>
             <p>מחזיר את כל נתוני המשחק בפורמט JSON</p>
         </div>
         
         <div class="endpoint">
-            <h3>🔄 איפוס משחק</h3>
-            <div class="url">GET /?reset</div>
-            <p>מאפס את המשחק (פונקציית מנהל)</p>
+            <h3>🎮 מידע על משחק</h3>
+            <div class="url">GET /game-info/HASH_ID</div>
+            <p>מחזיר מידע על משחק כולל URL לאדמין וקוד QR</p>
         </div>
         
         <div class="endpoint">
-            <h3>💾 שמירת מצגת</h3>
+            <h3>� קוד QR לאדמין</h3>
+            <div class="url">GET /qr-code/HASH_ID</div>
+            <p>מחזיר תמונת QR לכניסת אדמין (פורט 3002)</p>
+            <p><strong>דוגמה:</strong> <code>/qr-code/00007236196d</code></p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>📱 קוד QR לשחקנים</h3>
+            <div class="url">GET /qr-code-player/GAME_PIN</div>
+            <p>מחזיר תמונת QR לכניסת שחקנים (פורט 8080)</p>
+            <p><strong>דוגמה:</strong> <code>/qr-code-player/123456</code> או <code>/qr-code-player/123-456</code></p>
+        </div>
+        
+        <h3>💾 שמירה וטעינה</h3>
+        
+        <div class="endpoint">
+            <h3>� שמירת מצגת</h3>
             <div class="url">POST /save</div>
-            <p>שומר נתוני מצגת כ-JSON עם Window ID ייחודי</p>
+            <p><strong>JSON Body:</strong> <code>{{"hashId": "HASH", "data": {{...}}}}</code></p>
+            <p>שומר נתוני מצגת לפי hash ID</p>
+            <p><strong>מבנה הנתונים:</strong> slideTypeData (מסודר לפי UUID של שקפים), presentationSettings</p>
+            <p><strong>מיקום:</strong> <code>srv/data/saved_presentations/{{hash_id}}.json</code></p>
         </div>
         
         <div class="endpoint">
-            <h3>📂 טעינת מצגת</h3>
+            <h3>� טעינת מצגת</h3>
             <div class="url">POST /load</div>
-            <p>טוען נתוני מצגת שמורים לפי Window ID</p>
+            <p><strong>JSON Body:</strong> <code>{{"hashId": "HASH"}}</code></p>
+            <p>טוען נתוני מצגת שמורים לפי hash ID</p>
         </div>
         
-        <div class="endpoint">
-            <h3>📋 רשימת קבצים שמורים</h3>
-            <div class="url"><a href="/list_saved_files" target="_blank">GET /list_saved_files</a></div>
-            <p>מציג את כל המצגות השמורות ומיקומן המדויק</p>
-        </div>
+        <h3>🔌 WebSocket Events</h3>
         
         <div class="endpoint">
-            <h3>🔍 בדיקת מיקום שמירה</h3>
-            <div class="url"><a href="/debug_save_location.html" target="_blank">GET /debug_save_location.html</a></div>
-            <p>דף בדיקה אינטראקטיבי - מאשר שהקבצים נשמרים בשרת ולא ליד ה-pptx</p>
+            <h3>� אירועים זמינים</h3>
+            <div class="url">ws://localhost:5000</div>
+            <p><strong>participant_update:</strong> עדכון על הוספה/הסרה של משתתף בודד</p>
+            <p><strong>user_update:</strong> עדכון כללי על מספר המשתתפים</p>
+            <p><strong>slide_navigation:</strong> פקודות ניווט בין שקפים</p>
+            <p><strong>game_pin_registered:</strong> אישור רישום קוד משחק</p>
+            <p><strong>timer_finished:</strong> סיום טיימר</p>
+            <p><strong>timer_stopped:</strong> עצירה ידנית של טיימר</p>
         </div>
         
         <h2>מידע נוכחי</h2>
@@ -1168,8 +1220,6 @@ def api_handler():
             action = 'leave_player'
         elif 'register_session' in request.args:
             action = 'register_session'
-        elif 'reset_to_first' in request.args:
-            action = 'reset_to_first'
         elif 'next_page' in request.args:
             action = 'next_page'
         elif 'next_slide' in request.args:
@@ -1321,6 +1371,7 @@ def api_handler():
                 game.log(f'👋 Player leaving: ID: {user_id} from game PIN: {game_pin} (hash: {hash_id})')
                 
                 # Send participant update to add-ins in this specific game room
+                # Note: We send the remove event first, then clients will update their own count
                 participant_data = {
                     'nick': user_id,  # Use user_id as identifier
                     'type': 'remove',
@@ -1399,66 +1450,28 @@ def api_handler():
                 
                 game.log(f'📤 Sent game_pin_registered to {sent} client(s)')
                 
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Session registered successfully',
-                    'hashId': hash_id,
-                    'gamePin': game_pin
-                })
-                
-            except Exception as e:
-                game.log(f'❌ Error in register_session: {str(e)}')
-                return jsonify({
-                    'status': 'error',
-                    'message': str(e)
-                }), 500
-        
-        elif action == 'reset_to_first':
-            # Admin resets presentation to first slide
-            try:
-                hash_id = request.args.get('hash_id')
-                
-                if not hash_id:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Missing hash_id'
-                    }), 400
-                
-                # Validate and sanitize hash_id
-                import re
-                hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
-                
-                if len(hash_id) < 8 or len(hash_id) > 20:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Invalid hash_id length'
-                    }), 400
-                
+                # Also reset presentation to first slide (integrated logic)
                 game.log(f'📍 Resetting to first slide for game: {hash_id}')
                 
-                # Send WebSocket message to add-ins in this specific game room
                 reset_command = {
                     'action': 'go_to_first_slide',
                     'timestamp': time.time(),
                     'hashId': hash_id
                 }
                 
-                sent_count = emit_to_room('slide_navigation', reset_command, hash_id)
+                reset_sent = emit_to_room('slide_navigation', reset_command, hash_id)
+                game.log(f'📤 Sent reset command to {reset_sent} client(s)')
                 
-                if sent_count > 0:
-                    return jsonify({
-                        'status': 'success',
-                        'message': f'Reset command sent to {sent_count} client(s) in game {hash_id}',
-                        'action': 'go_to_first_slide'
-                    })
-                else:
-                    return jsonify({
-                        'status': 'warning',
-                        'message': f'No clients connected to game {hash_id}'
-                    }), 404
-                    
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Session registered successfully',
+                    'hashId': hash_id,
+                    'gamePin': game_pin,
+                    'resetSent': reset_sent > 0
+                })
+                
             except Exception as e:
-                game.log(f'❌ Error in reset_to_first: {str(e)}')
+                game.log(f'❌ Error in register_session: {str(e)}')
                 return jsonify({
                     'status': 'error',
                     'message': str(e)

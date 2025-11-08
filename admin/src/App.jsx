@@ -59,25 +59,7 @@ function App() {
     return Math.floor(100000 + Math.random() * 900000).toString()
   }
   
-  // Reset presentation to first slide
-  const resetToFirstSlide = async (hashId) => {
-    try {
-      const url = `${SERVER_URL}/?reset_to_first&hash_id=${hashId}`
-      console.log('📤 Sending reset command to:', url)
-      const response = await fetch(url)
-      const data = await response.json()
-      
-      if (data.status === 'success') {
-        console.log('✅ Reset to first slide command sent')
-      } else {
-        console.error('❌ Failed to reset:', data.message)
-      }
-    } catch (error) {
-      console.error('❌ Error resetting to first slide:', error)
-    }
-  }
-  
-  // Register session with server
+  // Register session with server (also resets to first slide automatically)
   const registerSession = async (hashId, gamePin) => {
     try {
       console.log('📡 Registering session with server...')
@@ -88,11 +70,10 @@ function App() {
       
       if (data.status === 'success') {
         console.log('✅ Session registered successfully')
+        if (data.resetSent) {
+          console.log('✅ Presentation reset to first slide')
+        }
         setStatus('')
-        
-        // Reset to first slide
-        console.log('📍 Resetting presentation to first slide...')
-        resetToFirstSlide(hashId)
       } else {
         console.error('❌ Failed to register session:', data.message)
         setStatus('⚠️ חיבור למשחק נכשל')
