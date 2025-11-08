@@ -8,12 +8,16 @@
 import { getCurrentSlideNumber } from './navigation.js';
 import { loadSlideType } from './slide-manager.js';
 import { startTimer, stopTimer } from './game-actions.js';
+import { startAcceptingParticipants, stopAcceptingParticipants } from './api.js';
 
 // Debounce timer for slide changes
 let slideChangeDebounceTimer = null;
 
 // Flag to prevent duplicate processing when navigation is triggered by WebSocket
 let isNavigatingViaWebSocket = false;
+
+// Track current participant acceptance state to avoid redundant API calls
+let isAcceptingParticipants = false;
 
 /**
  * Setup slide change listener
@@ -103,6 +107,33 @@ export async function processSlideChange(htmlCache, fromWebSocket = false) {
         // Load slide type UI
         loadSlideType(htmlCache);
         
+        // Control participant acceptance based on slide type
+        if (slideType === 'opening') {
+            // On "opening" slide - start accepting participants (only if not already accepting)
+            if (window.currentHashId && !isAcceptingParticipants) {
+                console.log('🟢 Opening slide detected - starting to accept participants...');
+                const success = await startAcceptingParticipants(window.currentHashId);
+                if (success) {
+                    isAcceptingParticipants = true;
+                }
+            } else if (isAcceptingParticipants) {
+                console.log('ℹ️ Already accepting participants - no action needed');
+            } else {
+                console.warn('⚠️ Cannot start accepting participants - hashId not available');
+            }
+        } else if (slideType !== 'opening') {
+            // Not on "opening" slide - stop accepting participants (only if currently accepting)
+            if (window.currentHashId && isAcceptingParticipants) {
+                console.log('🔴 Left opening slide - stopping participant acceptance...');
+                const success = await stopAcceptingParticipants(window.currentHashId);
+                if (success) {
+                    isAcceptingParticipants = false;
+                }
+            } else if (!isAcceptingParticipants) {
+                console.log('ℹ️ Not accepting participants - no action needed');
+            }
+        }
+        
         // Auto-start timer ONLY if:
         // 1. This is from WebSocket navigation (not manual editing)
         // 2. Slide is a question
@@ -137,5 +168,14 @@ export function setWebSocketNavigationFlag(value) {
     } else {
         console.log('🚩 WebSocket navigation flag CLEARED');
     }
+}
+
+/**
+ * Reset participant acceptance state
+ * Called when a new game starts (game_pin_registered)
+ */
+export function resetParticipantAcceptanceState() {
+    isAcceptingParticipants = false;
+    console.log('🔄 Reset participant acceptance state to: false');
 }
 

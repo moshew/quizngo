@@ -11,7 +11,6 @@ let socket = null;
 
 // Participants management
 let participantsList = [];
-let participantsPositions = new Map(); // nickname -> position index
 
 /**
  * Get the current socket instance
@@ -185,146 +184,43 @@ function setupSocketEventHandlers(config) {
  */
 function handleParticipantUpdate(data, callback) {
     // Expected data format:
-    // { nick: "username", type: "add"/"remove", total: 5 }
+    // { nick: "username", type: "add"/"remove", user_id: "uid" }
     
-    const { nick, type, total } = data;
+    const { nick, type, user_id } = data;
     
     if (!nick || !type) {
         console.error('❌ Invalid participant update data:', data);
         return;
     }
     
-    console.log(`📢 Participant ${type}: ${nick} (total: ${total})`);
+    console.log(`📢 Participant ${type}: ${nick} (user_id: ${user_id})`);
+    console.log(`📊 Current participants list BEFORE update:`, participantsList.length, participantsList);
     
+    // Simply update the list - no UI elements needed
     if (type === 'add') {
-        addParticipant(nick);
+        if (!participantsList.includes(user_id)) {
+            participantsList.push(user_id);
+            console.log(`✅ Added participant: ${nick} (${user_id})`);
+        } else {
+            console.log(`⚠️ Participant ${user_id} already in list`);
+        }
     } else if (type === 'remove') {
-        removeParticipant(nick);
-    }
-    
-    // Update total count
-    if (total !== undefined) {
-        window.currentUsers = total;
-        const userCountElement = document.getElementById('userCount');
-        if (userCountElement) {
-            userCountElement.textContent = total;
+        const index = participantsList.indexOf(user_id);
+        if (index !== -1) {
+            participantsList.splice(index, 1);
+            console.log(`✅ Removed participant: ${user_id}`);
+        } else {
+            console.log(`⚠️ Participant ${user_id} not found in list`);
         }
     }
     
+    console.log(`📊 Current participants list AFTER update:`, participantsList.length, participantsList);
+    console.log(`📊 Total participants: ${participantsList.length}`);
+    
+    // Trigger callback with updated count
     if (callback) {
         callback(data, participantsList);
     }
-}
-
-/**
- * Add participant to list
- */
-function addParticipant(nickname) {
-    if (!participantsList.includes(nickname)) {
-        participantsList.push(nickname);
-        console.log(`✅ Added participant: ${nickname}`);
-        console.log(`📊 Total participants: ${participantsList.length}`);
-        console.log(`👥 Current list: ${participantsList.join(', ')}`);
-        
-        // Assign position
-        const position = calculateNewParticipantPosition();
-        participantsPositions.set(nickname, position);
-        
-        // Create and insert UI element
-        const element = createParticipantElement(nickname, position);
-        insertParticipantAtPosition(element, position);
-    } else {
-        console.log(`⚠️ Participant ${nickname} already in list`);
-    }
-}
-
-/**
- * Remove participant from list
- */
-function removeParticipant(nickname) {
-    const index = participantsList.indexOf(nickname);
-    if (index !== -1) {
-        participantsList.splice(index, 1);
-        console.log(`✅ Removed participant: ${nickname}`);
-        console.log(`📊 Total participants: ${participantsList.length}`);
-        console.log(`👥 Current list: ${participantsList.join(', ')}`);
-        
-        // Remove from positions map
-        participantsPositions.delete(nickname);
-        
-        // Remove UI element
-        const element = document.querySelector(`.participant-pill[data-nickname="${nickname}"]`);
-        if (element) {
-            element.remove();
-        }
-        
-        // Reposition remaining participants
-        repositionAllParticipants();
-    } else {
-        console.log(`⚠️ Participant ${nickname} not found in list`);
-    }
-}
-
-/**
- * Calculate new participant position
- */
-function calculateNewParticipantPosition() {
-    // Find the lowest available position index
-    const usedPositions = Array.from(participantsPositions.values());
-    let position = 0;
-    while (usedPositions.includes(position)) {
-        position++;
-    }
-    return position;
-}
-
-/**
- * Create participant UI element
- */
-function createParticipantElement(nickname, position) {
-    const pill = document.createElement('div');
-    pill.className = 'participant-pill';
-    pill.setAttribute('data-nickname', nickname);
-    pill.setAttribute('data-position', position);
-    pill.textContent = nickname;
-    return pill;
-}
-
-/**
- * Insert participant at specific position
- */
-function insertParticipantAtPosition(element, position) {
-    const container = document.getElementById('liveParticipantsList');
-    if (!container) return;
-    
-    const children = Array.from(container.children);
-    const insertIndex = children.findIndex(child => {
-        const childPosition = parseInt(child.getAttribute('data-position') || '0');
-        return childPosition > position;
-    });
-    
-    if (insertIndex === -1) {
-        container.appendChild(element);
-    } else {
-        container.insertBefore(element, children[insertIndex]);
-    }
-}
-
-/**
- * Reposition all participants
- */
-function repositionAllParticipants() {
-    const container = document.getElementById('liveParticipantsList');
-    if (!container) return;
-    
-    const pills = Array.from(container.querySelectorAll('.participant-pill'));
-    pills.sort((a, b) => {
-        const posA = parseInt(a.getAttribute('data-position') || '0');
-        const posB = parseInt(b.getAttribute('data-position') || '0');
-        return posA - posB;
-    });
-    
-    pills.forEach(pill => container.appendChild(pill));
 }
 
 /**
@@ -332,6 +228,27 @@ function repositionAllParticipants() {
  */
 export function getParticipantsList() {
     return [...participantsList];
+}
+
+/**
+ * Get participants count
+ */
+export function getParticipantsCount() {
+    return participantsList.length;
+}
+
+/**
+ * Reset participants list
+ */
+export function resetParticipantsList() {
+    console.log('🔄 Resetting participants list');
+    console.log('📊 Before reset, participants:', participantsList.length, participantsList);
+    
+    // Clear the array in-place (important for cached code)
+    participantsList.length = 0;
+    
+    console.log('✅ Participants list cleared');
+    console.log('📊 After reset, participants:', participantsList.length, participantsList);
 }
 
 /**

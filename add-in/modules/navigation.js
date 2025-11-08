@@ -281,6 +281,13 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
     
     console.log(`   Target slide ID: ${targetSlideId}`);
     
+    // *** UPDATE TRACKING IMMEDIATELY BEFORE NAVIGATION ***
+    // This ensures the tracking is updated synchronously, preventing race conditions
+    // when rapid navigation commands are issued (e.g., go_to_first + next_slide)
+    window.currentSlideNumber = slideIndex + 1;
+    window.currentSlideId = targetSlideId;
+    console.log(`   Pre-navigation tracking update: slideNumber=${window.currentSlideNumber}, slideId=${window.currentSlideId}`);
+    
     // Navigate using goToByIdAsync (works in both edit and presentation modes)
     const navigationSucceeded = await new Promise((resolve) => {
         // goToByIdAsync uses 1-based index!
@@ -301,11 +308,9 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
         );
     });
     
-    // Update internal tracking
-    window.currentSlideNumber = slideIndex + 1;
-    window.currentSlideId = targetSlideId;
-    
-    console.log(`   Updated tracking: slideNumber=${window.currentSlideNumber}, slideId=${window.currentSlideId}`);
+    // Tracking was already updated before navigation (see above)
+    // This ensures immediate availability for subsequent navigation calls
+    console.log(`   Post-navigation verification: slideNumber=${window.currentSlideNumber}, slideId=${window.currentSlideId}`);
     
     // Trigger slide change processing (timer, UI updates, etc.)
     if (navigationSucceeded) {
@@ -314,8 +319,8 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
         // Set flag to prevent duplicate processing from DocumentSelectionChanged event
         setWebSocketNavigationFlag(true);
         
-        // Small delay to ensure PowerPoint navigation completes
-        // This ensures the presentation has fully rendered the new slide
+        // Small delay to ensure PowerPoint navigation completes and to prevent race conditions
+        // with the DocumentSelectionChanged event (50ms is sufficient after testing)
         setTimeout(async () => {
             try {
                 await processSlideChange(window.htmlCache, true); // fromWebSocket = true
@@ -328,7 +333,7 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
                     setWebSocketNavigationFlag(false);
                 }, 100);
             }
-        }, 300); // 300ms = typical slide transition time
+        }, 50); // Reduced from 300ms - tracking is now updated immediately before navigation
     }
     
     console.log('═'.repeat(80));

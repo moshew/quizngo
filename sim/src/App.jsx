@@ -24,10 +24,20 @@ const SOCKET_URL = SERVER_URL
 
 function App() {
   const [connectedPlayers, setConnectedPlayers] = useState(new Set())
+  const [playerUIDs, setPlayerUIDs] = useState({}) // Store UID for each player
   const [socket, setSocket] = useState(null)
   const [gamePin, setGamePin] = useState('') // Changed from gameId to gamePin
   const [totalUsers, setTotalUsers] = useState(0)
   const [loading, setLoading] = useState({})
+
+  // Reset simulator when game PIN changes
+  useEffect(() => {
+    console.log('🔄 Game PIN changed, resetting simulator')
+    setConnectedPlayers(new Set())
+    setPlayerUIDs({})
+    setTotalUsers(0)
+    setLoading({})
+  }, [gamePin])
 
   // התחברות WebSocket
   useEffect(() => {
@@ -70,14 +80,16 @@ function App() {
     try {
       console.log(`📥 Connecting player: ${player.name} to game PIN: ${gamePin}`)
       
+      // Remove hyphen from game PIN before sending to server
+      const cleanGamePin = gamePin.replace(/-/g, '')
+      
       const response = await fetch(`${API_BASE}/?join_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          game_pin: gamePin.trim(),
-          user_id: player.id,
+          game_pin: cleanGamePin,
           name: player.name
         })
       })
@@ -85,8 +97,11 @@ function App() {
       const data = await response.json()
       console.log(`✅ Player connected:`, data)
 
-      if (response.ok) {
+      if (response.ok && data.uid) {
+        // Store the UID for this player
+        setPlayerUIDs(prev => ({ ...prev, [player.id]: data.uid }))
         setConnectedPlayers(prev => new Set([...prev, player.id]))
+        console.log(`💾 Stored UID for ${player.name}: ${data.uid}`)
       } else {
         alert(`שגיאה בחיבור ${player.name}: ${data.message || data.error}`)
       }
@@ -105,26 +120,33 @@ function App() {
       return
     }
     
+    // Get the UID for this player
+    const uid = playerUIDs[player.id]
+    if (!uid) {
+      alert(`שגיאה: לא נמצא UID עבור ${player.name}`)
+      return
+    }
+    
     setLoading(prev => ({ ...prev, [player.id]: true }))
     
     try {
-      console.log(`📤 Disconnecting player: ${player.name} from game PIN: ${gamePin}`)
+      console.log(`📤 Disconnecting player: ${player.name} (UID: ${uid})`)
       
-      const response = await fetch(`${API_BASE}/?leave_player`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          game_pin: gamePin.trim(),
-          user_id: player.id
-        })
+      // Send UID as query parameter instead of header (CORS-friendly)
+      const response = await fetch(`${API_BASE}/?leave_player&uid=${encodeURIComponent(uid)}`, {
+        method: 'POST'
       })
 
       const data = await response.json()
       console.log(`✅ Player disconnected:`, data)
 
       if (response.ok) {
+        // Remove the UID and player from connected list
+        setPlayerUIDs(prev => {
+          const newUIDs = { ...prev }
+          delete newUIDs[player.id]
+          return newUIDs
+        })
         setConnectedPlayers(prev => {
           const newSet = new Set(prev)
           newSet.delete(player.id)
@@ -154,9 +176,27 @@ function App() {
           <input 
             type="text" 
             value={gamePin}
-            onChange={(e) => setGamePin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-            placeholder="123456"
-            maxLength="6"
+            onChange={(e) => {
+              // Allow only digits and hyphen
+              let value = e.target.value.replace(/[^0-9-]/g, '')
+              
+              // Auto-format: XXX-XXX
+              if (value.length > 0) {
+                // Remove all hyphens first
+                const digitsOnly = value.replace(/-/g, '')
+                
+                // Add hyphen after 3rd digit
+                if (digitsOnly.length > 3) {
+                  value = digitsOnly.slice(0, 3) + '-' + digitsOnly.slice(3, 6)
+                } else {
+                  value = digitsOnly
+                }
+              }
+              
+              setGamePin(value)
+            }}
+            placeholder="123-456"
+            maxLength="7"
             style={{
               width: '200px',
               padding: '12px 20px',
@@ -168,7 +208,7 @@ function App() {
               letterSpacing: '2px'
             }}
           />
-          {gamePin && gamePin.length === 6 && (
+          {gamePin && gamePin.replace(/-/g, '').length === 6 && (
             <span style={{ marginLeft: '15px', color: '#27ae60', fontSize: '20px' }}>✓</span>
           )}
         </div>
@@ -186,7 +226,7 @@ function App() {
         {FAKE_PLAYERS.map(player => {
           const isConnected = connectedPlayers.has(player.id)
           const isLoading = loading[player.id]
-          const isDisabled = !gamePin || gamePin.length !== 6
+          const isDisabled = !gamePin || gamePin.replace(/-/g, '').length !== 6
 
           return (
             <div 

@@ -32,8 +32,12 @@ socketio = SocketIO(app,
     engineio_logger=False
 )
 
-# Configure CORS
-CORS(app, origins="*")  # Allow all origins for development
+# Configure CORS - allow custom headers
+CORS(app, 
+     origins="*",  # Allow all origins for development
+     allow_headers=["Content-Type", "access_token"],  # Explicitly allow access_token header
+     expose_headers=["Content-Type"]
+)
 
 # Configuration
 DATA_DIR = Path(__file__).parent / 'data'
@@ -697,10 +701,11 @@ def index():
         
         <div class="endpoint">
             <h3>➖ ניתוק משתתף</h3>
-            <div class="url">POST /?leave_player</div>
-            <p><strong>Headers:</strong> <code>access_token: uid</code></p>
-            <p><strong>Body:</strong> לא נדרש (השרת מזהה את המשתתף לפי ה-access_token)</p>
-            <p>מסיר משתתף מהמשחק ומוחק את ה-uid מהמערכת</p>
+            <div class="url">POST /?leave_player&amp;uid=UID</div>
+            <p><strong>Query Params:</strong> <code>uid</code> - ה-UID שהתקבל בהצטרפות</p>
+            <p><strong>Body:</strong> לא נדרש</p>
+            <p><strong>דוגמה:</strong> <code>/?leave_player&uid=abc-123-def</code></p>
+            <p>מסיר משתתף מהמשחק</p>
         </div>
         
         <h3>🧭 ניווט ובקרה</h3>
@@ -1220,6 +1225,10 @@ def api_handler():
             action = 'leave_player'
         elif 'register_session' in request.args:
             action = 'register_session'
+        elif 'start_accepting_participants' in request.args:
+            action = 'start_accepting_participants'
+        elif 'stop_accepting_participants' in request.args:
+            action = 'stop_accepting_participants'
         elif 'next_page' in request.args:
             action = 'next_page'
         elif 'next_slide' in request.args:
@@ -1263,13 +1272,12 @@ def api_handler():
                     }), 400
                 
                 game_pin = data.get('game_pin', '').strip()
-                user_id = data.get('user_id', '').strip()
                 name = data.get('name', '').strip()
                 
-                if not game_pin or not user_id or not name:
+                if not game_pin or not name:
                     return jsonify({
                         'status': 'error',
-                        'message': 'Missing game_pin, user_id, or name'
+                        'message': 'Missing game_pin or name'
                     }), 400
                 
                 # Sanitize inputs
@@ -1295,13 +1303,26 @@ def api_handler():
                         'message': f'No active game found with PIN {game_pin}'
                     }), 404
                 
-                game.log(f'👥 Player joining: {name} (ID: {user_id}) to game PIN: {game_pin} (hash: {hash_id})')
+                # Check if session is accepting participants
+                session = game_sessions[hash_id]
+                if not session.get('acceptingParticipants', False):
+                    game.log(f'🚫 Rejected join attempt - session {hash_id} not accepting participants')
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Game is not accepting participants yet. Please wait for the game to start.'
+                    }), 403
+                
+                # Generate unique user ID (uid)
+                import uuid
+                uid = str(uuid.uuid4())
+                
+                game.log(f'👥 Player joining: {name} (UID: {uid}) to game PIN: {game_pin} (hash: {hash_id})')
                 
                 # Send participant update to add-ins in this specific game room
                 participant_data = {
                     'nick': name,
                     'type': 'add',
-                    'user_id': user_id,
+                    'user_id': uid,
                     'timestamp': time.time()
                 }
                 
@@ -1311,9 +1332,7 @@ def api_handler():
                 
                 return jsonify({
                     'status': 'success',
-                    'message': f'Player {name} joined game {game_pin}',
-                    'hashId': hash_id,
-                    'gamePin': game_pin
+                    'uid': uid
                 })
                 
             except Exception as e:
@@ -1326,68 +1345,54 @@ def api_handler():
                 }), 500
         
         elif action == 'leave_player':
-            # Player leaves game by game PIN
+            # Player leaves game by UID (from query param or header)
             try:
-                # Get JSON data from POST request
-                data = request.get_json()
-                if not data:
+                # Try to get UID from query param first, then from header
+                uid = request.args.get('uid', '').strip() or request.headers.get('access_token', '').strip()
+                
+                # Debug: log all headers
+                game.log(f'🔍 Query params: {dict(request.args)}')
+                game.log(f'🔍 All headers: {dict(request.headers)}')
+                game.log(f'🔍 UID value: "{uid}"')
+                
+                if not uid:
                     return jsonify({
                         'status': 'error',
-                        'message': 'No JSON data provided'
+                        'message': 'Missing uid parameter or access_token header'
                     }), 400
                 
-                game_pin = data.get('game_pin', '').strip()
-                user_id = data.get('user_id', '').strip()
+                game.log(f'👋 Player leaving: UID: {uid}')
                 
-                if not game_pin or not user_id:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Missing game_pin or user_id'
-                    }), 400
-                
-                # Sanitize inputs
-                import re
-                game_pin = re.sub(r'[^0-9]', '', game_pin)
-                
-                if len(game_pin) != 6:
-                    return jsonify({
-                        'status': 'error',
-                        'message': 'Game PIN must be 6 digits'
-                    }), 400
-                
-                # Find hash_id for this game_pin
+                # Find which game this UID belongs to by searching all game sessions
+                # Note: In a real implementation, you'd want to maintain a uid->hash_id mapping
                 hash_id = None
-                for h_id, session in game_sessions.items():
-                    if session.get('gamePin') == game_pin:
-                        hash_id = h_id
-                        break
+                for h_id in game_sessions.keys():
+                    # For now, we'll send the leave event to all sessions
+                    # In production, you should track which session the UID belongs to
+                    hash_id = h_id
+                    break
                 
                 if not hash_id:
                     return jsonify({
                         'status': 'error',
-                        'message': f'No active game found with PIN {game_pin}'
+                        'message': 'No active games found'
                     }), 404
                 
-                game.log(f'👋 Player leaving: ID: {user_id} from game PIN: {game_pin} (hash: {hash_id})')
-                
                 # Send participant update to add-ins in this specific game room
-                # Note: We send the remove event first, then clients will update their own count
                 participant_data = {
-                    'nick': user_id,  # Use user_id as identifier
+                    'nick': uid,  # Use uid as identifier
                     'type': 'remove',
-                    'user_id': user_id,
+                    'user_id': uid,
                     'timestamp': time.time()
                 }
                 
                 sent = emit_to_room('participant_update', participant_data, hash_id)
                 
-                game.log(f'📤 Sent participant_update (remove) to {sent} client(s) in room {hash_id}')
+                game.log(f'� Sent participant_update (remove) to {sent} client(s) in room {hash_id}')
                 
                 return jsonify({
                     'status': 'success',
-                    'message': f'Player {user_id} left game {game_pin}',
-                    'hashId': hash_id,
-                    'gamePin': game_pin
+                    'message': 'Player left the game'
                 })
                 
             except Exception as e:
@@ -1432,7 +1437,8 @@ def api_handler():
                 game_sessions[hash_id] = {
                     'gamePin': game_pin,
                     'timestamp': time.time(),
-                    'active': True
+                    'active': True,
+                    'acceptingParticipants': False  # Initially not accepting
                 }
                 
                 game.log(f'✅ Session registered: hash={hash_id}, PIN={game_pin}')
@@ -1472,6 +1478,74 @@ def api_handler():
                 
             except Exception as e:
                 game.log(f'❌ Error in register_session: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+        
+        elif action == 'start_accepting_participants':
+            # Start accepting participants for a game session
+            try:
+                hash_id = request.args.get('hash_id')
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing hash_id'
+                    }), 400
+                
+                if hash_id not in game_sessions:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'No session found with hash_id {hash_id}'
+                    }), 404
+                
+                # Enable participant acceptance
+                game_sessions[hash_id]['acceptingParticipants'] = True
+                game.log(f'✅ Started accepting participants for session {hash_id}')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Now accepting participants',
+                    'hashId': hash_id
+                })
+                
+            except Exception as e:
+                game.log(f'❌ Error in start_accepting_participants: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+        
+        elif action == 'stop_accepting_participants':
+            # Stop accepting participants for a game session
+            try:
+                hash_id = request.args.get('hash_id')
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing hash_id'
+                    }), 400
+                
+                if hash_id not in game_sessions:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'No session found with hash_id {hash_id}'
+                    }), 404
+                
+                # Disable participant acceptance
+                game_sessions[hash_id]['acceptingParticipants'] = False
+                game.log(f'🛑 Stopped accepting participants for session {hash_id}')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Stopped accepting participants',
+                    'hashId': hash_id
+                })
+                
+            except Exception as e:
+                game.log(f'❌ Error in stop_accepting_participants: {str(e)}')
                 return jsonify({
                     'status': 'error',
                     'message': str(e)

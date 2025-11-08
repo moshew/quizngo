@@ -64,8 +64,8 @@ export function updateDisplayedValues() {
     
     // Update user count
     const userCountEl = document.getElementById('userCount');
-    if (userCountEl && window.currentUsers !== undefined) {
-        userCountEl.textContent = window.currentUsers;
+    if (userCountEl && typeof window.getParticipantsCount === 'function') {
+        userCountEl.textContent = window.getParticipantsCount();
     }
     
     // Update time remaining

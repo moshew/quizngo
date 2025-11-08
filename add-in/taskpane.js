@@ -35,12 +35,14 @@
 console.log('📄 taskpane.js loaded (Refactored Version)!');
 
 // Import modules
-import { API_BASE, makeApiCall, makeJsonApiCall, initializeQuiz } from './modules/api.js';
+import { API_BASE, makeApiCall, makeJsonApiCall, initializeQuiz, startAcceptingParticipants, stopAcceptingParticipants } from './modules/api.js';
 import { 
     initializeWebSocket, 
     getSocket, 
     emitSocketEvent, 
-    getParticipantsList 
+    getParticipantsList,
+    getParticipantsCount,
+    resetParticipantsList
 } from './modules/websocket.js';
 import { 
     goToFirstSlideInPowerPoint, 
@@ -64,8 +66,6 @@ import {
     resetParticipantsNumInSlides,
     updateParticipantsNumInSlides,
     updateQrCodeInSlides, 
-    insertLiveParticipantsArea,
-    updateLiveParticipantsInSlide,
     insertGameIdButton,
     insertParticipantsNumButton,
     insertQrCodeButton,
@@ -97,7 +97,8 @@ import {
 import { 
     setupSlideChangeListener, 
     onSlideChanged, 
-    processSlideChange 
+    processSlideChange,
+    resetParticipantAcceptanceState
 } from './modules/event-handlers.js';
 import { 
     startPresentationMode, 
@@ -118,12 +119,15 @@ let autoUpdateInterval = null;
 let slideCheckInterval = null;
 
 // IMPORTANT: All state is stored on window object for consistency and global access
-window.currentUsers = 0;
+// NOTE: currentUsers is now calculated from participantsList.length
 window.currentTime = '';
 window.currentSlideNumber = 1;
 window.currentSlideId = null;
 window.slideTypeData = {};
 window.lastQuestionSlideIndex = null;
+
+// Expose participants count getter
+window.getParticipantsCount = getParticipantsCount;
 
 // Presentation settings (shared across all slides)
 window.presentationSettings = {
@@ -196,19 +200,13 @@ Office.onReady((info) => {
                 timerActive = false;
             },
             onUserUpdate: (data) => {
-                window.currentUsers = data.users || data.total || 0;
-                
+                // Legacy event - update UI if needed
                 const userCountElement = document.getElementById('userCount');
                 if (userCountElement) {
-                    userCountElement.textContent = window.currentUsers;
+                    userCountElement.textContent = getParticipantsCount();
                 }
             },
             onParticipantUpdate: (data, participantsList) => {
-                // Update live participants in slide
-                updateLiveParticipantsInSlide(participantsList).catch(err => {
-                    console.error('Failed to update participants in slide:', err);
-                });
-                
                 // Update kahoot-participants-num with current count
                 const participantCount = participantsList.length;
                 console.log(`👥 Updating participant count to: ${participantCount}`);
@@ -240,11 +238,15 @@ Office.onReady((info) => {
                     console.error('❌ Failed to reset timer elements:', err);
                 });
                 
-                // Reset participants number to 0
-                console.log('🔄 Resetting participants number to 0...');
+                // Reset participants list and number to 0
+                console.log('🔄 Resetting participants list and number to 0...');
+                resetParticipantsList();
                 resetParticipantsNumInSlides().catch(err => {
                     console.error('❌ Failed to reset participants number:', err);
                 });
+                
+                // Reset participant acceptance state
+                resetParticipantAcceptanceState();
                 
                 // Update kahoot-game-id tags in PowerPoint slides
                 updateGameIdInSlides(gamePin).catch(err => {
@@ -257,6 +259,9 @@ Office.onReady((info) => {
                         console.error('❌ updateQrCodeInSlides error:', err);
                     });
                 }
+                
+                // Note: startAcceptingParticipants will be called automatically by processSlideChange
+                // after the slide_navigation event moves us to the first slide (which is "opening")
                 
                 showStatus(`🎮 משחק פעיל - Game PIN: ${formattedPin}`, 'success');
             },
@@ -382,7 +387,6 @@ window.goToFirstSlideInPowerPoint = goToFirstSlideInPowerPoint;
 window.goToNextSlideInPowerPoint = goToNextSlideInPowerPoint;
 window.simulateClickInPowerPoint = simulateClickInPowerPoint;
 window.resetAnimationState = resetAnimationState;
-window.insertLiveParticipantsArea = insertLiveParticipantsArea;
 window.savePresentationData = () => savePresentationData(false);
 window.loadPresentationData = loadPresentationData;
 window.triggerAutoSave = triggerAutoSave; // Exposed for ui-manager.js

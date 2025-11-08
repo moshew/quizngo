@@ -30,3 +30,45 @@ export async function initializeQuiz() {
     console.log('initializeQuiz called (stub)');
 }
 
+// Start accepting participants
+export async function startAcceptingParticipants(hashId) {
+    try {
+        console.log('🟢 Calling start_accepting_participants for hash:', hashId);
+        const response = await makeApiCall(`?start_accepting_participants&hash_id=${hashId}`);
+        
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('❌ Failed to start accepting participants:', text);
+            return false;
+        }
+        
+        const data = await response.json();
+        console.log('✅ Start accepting participants response:', data);
+        return data.status === 'success';
+    } catch (error) {
+        console.error('❌ Error calling start_accepting_participants:', error);
+        return false;
+    }
+}
+
+// Stop accepting participants
+export async function stopAcceptingParticipants(hashId) {
+    try {
+        console.log('🔴 Calling stop_accepting_participants for hash:', hashId);
+        const response = await makeApiCall(`?stop_accepting_participants&hash_id=${hashId}`);
+        
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('❌ Failed to stop accepting participants:', text);
+            return false;
+        }
+        
+        const data = await response.json();
+        console.log('✅ Stop accepting participants response:', data);
+        return data.status === 'success';
+    } catch (error) {
+        console.error('❌ Error calling stop_accepting_participants:', error);
+        return false;
+    }
+}
+
