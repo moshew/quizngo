@@ -113,6 +113,156 @@ export async function updateGameIdInSlides(gamePin) {
 }
 
 /**
+ * Reset participants number in all slides with the tag
+ */
+export async function resetParticipantsNumInSlides() {
+    console.log(`👥 Starting resetParticipantsNumInSlides - resetting to 0`);
+    
+    try {
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            console.log(`🔍 Searching for kahoot-participants-num tags in ${slides.items.length} slides...`);
+            
+            let foundElements = 0;
+            
+            for (let i = 0; i < slides.items.length; i++) {
+                const slide = slides.items[i];
+                const shapes = slide.shapes;
+                shapes.load(['items']);
+                await context.sync();
+                
+                console.log(`📄 Checking slide ${i + 1} with ${shapes.items.length} shapes`);
+                
+                for (let j = 0; j < shapes.items.length; j++) {
+                    const shape = shapes.items[j];
+                    const tags = shape.tags;
+                    tags.load(['items']);
+                    await context.sync();
+                    
+                    let hasParticipantsNumTag = false;
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        console.log(`  🏷️ Tag: ${tag.key} = ${tag.value}`);
+                        
+                        // Case-insensitive comparison
+                        if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
+                            hasParticipantsNumTag = true;
+                            console.log('  ✅ Found kahoot-participants-num tag!');
+                            break;
+                        }
+                    }
+                    
+                    if (hasParticipantsNumTag) {
+                        console.log(`📝 Resetting participants number in slide ${i + 1}`);
+                        shape.load(['textFrame', 'name', 'type']);
+                        await context.sync();
+                        
+                        console.log(`  Shape type: ${shape.type}, name: ${shape.name}`);
+                        
+                        try {
+                            const textRange = shape.textFrame.textRange;
+                            textRange.text = '0';
+                            await context.sync();
+                            
+                            foundElements++;
+                            console.log(`✅ Reset participants number to 0 in slide ${i + 1}`);
+                        } catch (textError) {
+                            console.error(`❌ Error updating text in slide ${i + 1}:`, textError);
+                        }
+                    }
+                }
+            }
+            
+            console.log(`✅ Total participants number elements reset: ${foundElements}`);
+        });
+    } catch (error) {
+        console.error('❌ Error resetting participants number in slides:', error);
+        console.error('Error details:', error.message, error.stack);
+    }
+}
+
+/**
+ * Update participants number in all slides with the tag
+ */
+export async function updateParticipantsNumInSlides(count) {
+    console.log(`👥 Starting updateParticipantsNumInSlides with count: ${count}`);
+    
+    if (count === undefined || count === null) {
+        console.error('❌ No count provided to updateParticipantsNumInSlides');
+        return;
+    }
+    
+    try {
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            console.log(`🔍 Searching for kahoot-participants-num tags in ${slides.items.length} slides...`);
+            
+            let foundElements = 0;
+            
+            for (let i = 0; i < slides.items.length; i++) {
+                const slide = slides.items[i];
+                const shapes = slide.shapes;
+                shapes.load(['items']);
+                await context.sync();
+                
+                for (let j = 0; j < shapes.items.length; j++) {
+                    const shape = shapes.items[j];
+                    const tags = shape.tags;
+                    tags.load(['items']);
+                    await context.sync();
+                    
+                    let hasParticipantsNumTag = false;
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        // Case-insensitive comparison
+                        if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
+                            hasParticipantsNumTag = true;
+                            break;
+                        }
+                    }
+                    
+                    if (hasParticipantsNumTag) {
+                        console.log(`📝 Updating participants number in slide ${i + 1} to ${count}`);
+                        shape.load(['textFrame', 'name', 'type']);
+                        await context.sync();
+                        
+                        try {
+                            const textRange = shape.textFrame.textRange;
+                            textRange.text = String(count);
+                            await context.sync();
+                            
+                            foundElements++;
+                            console.log(`✅ Updated participants number to ${count} in slide ${i + 1}`);
+                        } catch (textError) {
+                            console.error(`❌ Error updating text in slide ${i + 1}:`, textError);
+                        }
+                    }
+                }
+            }
+            
+            console.log(`✅ Total participants number elements updated: ${foundElements}`);
+        });
+    } catch (error) {
+        console.error('❌ Error updating participants number in slides:', error);
+        console.error('Error details:', error.message, error.stack);
+    }
+}
+
+/**
  * Update QR Code in slides with image from server
  */
 export async function updateQrCodeInSlides(hashId, gamePin) {

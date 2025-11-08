@@ -16,13 +16,16 @@ const FAKE_PLAYERS = [
   { id: 'p10', name: 'ליאת בר' }
 ]
 
-const API_BASE = 'http://localhost:5000'
-const SOCKET_URL = 'http://localhost:5000'
+// Get server URL from environment or use default
+// For network access, set VITE_SERVER_URL to your machine's IP, e.g., http://192.168.1.100:5000
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'
+const API_BASE = SERVER_URL
+const SOCKET_URL = SERVER_URL
 
 function App() {
   const [connectedPlayers, setConnectedPlayers] = useState(new Set())
   const [socket, setSocket] = useState(null)
-  const [gameId, setGameId] = useState(null)
+  const [gamePin, setGamePin] = useState('') // Changed from gameId to gamePin
   const [totalUsers, setTotalUsers] = useState(0)
   const [loading, setLoading] = useState({})
 
@@ -47,12 +50,6 @@ function App() {
       setTotalUsers(data.count || 0)
     })
 
-    // קבלת Game ID
-    newSocket.on('game_initialized', (data) => {
-      console.log('🎮 Game initialized:', data)
-      setGameId(data.game_id)
-    })
-
     setSocket(newSocket)
 
     return () => {
@@ -63,17 +60,23 @@ function App() {
 
   // חיבור משתתף
   const connectPlayer = async (player) => {
+    if (!gamePin || gamePin.trim() === '') {
+      alert('יש להזין Game PIN קודם!')
+      return
+    }
+    
     setLoading(prev => ({ ...prev, [player.id]: true }))
     
     try {
-      console.log(`📥 Connecting player: ${player.name}`)
+      console.log(`📥 Connecting player: ${player.name} to game PIN: ${gamePin}`)
       
-      const response = await fetch(`${API_BASE}/?join`, {
+      const response = await fetch(`${API_BASE}/?join_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          game_pin: gamePin.trim(),
           user_id: player.id,
           name: player.name
         })
@@ -84,11 +87,6 @@ function App() {
 
       if (response.ok) {
         setConnectedPlayers(prev => new Set([...prev, player.id]))
-        
-        // עדכון Game ID אם קיבלנו
-        if (data.game_id) {
-          setGameId(data.game_id)
-        }
       } else {
         alert(`שגיאה בחיבור ${player.name}: ${data.message || data.error}`)
       }
@@ -102,17 +100,23 @@ function App() {
 
   // ניתוק משתתף
   const disconnectPlayer = async (player) => {
+    if (!gamePin || gamePin.trim() === '') {
+      alert('יש להזין Game PIN קודם!')
+      return
+    }
+    
     setLoading(prev => ({ ...prev, [player.id]: true }))
     
     try {
-      console.log(`📤 Disconnecting player: ${player.name}`)
+      console.log(`📤 Disconnecting player: ${player.name} from game PIN: ${gamePin}`)
       
-      const response = await fetch(`${API_BASE}/?leave`, {
+      const response = await fetch(`${API_BASE}/?leave_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          game_pin: gamePin.trim(),
           user_id: player.id
         })
       })
@@ -137,30 +141,6 @@ function App() {
     }
   }
 
-  // אתחול משחק
-  const initializeGame = async () => {
-    try {
-      console.log('🎮 Initializing game...')
-      
-      const response = await fetch(`${API_BASE}/?init`, {
-        method: 'GET'
-      })
-
-      const data = await response.json()
-      console.log('✅ Game initialized:', data)
-
-      if (response.ok && data.game_id) {
-        setGameId(data.game_id)
-        alert(`משחק חדש נוצר!\nGame PIN: ${data.game_id}`)
-      } else {
-        alert(`שגיאה באתחול משחק: ${data.message || data.error}`)
-      }
-    } catch (error) {
-      console.error('❌ Error initializing game:', error)
-      alert(`שגיאה באתחול משחק: ${error.message}`)
-    }
-  }
-
   return (
     <div className="app">
       <header className="header">
@@ -169,9 +149,28 @@ function App() {
       </header>
 
       <div className="game-info">
-        <div className="info-card">
-          <div className="info-label">Game PIN:</div>
-          <div className="info-value">{gameId || '-'}</div>
+        <div className="info-card" style={{ gridColumn: '1 / -1', padding: '20px' }}>
+          <div className="info-label" style={{ marginBottom: '10px' }}>הזן Game PIN:</div>
+          <input 
+            type="text" 
+            value={gamePin}
+            onChange={(e) => setGamePin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+            placeholder="123456"
+            maxLength="6"
+            style={{
+              width: '200px',
+              padding: '12px 20px',
+              fontSize: '24px',
+              textAlign: 'center',
+              border: '2px solid #ddd',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              letterSpacing: '2px'
+            }}
+          />
+          {gamePin && gamePin.length === 6 && (
+            <span style={{ marginLeft: '15px', color: '#27ae60', fontSize: '20px' }}>✓</span>
+          )}
         </div>
         <div className="info-card">
           <div className="info-label">משתתפים פעילים:</div>
@@ -183,21 +182,16 @@ function App() {
         </div>
       </div>
 
-      <div className="controls">
-        <button className="btn btn-init" onClick={initializeGame}>
-          🚀 התחל משחק חדש
-        </button>
-      </div>
-
       <div className="players-grid">
         {FAKE_PLAYERS.map(player => {
           const isConnected = connectedPlayers.has(player.id)
           const isLoading = loading[player.id]
+          const isDisabled = !gamePin || gamePin.length !== 6
 
           return (
             <div 
               key={player.id} 
-              className={`player-card ${isConnected ? 'connected' : ''}`}
+              className={`player-card ${isConnected ? 'connected' : ''} ${isDisabled ? 'disabled' : ''}`}
             >
               <div className="player-avatar">
                 {player.name.charAt(0)}
@@ -211,7 +205,7 @@ function App() {
                   <button 
                     className="btn btn-disconnect"
                     onClick={() => disconnectPlayer(player)}
-                    disabled={isLoading}
+                    disabled={isLoading || isDisabled}
                   >
                     {isLoading ? '⏳' : '🚪'} התנתק
                   </button>
@@ -219,7 +213,7 @@ function App() {
                   <button 
                     className="btn btn-connect"
                     onClick={() => connectPlayer(player)}
-                    disabled={isLoading}
+                    disabled={isLoading || isDisabled}
                   >
                     {isLoading ? '⏳' : '🎮'} הצטרף
                   </button>
@@ -238,7 +232,12 @@ function App() {
 
       <footer className="footer">
         <p>WebSocket: {socket?.connected ? '🟢 מחובר' : '🔴 לא מחובר'}</p>
-        <p>Server: {API_BASE}</p>
+        <p>Server: {SERVER_URL}</p>
+        {SERVER_URL.includes('localhost') && (
+          <p style={{ color: '#fbbf24', marginTop: '10px' }}>
+            ⚠️ שרת מקומי - לגישה ממחשבים אחרים, עדכן את VITE_SERVER_URL בקובץ .env
+          </p>
+        )}
       </footer>
     </div>
   )

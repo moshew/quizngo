@@ -1155,13 +1155,17 @@ def load_presentation():
             'message': f'Error loading presentation: {str(e)}'
         }), 500
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'POST'])
 def api_handler():
     """Handle API requests"""
     try:
         # Determine action from query parameters
         if 'init' in request.args:
             action = 'init'
+        elif 'join_player' in request.args:
+            action = 'join_player'
+        elif 'leave_player' in request.args:
+            action = 'leave_player'
         elif 'register_session' in request.args:
             action = 'register_session'
         elif 'reset_to_first' in request.args:
@@ -1196,6 +1200,153 @@ def api_handler():
             return jsonify({
                 'game_id': game_id
             })
+        
+        elif action == 'join_player':
+            # Player joins game by game PIN
+            try:
+                # Get JSON data from POST request
+                data = request.get_json()
+                if not data:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'No JSON data provided'
+                    }), 400
+                
+                game_pin = data.get('game_pin', '').strip()
+                user_id = data.get('user_id', '').strip()
+                name = data.get('name', '').strip()
+                
+                if not game_pin or not user_id or not name:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing game_pin, user_id, or name'
+                    }), 400
+                
+                # Sanitize inputs
+                import re
+                game_pin = re.sub(r'[^0-9]', '', game_pin)
+                
+                if len(game_pin) != 6:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Game PIN must be 6 digits'
+                    }), 400
+                
+                # Find hash_id for this game_pin
+                hash_id = None
+                for h_id, session in game_sessions.items():
+                    if session.get('gamePin') == game_pin:
+                        hash_id = h_id
+                        break
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'No active game found with PIN {game_pin}'
+                    }), 404
+                
+                game.log(f'👥 Player joining: {name} (ID: {user_id}) to game PIN: {game_pin} (hash: {hash_id})')
+                
+                # Send participant update to add-ins in this specific game room
+                participant_data = {
+                    'nick': name,
+                    'type': 'add',
+                    'user_id': user_id,
+                    'timestamp': time.time()
+                }
+                
+                sent = emit_to_room('participant_update', participant_data, hash_id)
+                
+                game.log(f'📤 Sent participant_update (add) to {sent} client(s) in room {hash_id}')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Player {name} joined game {game_pin}',
+                    'hashId': hash_id,
+                    'gamePin': game_pin
+                })
+                
+            except Exception as e:
+                game.log(f'❌ Error in join_player: {str(e)}')
+                import traceback
+                traceback.print_exc()
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+        
+        elif action == 'leave_player':
+            # Player leaves game by game PIN
+            try:
+                # Get JSON data from POST request
+                data = request.get_json()
+                if not data:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'No JSON data provided'
+                    }), 400
+                
+                game_pin = data.get('game_pin', '').strip()
+                user_id = data.get('user_id', '').strip()
+                
+                if not game_pin or not user_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing game_pin or user_id'
+                    }), 400
+                
+                # Sanitize inputs
+                import re
+                game_pin = re.sub(r'[^0-9]', '', game_pin)
+                
+                if len(game_pin) != 6:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Game PIN must be 6 digits'
+                    }), 400
+                
+                # Find hash_id for this game_pin
+                hash_id = None
+                for h_id, session in game_sessions.items():
+                    if session.get('gamePin') == game_pin:
+                        hash_id = h_id
+                        break
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'No active game found with PIN {game_pin}'
+                    }), 404
+                
+                game.log(f'👋 Player leaving: ID: {user_id} from game PIN: {game_pin} (hash: {hash_id})')
+                
+                # Send participant update to add-ins in this specific game room
+                participant_data = {
+                    'nick': user_id,  # Use user_id as identifier
+                    'type': 'remove',
+                    'user_id': user_id,
+                    'timestamp': time.time()
+                }
+                
+                sent = emit_to_room('participant_update', participant_data, hash_id)
+                
+                game.log(f'📤 Sent participant_update (remove) to {sent} client(s) in room {hash_id}')
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Player {user_id} left game {game_pin}',
+                    'hashId': hash_id,
+                    'gamePin': game_pin
+                })
+                
+            except Exception as e:
+                game.log(f'❌ Error in leave_player: {str(e)}')
+                import traceback
+                traceback.print_exc()
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
         
         elif action == 'register_session':
             # Admin registers a new game session

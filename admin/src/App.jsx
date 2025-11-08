@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 
 // Server configuration
-const SERVER_URL = 'http://192.168.31.22:5000'
+// Get server URL from environment or use default
+// For network access, set VITE_SERVER_URL to your machine's IP, e.g., http://192.168.1.100:5000
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://192.168.31.22:5000'
 
 function App() {
   const [status, setStatus] = useState('')

@@ -61,6 +61,8 @@ import {
 } from './modules/presentation-state.js';
 import { 
     updateGameIdInSlides, 
+    resetParticipantsNumInSlides,
+    updateParticipantsNumInSlides,
     updateQrCodeInSlides, 
     insertLiveParticipantsArea,
     updateLiveParticipantsInSlide,
@@ -206,6 +208,13 @@ Office.onReady((info) => {
                 updateLiveParticipantsInSlide(participantsList).catch(err => {
                     console.error('Failed to update participants in slide:', err);
                 });
+                
+                // Update kahoot-participants-num with current count
+                const participantCount = participantsList.length;
+                console.log(`👥 Updating participant count to: ${participantCount}`);
+                updateParticipantsNumInSlides(participantCount).catch(err => {
+                    console.error('❌ Failed to update participants number:', err);
+                });
             },
             onGamePinRegistered: (data) => {
                 const gamePin = data.gamePin;
@@ -229,6 +238,12 @@ Office.onReady((info) => {
                 const initialTime = window.presentationSettings?.questionWaitTime || 30;
                 updateAllQuestionTimeElements(initialTime).catch(err => {
                     console.error('❌ Failed to reset timer elements:', err);
+                });
+                
+                // Reset participants number to 0
+                console.log('🔄 Resetting participants number to 0...');
+                resetParticipantsNumInSlides().catch(err => {
+                    console.error('❌ Failed to reset participants number:', err);
                 });
                 
                 // Update kahoot-game-id tags in PowerPoint slides
