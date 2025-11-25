@@ -9,8 +9,11 @@ export const WEBSOCKET_URL = 'http://localhost:5000';
 // WebSocket instance
 let socket = null;
 
-// Participants management
-let participantsList = [];
+// Participants management - enhanced with scoring data
+let participantsData = new Map(); // Map of userId -> { userId, nickname, score, lastAnswerTime, lastAnswerCorrect }
+
+// Current question answer tracking
+let currentQuestionAnswers = new Map(); // Map of userId -> { answerIndex, timestamp }
 
 /**
  * Get the current socket instance
@@ -65,6 +68,7 @@ function setupSocketEventHandlers(config) {
         onClickNavigation,
         onAnimationReset,
         onSlideChange,
+        onPlayerAnswer,
         onError
     } = config;
     
@@ -177,6 +181,12 @@ function setupSocketEventHandlers(config) {
             onSlideChange(data);
         }
     });
+    
+    // Handle player answer submissions
+    socket.on('player_answer', (data) => {
+        console.log('📝 Player answer received:', data);
+        handlePlayerAnswer(data, onPlayerAnswer);
+    });
 }
 
 /**
@@ -194,32 +204,37 @@ function handleParticipantUpdate(data, callback) {
     }
     
     console.log(`📢 Participant ${type}: ${nick} (user_id: ${user_id})`);
-    console.log(`📊 Current participants list BEFORE update:`, participantsList.length, participantsList);
+    console.log(`📊 Current participants BEFORE update:`, participantsData.size, Array.from(participantsData.keys()));
     
-    // Simply update the list - no UI elements needed
+    // Update the participants data map
     if (type === 'add') {
-        if (!participantsList.includes(user_id)) {
-            participantsList.push(user_id);
+        if (!participantsData.has(user_id)) {
+            participantsData.set(user_id, {
+                userId: user_id,
+                nickname: nick,
+                score: 0,
+                lastAnswerTime: null,
+                lastAnswerCorrect: null
+            });
             console.log(`✅ Added participant: ${nick} (${user_id})`);
         } else {
             console.log(`⚠️ Participant ${user_id} already in list`);
         }
     } else if (type === 'remove') {
-        const index = participantsList.indexOf(user_id);
-        if (index !== -1) {
-            participantsList.splice(index, 1);
+        if (participantsData.has(user_id)) {
+            participantsData.delete(user_id);
             console.log(`✅ Removed participant: ${user_id}`);
         } else {
             console.log(`⚠️ Participant ${user_id} not found in list`);
         }
     }
     
-    console.log(`📊 Current participants list AFTER update:`, participantsList.length, participantsList);
-    console.log(`📊 Total participants: ${participantsList.length}`);
+    console.log(`📊 Current participants AFTER update:`, participantsData.size, Array.from(participantsData.keys()));
+    console.log(`📊 Total participants: ${participantsData.size}`);
     
     // Trigger callback with updated count
     if (callback) {
-        callback(data, participantsList);
+        callback(data, Array.from(participantsData.keys()));
     }
 }
 
@@ -227,14 +242,21 @@ function handleParticipantUpdate(data, callback) {
  * Get participants list
  */
 export function getParticipantsList() {
-    return [...participantsList];
+    return Array.from(participantsData.keys());
 }
 
 /**
  * Get participants count
  */
 export function getParticipantsCount() {
-    return participantsList.length;
+    return participantsData.size;
+}
+
+/**
+ * Get participants data (full data map)
+ */
+export function getParticipantsData() {
+    return new Map(participantsData);
 }
 
 /**
@@ -242,13 +264,96 @@ export function getParticipantsCount() {
  */
 export function resetParticipantsList() {
     console.log('🔄 Resetting participants list');
-    console.log('📊 Before reset, participants:', participantsList.length, participantsList);
+    console.log('📊 Before reset, participants:', participantsData.size, Array.from(participantsData.keys()));
     
-    // Clear the array in-place (important for cached code)
-    participantsList.length = 0;
+    // Clear the map
+    participantsData.clear();
     
     console.log('✅ Participants list cleared');
-    console.log('📊 After reset, participants:', participantsList.length, participantsList);
+    console.log('📊 After reset, participants:', participantsData.size, Array.from(participantsData.keys()));
+}
+
+/**
+ * Handle player answer from sim via server
+ */
+function handlePlayerAnswer(data, callback) {
+    // Expected data format:
+    // { userId: "uid", answerIndex: 1-4, hashId: "...", timestamp: ... }
+    
+    const { userId, answerIndex, timestamp } = data;
+    
+    if (!userId || !answerIndex) {
+        console.error('❌ Invalid player answer data:', data);
+        return;
+    }
+    
+    console.log(`📝 Player ${userId} answered: ${answerIndex} at timestamp: ${timestamp}`);
+    
+    // Store answer with timestamp
+    currentQuestionAnswers.set(userId, {
+        answerIndex: answerIndex,
+        timestamp: timestamp
+    });
+    
+    console.log(`📊 Total answers received: ${currentQuestionAnswers.size} / ${participantsData.size}`);
+    
+    // Update "מספר עונים" tag
+    updateRespondentsCount(currentQuestionAnswers.size);
+    
+    // Check if all participants have answered
+    if (currentQuestionAnswers.size >= participantsData.size && participantsData.size > 0) {
+        console.log('✅ All participants have answered!');
+        // Stop timer and send "answer time ended"
+        stopTimerAndEndAnswerTime();
+    }
+    
+    // Trigger callback
+    if (callback) {
+        callback(data, currentQuestionAnswers);
+    }
+}
+
+/**
+ * Reset current question answers
+ */
+export function resetCurrentQuestionAnswers() {
+    console.log('🔄 Resetting current question answers');
+    currentQuestionAnswers.clear();
+    console.log('✅ Answers cleared');
+}
+
+/**
+ * Get current question answers
+ */
+export function getCurrentQuestionAnswers() {
+    return new Map(currentQuestionAnswers);
+}
+
+/**
+ * Update "מספר עונים" tag in current slide
+ */
+async function updateRespondentsCount(count) {
+    try {
+        // Import PowerPoint shapes module dynamically to avoid circular dependency
+        const { updateCurrentSlideRespondentsCount } = await import('./powerpoint-shapes.js');
+        await updateCurrentSlideRespondentsCount(count);
+    } catch (error) {
+        console.error('❌ Error updating respondents count:', error);
+    }
+}
+
+/**
+ * Stop timer and send "answer time ended" when all answered
+ */
+async function stopTimerAndEndAnswerTime() {
+    try {
+        // Import game actions module dynamically to avoid circular dependency
+        const { stopTimer } = await import('./game-actions.js');
+        await stopTimer();
+        console.log('⏹️ Timer stopped - all participants answered');
+    } catch (error) {
+        console.error('❌ Error stopping timer:', error);
+    }
 }
 
 /**

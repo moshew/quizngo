@@ -67,6 +67,42 @@ client_rooms = {}  # e.g., {'session123': 'a65445f6664e', 'session456': 'f049ebb
 # Game sessions: maps hash_id -> session info
 game_sessions = {}  # e.g., {'a65445f6664e': {'sessionId': '123456', 'timestamp': 1234567890}}
 
+# Auto-close timeout (1 hour in seconds)
+GAME_TIMEOUT = 3600
+
+def check_game_active(hash_id):
+    """Check if a game session is active"""
+    if hash_id not in game_sessions:
+        return False
+    return game_sessions[hash_id].get('active', False)
+
+def schedule_game_timeout(hash_id):
+    """Schedule automatic game closure after 1 hour"""
+    def timeout_worker():
+        time.sleep(GAME_TIMEOUT)
+        
+        # Check if game is still active
+        if hash_id in game_sessions and game_sessions[hash_id].get('active', False):
+            game.log(f'⏰ Auto-closing game {hash_id} after {GAME_TIMEOUT}s timeout')
+            
+            # Mark as inactive
+            game_sessions[hash_id]['active'] = False
+            game_sessions[hash_id]['closedAt'] = time.time()
+            game_sessions[hash_id]['closedReason'] = 'timeout'
+            
+            # Notify clients
+            emit_to_room('game_closed', {
+                'hashId': hash_id,
+                'timestamp': time.time(),
+                'message': 'Game closed due to timeout (1 hour)',
+                'reason': 'timeout'
+            }, hash_id)
+    
+    timeout_thread = threading.Thread(target=timeout_worker)
+    timeout_thread.daemon = True
+    timeout_thread.start()
+    game.log(f'⏰ Scheduled auto-close for game {hash_id} in {GAME_TIMEOUT}s (1 hour)')
+
 def emit_to_room(event, data, target_hash_id):
     """
     Emit a message only to clients in a specific room (hash ID).
@@ -371,6 +407,36 @@ def handle_register_room(data):
         game.log(f'❌ Client {request.sid} failed to register - no hashId provided')
         emit('room_registered', {'status': 'error', 'message': 'No hashId provided'})
 
+@socketio.on('register_room_by_pin')
+def handle_register_room_by_pin(data):
+    """Register client (sim) with a game PIN - find hash ID and join room"""
+    game_pin = data.get('gamePin')
+    if not game_pin:
+        game.log(f'❌ Client {request.sid} failed to register - no gamePin provided')
+        emit('room_registered', {'status': 'error', 'message': 'No gamePin provided'})
+        return
+    
+    # Find hash_id for this game_pin
+    hash_id = None
+    for h_id, session in game_sessions.items():
+        if session.get('gamePin') == game_pin:
+            hash_id = h_id
+            break
+    
+    if not hash_id:
+        game.log(f'❌ Client {request.sid} failed to register - no session found for PIN {game_pin}')
+        emit('room_registered', {'status': 'error', 'message': f'No active game found with PIN {game_pin}'})
+        return
+    
+    # Join Socket.IO room
+    join_room(hash_id)
+    
+    # Track in our mapping
+    client_rooms[request.sid] = hash_id
+    
+    game.log(f'✅ Sim client {request.sid} joined room (hash): {hash_id} via PIN: {game_pin}')
+    emit('room_registered', {'hashId': hash_id, 'gamePin': game_pin, 'status': 'success'})
+
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
@@ -443,6 +509,29 @@ def handle_user_update(data):
         
     except Exception as e:
         game.log(f'Error handling user update: {e}')
+
+@socketio.on('player_answer')
+def handle_player_answer(data):
+    """Handle player answer submission from sim"""
+    try:
+        game.log(f'Received player_answer: {data}')
+        
+        # Get hash ID from data or from sender's room
+        hash_id = data.get('hashId')
+        if not hash_id and request.sid in client_rooms:
+            hash_id = client_rooms[request.sid]
+        
+        if hash_id:
+            # Forward answer to add-in in this game room
+            emit_to_room('player_answer', data, hash_id)
+            game.log(f'Forwarded player_answer to add-in in room {hash_id}')
+        else:
+            # Fallback: broadcast to all if no hash_id
+            game.log(f'Warning: No hash ID for player_answer, broadcasting to all')
+            socketio.emit('player_answer', data)
+        
+    except Exception as e:
+        game.log(f'Error handling player answer: {e}')
 
 @app.route('/debug_save_location.html')
 def debug_save_location():
@@ -670,8 +759,26 @@ def index():
             <h3>🎯 רישום סשן משחק</h3>
             <div class="url">GET /?register_session&amp;hash_id=HASH&amp;game_pin=PIN</div>
             <p>רושם סשן משחק חדש עם hash_id (מזהה מצגת) ו-game_pin (קוד כניסה למשחק)</p>
-            <p><strong>מבצע גם:</strong> איפוס המצגת לשקף הראשון אוטומטית</p>
+            <p><strong>מבצע גם:</strong> איפוס המצגת לשקף הראשון אוטומטית + תזמון סגירה אוטומטית אחרי שעה</p>
             <p><strong>דוגמה:</strong> <code>/?register_session&hash_id=00007236196d&game_pin=123456</code></p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>🔍 בדיקת קיום משחק פעיל</h3>
+            <div class="url">GET /?check_active_game&amp;hash_id=HASH</div>
+            <p>בודק אם קיים משחק פעיל עבור ה-hash_id הנתון</p>
+            <p><strong>מחזיר:</strong> <code>{"status": "success", "active": true/false, "gamePin": "123456"}</code></p>
+            <p><strong>שימוש:</strong> Admin קורא לזה בטעינה כדי להצטרף למשחק קיים במקום ליצור חדש</p>
+            <p><strong>דוגמה:</strong> <code>/?check_active_game&hash_id=00007236196d</code></p>
+        </div>
+        
+        <div class="endpoint">
+            <h3>🔒 סגירת משחק</h3>
+            <div class="url">GET /?close_game&amp;hash_id=HASH</div>
+            <p>סוגר משחק פעיל (מסמן אותו כ-inactive)</p>
+            <p><strong>נקרא אוטומטית:</strong> כשמגיעים לשקף האחרון במצגת (add-in קורא לזה)</p>
+            <p><strong>נקרא גם:</strong> אוטומטית אחרי שעה (timeout)</p>
+            <p><strong>דוגמה:</strong> <code>/?close_game&hash_id=00007236196d</code></p>
         </div>
         
         <h3>👥 ניהול משתתפים</h3>
@@ -953,6 +1060,148 @@ def list_saved_files():
             'message': f'Error listing files: {str(e)}'
         }), 500
 
+@app.route('/sim_gamePIN', methods=['GET'])
+def get_active_game_pins():
+    """Get list of all active game PINs for the simulator"""
+    try:
+        # Return all active game sessions with their PINs
+        active_pins = []
+        
+        for hash_id, session in game_sessions.items():
+            if session.get('active', False):
+                active_pins.append({
+                    'gamePin': session.get('gamePin'),
+                    'hashId': hash_id,
+                    'timestamp': session.get('timestamp'),
+                    'acceptingParticipants': session.get('acceptingParticipants', False)
+                })
+        
+        game.log(f'📋 Retrieved {len(active_pins)} active game PINs for simulator')
+        
+        return jsonify({
+            'status': 'success',
+            'count': len(active_pins),
+            'games': active_pins
+        })
+        
+    except Exception as e:
+        game.log(f'❌ Error getting active game PINs: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/answer_time_started', methods=['POST'])
+def answer_time_started():
+    """Handle answer time started via REST API"""
+    try:
+        data = request.get_json()
+        hash_id = data.get('hashId', 'N/A')
+        
+        game.log(f'🎯 RECEIVED answer_time_started (REST)! hashId: {hash_id}')
+        
+        if hash_id and hash_id != 'N/A':
+            # Broadcast to specific room via WebSocket
+            sent_count = emit_to_room('answer_time_started', data, hash_id)
+            game.log(f'✅ Broadcasted answer_time_started to {sent_count} client(s) in room {hash_id}')
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'Broadcasted to {sent_count} client(s)',
+                'hashId': hash_id
+            })
+        else:
+            game.log(f'⚠️ Warning: No hash ID for answer_time_started')
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing hashId'
+            }), 400
+        
+    except Exception as e:
+        game.log(f'❌ Error handling answer_time_started: {e}')
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/submit_results', methods=['POST'])
+def submit_results():
+    """
+    Receive question results from add-in and broadcast individual results to each player.
+    Each player receives their own results via WebSocket.
+    """
+    try:
+        data = request.get_json()
+        
+        # Log what we received
+        game.log(f'📊 RECEIVED results submission request')
+        game.log(f'📊 Raw data: {data}')
+        
+        if not data:
+            game.log('❌ No JSON data received')
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
+        
+        hash_id = data.get('hashId')
+        results = data.get('results', [])
+        
+        game.log(f'📊 hashId: {hash_id}')
+        game.log(f'📊 Results for {len(results)} players')
+        
+        if not hash_id:
+            game.log('❌ Missing hashId in request')
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing hashId'
+            }), 400
+        
+        if not results:
+            game.log('❌ Missing or empty results in request')
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing or empty results'
+            }), 400
+        
+        # Broadcast individual results to each player
+        for result in results:
+            user_id = result.get('userId')
+            
+            # Prepare player-specific data
+            player_data = {
+                'userId': user_id,
+                'nickname': result.get('nickname'),
+                'questionScore': result.get('questionScore'),
+                'cumulativeScore': result.get('cumulativeScore'),
+                'rank': result.get('rank'),
+                'isCorrect': result.get('isCorrect'),
+                'answered': result.get('answered'),
+                'timestamp': data.get('timestamp')
+            }
+            
+            # Send to all sims in this game room (they will filter by userId)
+            emit_to_room('player_results', player_data, hash_id)
+            
+            game.log(f'  📤 Sent results to player {result.get("nickname")}: Rank #{result.get("rank")}, Score: {result.get("cumulativeScore")}')
+        
+        game.log(f'✅ Results broadcasted to {len(results)} player(s) in room {hash_id}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Results sent to {len(results)} player(s)',
+            'hashId': hash_id
+        })
+        
+    except Exception as e:
+        game.log(f'❌ Error handling submit_results: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 
 @app.route('/game-info/<hash_id>', methods=['GET'])
 def get_game_info(hash_id):
@@ -1229,6 +1478,10 @@ def api_handler():
             action = 'start_accepting_participants'
         elif 'stop_accepting_participants' in request.args:
             action = 'stop_accepting_participants'
+        elif 'check_active_game' in request.args:
+            action = 'check_active_game'
+        elif 'close_game' in request.args:
+            action = 'close_game'
         elif 'next_page' in request.args:
             action = 'next_page'
         elif 'next_slide' in request.args:
@@ -1302,6 +1555,15 @@ def api_handler():
                         'status': 'error',
                         'message': f'No active game found with PIN {game_pin}'
                     }), 404
+                
+                # Check if game is active
+                if not check_game_active(hash_id):
+                    game.log(f'🚫 Rejected join attempt - game {hash_id} is closed')
+                    return jsonify({
+                        'status': 'warning',
+                        'message': 'This game has been closed. Please ask the teacher to start a new game.',
+                        'game_closed': True
+                    }), 403
                 
                 # Check if session is accepting participants
                 session = game_sessions[hash_id]
@@ -1441,6 +1703,9 @@ def api_handler():
                     'acceptingParticipants': False  # Initially not accepting
                 }
                 
+                # Schedule auto-close after 1 hour
+                schedule_game_timeout(hash_id)
+                
                 game.log(f'✅ Session registered: hash={hash_id}, PIN={game_pin}')
                 game.log(f'📊 Current client_rooms: {client_rooms}')
                 
@@ -1494,11 +1759,12 @@ def api_handler():
                         'message': 'Missing hash_id'
                     }), 400
                 
-                if hash_id not in game_sessions:
+                if not check_game_active(hash_id):
                     return jsonify({
-                        'status': 'error',
-                        'message': f'No session found with hash_id {hash_id}'
-                    }), 404
+                        'status': 'warning',
+                        'message': 'Game session is not active or does not exist',
+                        'game_closed': True
+                    }), 403
                 
                 # Enable participant acceptance
                 game_sessions[hash_id]['acceptingParticipants'] = True
@@ -1528,11 +1794,12 @@ def api_handler():
                         'message': 'Missing hash_id'
                     }), 400
                 
-                if hash_id not in game_sessions:
+                if not check_game_active(hash_id):
                     return jsonify({
-                        'status': 'error',
-                        'message': f'No session found with hash_id {hash_id}'
-                    }), 404
+                        'status': 'warning',
+                        'message': 'Game session is not active or does not exist',
+                        'game_closed': True
+                    }), 403
                 
                 # Disable participant acceptance
                 game_sessions[hash_id]['acceptingParticipants'] = False
@@ -1580,6 +1847,15 @@ def api_handler():
                         'status': 'error',
                         'message': 'Invalid hash ID length'
                     }), 400
+                
+                # Check if game is active
+                if not check_game_active(hash_id):
+                    game.log(f'⚠️ Next slide request for inactive game {hash_id}')
+                    return jsonify({
+                        'status': 'warning',
+                        'message': 'Game session is not active or has been closed',
+                        'game_closed': True
+                    }), 200
                 
                 # Send WebSocket message ONLY to add-ins in this specific game room
                 slide_command = {
@@ -1719,6 +1995,109 @@ def api_handler():
                 return jsonify({
                     'status': 'error',
                     'message': f'Server error in reset_animations: {str(e)}'
+                }), 500
+        
+        elif action == 'check_active_game':
+            # Check if an active game exists for the given hash_id
+            try:
+                hash_id = request.args.get('hash_id')
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing hash_id'
+                    }), 400
+                
+                # Validate and sanitize hash_id
+                import re
+                hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+                
+                if len(hash_id) < 8 or len(hash_id) > 20:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid hash ID length'
+                    }), 400
+                
+                # Check if session exists and is active
+                if hash_id in game_sessions and game_sessions[hash_id].get('active', False):
+                    session = game_sessions[hash_id]
+                    game.log(f'✅ Active game found for hash {hash_id}')
+                    
+                    return jsonify({
+                        'status': 'success',
+                        'active': True,
+                        'gamePin': session.get('gamePin'),
+                        'timestamp': session.get('timestamp'),
+                        'hashId': hash_id
+                    })
+                else:
+                    game.log(f'❌ No active game found for hash {hash_id}')
+                    return jsonify({
+                        'status': 'success',
+                        'active': False,
+                        'hashId': hash_id
+                    })
+                    
+            except Exception as e:
+                game.log(f'❌ Error in check_active_game: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+        
+        elif action == 'close_game':
+            # Close an active game session
+            try:
+                hash_id = request.args.get('hash_id')
+                
+                if not hash_id:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Missing hash_id'
+                    }), 400
+                
+                # Validate and sanitize hash_id
+                import re
+                hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+                
+                if len(hash_id) < 8 or len(hash_id) > 20:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid hash ID length'
+                    }), 400
+                
+                # Check if session exists
+                if hash_id not in game_sessions:
+                    game.log(f'⚠️ Cannot close game - session {hash_id} not found')
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Game session not found'
+                    }), 404
+                
+                # Mark session as inactive
+                game_sessions[hash_id]['active'] = False
+                game_sessions[hash_id]['closedAt'] = time.time()
+                
+                game.log(f'🔒 Game closed: hash={hash_id}')
+                
+                # Notify clients in this room that game is closed
+                emit_to_room('game_closed', {
+                    'hashId': hash_id,
+                    'timestamp': time.time(),
+                    'message': 'Game has ended'
+                }, hash_id)
+                
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Game closed successfully',
+                    'hashId': hash_id
+                })
+                
+            except Exception as e:
+                game.log(f'❌ Error in close_game: {str(e)}')
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
                 }), 500
     
     except Exception as e:

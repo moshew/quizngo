@@ -284,7 +284,7 @@ export async function getWindowId() {
 /**
  * Save presentation data to server
  */
-export async function savePresentationData(silentMode = false) {
+export async function savePresentationData() {
     try {
         console.log('🚀 Starting save process...');
         
@@ -293,9 +293,6 @@ export async function savePresentationData(silentMode = false) {
         
         if (!isSaved) {
             console.error('❌ Cannot save - presentation is not saved to disk');
-            if (!silentMode) {
-                throw new Error('⚠️ שמור תחילה את המצגת (Save As) לפני שמירת הנתונים!');
-            }
             return;
         }
         
@@ -304,9 +301,6 @@ export async function savePresentationData(silentMode = false) {
         
         if (!fileInfo || !fileInfo.fullPath) {
             console.log('🚫 Could not get file info');
-            if (!silentMode) {
-                throw new Error('⚠️ שמור תחילה את המצגת (Save As) לפני שמירת הנתונים!');
-            }
             return;
         }
         
@@ -319,9 +313,6 @@ export async function savePresentationData(silentMode = false) {
         
         if (!hashId) {
             console.error('❌ Failed to generate hash ID');
-            if (!silentMode) {
-                throw new Error('שגיאה ביצירת מזהה ייחודי');
-            }
             return;
         }
         
@@ -354,9 +345,6 @@ export async function savePresentationData(silentMode = false) {
         
         if (result.status === 'success') {
             console.log('✅ Data saved successfully');
-            if (!silentMode) {
-                console.log('💾 הנתונים נשמרו בהצלחה');
-            }
             return true;
         } else {
             throw new Error(result.message || 'Unknown error');
@@ -543,7 +531,7 @@ async function performAutoSave() {
     try {
         updateAutoSaveStatus('saving');
         
-        await savePresentationData(true);
+        await savePresentationData();
         
         hasUnsavedChanges = false;
         autoSaveTimer = null;

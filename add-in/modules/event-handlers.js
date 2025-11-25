@@ -140,6 +140,10 @@ export async function processSlideChange(htmlCache, fromWebSocket = false) {
         if (fromWebSocket && slideType === 'question') {
             console.log('🎯 Question slide detected via WebSocket - auto-starting timer...');
             
+            // Reset answers for new question
+            const { resetCurrentQuestionAnswers } = await import('./websocket.js');
+            resetCurrentQuestionAnswers();
+            
             // Stop any existing timer first
             await stopTimer();
             

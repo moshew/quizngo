@@ -6,9 +6,10 @@
 /* global PowerPoint */
 
 import { API_BASE } from './api.js';
-import { getGameHashId } from './presentation-state.js';
+import { getGameHashId, getSlideData } from './presentation-state.js';
 import { showStatus, showError, updateUIForSlideType, initializeStartScreen } from './ui-manager.js';
 import { updateCurrentSlideQuestionTime } from './powerpoint-shapes.js';
+import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
 
 /**
  * Start presentation mode (game start screen)
@@ -44,6 +45,7 @@ export async function startPresentationMode(htmlCache) {
 // Global timer variables
 let timerInterval = null;
 let timerRemaining = 0;
+let questionStartTime = null; // Track when the question timer started (for scoring)
 
 /**
  * Start question timer with delay
@@ -51,6 +53,7 @@ let timerRemaining = 0;
  * 1. Wait for clockActivationDelay seconds
  * 2. Start countdown from questionWaitTime
  * 3. Update kahoot-question-time elements in real-time
+ * 4. Send WebSocket messages to server at key points
  */
 export async function startTimer() { 
     console.log('⏱️ startTimer called');
@@ -82,6 +85,13 @@ export async function startTimer() {
     setTimeout(() => {
         console.log('🎬 Delay finished, starting countdown timer...');
         
+        // Record the start time for scoring calculations
+        questionStartTime = Date.now();
+        console.log(`📍 Question start time recorded: ${questionStartTime}`);
+        
+        // Send "answer time started" to server
+        sendAnswerTimeStarted();
+        
         // Step 2: Initialize timer
         timerRemaining = questionWaitTime;
         
@@ -98,6 +108,9 @@ export async function startTimer() {
                 clearInterval(timerInterval);
                 timerInterval = null;
                 updateQuestionTimeDisplay(0);
+                
+                // Process scores and send results
+                handleQuestionEnd();
                 
                 // Optional: Play sound or show notification
                 showStatus('⏰ זמן התשובה הסתיים!', 'warning');
@@ -122,10 +135,96 @@ export async function stopTimer() {
         clearInterval(timerInterval);
         timerInterval = null;
         timerRemaining = 0;
+        
+        // Process scores and send results when timer is manually stopped (all answered)
+        handleQuestionEnd();
+        
         console.log('✅ Timer stopped');
         showStatus('⏸️ טיימר הופסק', 'info');
     } else {
         console.log('⚠️ No active timer to stop');
+    }
+}
+
+/**
+ * Handle question end - process scores and send to server
+ */
+async function handleQuestionEnd() {
+    try {
+        console.log('🎯 Handling question end - processing scores...');
+        
+        // Get current slide ID
+        const slideId = window.currentSlideId;
+        if (!slideId) {
+            console.error('❌ No current slide ID available');
+            return;
+        }
+        
+        // Get hash ID
+        const hashId = window.currentHashId;
+        if (!hashId) {
+            console.error('❌ No hash ID available');
+            return;
+        }
+        
+        // Get question time from settings
+        const questionTime = window.presentationSettings?.questionWaitTime || 30;
+        
+        // Process answers and calculate scores
+        const results = await processAnswersAndScores(slideId, questionStartTime, questionTime);
+        
+        if (results) {
+            // Send results to server (this also signals end of question)
+            await sendResultsToServer(hashId, results);
+            
+            console.log('✅ Scores processed and sent to server');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error handling question end:', error);
+    }
+}
+
+/**
+ * Send "answer time started" message to server via REST API
+ */
+function sendAnswerTimeStarted() {
+    try {
+        console.log('📤 Attempting to send answer_time_started via REST...');
+        
+        const hashId = window.currentHashId;
+        if (!hashId) {
+            console.warn('⚠️ No hashId available - cannot send answer_time_started');
+            return;
+        }
+        
+        const data = {
+            hashId: hashId,
+            timestamp: Date.now(),
+            questionWaitTime: window.presentationSettings?.questionWaitTime || 30
+        };
+        
+        // Send via REST API instead of WebSocket
+        const url = `${API_BASE}answer_time_started`;
+        console.log(`📡 Sending to: ${url}`);
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            console.log('✅ Successfully sent answer_time_started to server:', result);
+        })
+        .catch(error => {
+            console.error('❌ Error sending answer_time_started:', error);
+        });
+        
+    } catch (error) {
+        console.error('❌ Error sending answer_time_started:', error);
     }
 }
 

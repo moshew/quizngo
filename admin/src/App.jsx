@@ -6,10 +6,10 @@ import { useState, useEffect, useRef } from 'react'
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://192.168.31.22:5000'
 
 function App() {
-  const [status, setStatus] = useState('')
   const [gameId, setGameId] = useState(null)
   const [sessionId, setSessionId] = useState(null)
   const [error, setError] = useState(null)
+  const [gameActive, setGameActive] = useState(true)
   const hasInitialized = useRef(false)
 
   // Extract game ID from URL and generate session ID on mount
@@ -44,14 +44,41 @@ function App() {
     console.log('✅ Valid game hash found:', hashId)
     setGameId(hashId)
     
-    // Generate unique session ID for this admin session
-    const newSessionId = generateSessionId()
-    console.log('🎲 Generated session ID:', newSessionId)
-    setSessionId(newSessionId)
-    
-    // Send session ID to server to register with add-in
-    registerSession(hashId, newSessionId)
+    // Check if an active game already exists for this hash
+    checkActiveGame(hashId)
   }, []) // Empty dependency array = run only once on mount
+  
+  // Check if an active game exists
+  const checkActiveGame = async (hashId) => {
+    try {
+      console.log('🔍 Checking for active game with hash:', hashId)
+      const url = `${SERVER_URL}/?check_active_game&hash_id=${hashId}`
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (data.status === 'success' && data.active) {
+        // Active game found - use existing game PIN
+        console.log('✅ Active game found! Game PIN:', data.gamePin)
+        setSessionId(data.gamePin)
+      } else {
+        // No active game - create new one
+        console.log('📝 No active game found, creating new session...')
+        const newSessionId = generateSessionId()
+        console.log('🎲 Generated new session ID (Game PIN):', newSessionId)
+        setSessionId(newSessionId)
+        
+        // Register the new session
+        registerSession(hashId, newSessionId)
+      }
+    } catch (error) {
+      console.error('❌ Error checking active game:', error)
+      // On error, fallback to creating new game
+      const newSessionId = generateSessionId()
+      setSessionId(newSessionId)
+      registerSession(hashId, newSessionId)
+    }
+  }
+
   
   // Generate a unique session ID
   const generateSessionId = () => {
@@ -73,20 +100,19 @@ function App() {
         if (data.resetSent) {
           console.log('✅ Presentation reset to first slide')
         }
-        setStatus('')
       } else {
         console.error('❌ Failed to register session:', data.message)
-        setStatus('⚠️ חיבור למשחק נכשל')
+        alert('⚠️ חיבור למשחק נכשל: ' + data.message)
       }
     } catch (error) {
       console.error('❌ Error registering session:', error)
-      setStatus('⚠️ שגיאה בחיבור לשרת')
+      alert('⚠️ שגיאה בחיבור לשרת: ' + error.message)
     }
   }
 
   const handleNextSlide = async () => {
     if (!gameId) {
-      setStatus('❌ אין מזהה משחק')
+      alert('❌ אין מזהה משחק')
       return
     }
 
@@ -99,11 +125,53 @@ function App() {
       
       if (data.status === 'success') {
         // Success - no message needed
-      } else {
-        setStatus('❌ שגיאה: ' + data.message)
+      } else if (data.status === 'warning' && data.game_closed) {
+        // Game was closed - disable the button silently (no error message)
+        console.log('⚠️ Game closed - disabling next slide button')
+        setGameActive(false)
+      } else if (data.game_closed) {
+        // Game was closed - disable the button
+        console.log('⚠️ Game closed - disabling next slide button')
+        setGameActive(false)
+      } else if (data.status === 'error') {
+        // Only show alerts for actual errors, not warnings
+        alert('❌ שגיאה: ' + data.message)
       }
     } catch (error) {
-      setStatus('❌ שגיאת רשת: ' + error.message)
+      alert('❌ שגיאת רשת: ' + error.message)
+    }
+  }
+
+  const handleResetGame = async () => {
+    if (!gameId) {
+      alert('❌ אין מזהה משחק')
+      return
+    }
+
+    try {
+      console.log('🔄 Resetting game...')
+      
+      // Generate new session ID
+      const newSessionId = generateSessionId()
+      console.log('🎲 Generated new session ID:', newSessionId)
+      
+      // Register new session (even if one exists) - no check needed
+      const url = `${SERVER_URL}/?register_session&hash_id=${gameId}&game_pin=${newSessionId}`
+      console.log('📤 Sending to:', url)
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (data.status === 'success') {
+        // Update state
+        setSessionId(newSessionId)
+        setGameActive(true)  // Re-enable the button
+        console.log('✅ Game reset successfully')
+      } else {
+        alert('❌ שגיאה באיתחול: ' + data.message)
+      }
+    } catch (error) {
+      console.error('❌ Error resetting game:', error)
+      alert('❌ שגיאה באיתחול: ' + error.message)
     }
   }
 
@@ -154,8 +222,40 @@ function App() {
   return (
     <div className="admin-container">
       <header>
-        <h1>🎮 Kahoot Admin Panel</h1>
-        <p className="subtitle">לוח בקרה לניהול המשחק</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <h1>🎮 Kahoot Admin Panel</h1>
+            <p className="subtitle">לוח בקרה לניהול המשחק</p>
+          </div>
+          
+          <button 
+            onClick={handleResetGame}
+            style={{
+              backgroundColor: '#ff9800',
+              border: 'none',
+              borderRadius: '50%',
+              width: '50px',
+              height: '50px',
+              fontSize: '24px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+              transition: 'all 0.3s ease',
+              marginLeft: '20px'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.backgroundColor = '#f57c00'
+              e.target.style.transform = 'scale(1.1)'
+            }}
+            onMouseOut={(e) => {
+              e.target.style.backgroundColor = '#ff9800'
+              e.target.style.transform = 'scale(1)'
+            }}
+            title="אתחל משחק מחדש"
+          >
+            🔄
+          </button>
+        </div>
+        
         <div style={{ 
           fontSize: '14px', 
           color: '#333', 
@@ -207,15 +307,14 @@ function App() {
           <button 
             className="btn btn-primary"
             onClick={handleNextSlide}
+            disabled={!gameActive}
+            style={{
+              opacity: gameActive ? 1 : 0.5,
+              cursor: gameActive ? 'pointer' : 'not-allowed'
+            }}
           >
             ➡️ עבור לשקף הבא
           </button>
-
-          {status && (
-            <div className={`status-message ${status.includes('✅') ? 'success' : 'error'}`}>
-              {status}
-            </div>
-          )}
         </div>
       </main>
     </div>

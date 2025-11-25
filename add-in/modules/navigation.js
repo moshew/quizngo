@@ -448,6 +448,10 @@ export async function goToNextSlideInPowerPoint() {
             const reason = result.reason;
             
             console.log(`🎯 Next slide: index=${nextIndex}, reason="${reason}"`);
+            console.log(`📊 Checking if last slide: nextIndex=${nextIndex}, totalSlides=${totalSlides}, isLast=${nextIndex >= totalSlides - 1}`);
+            
+            // Check if the calculated next slide is beyond or at the last slide
+            const isLastSlide = nextIndex >= totalSlides - 1;
             
             if (nextIndex !== currentIndex) {
                 const nextSlideId = slideIds[nextIndex];
@@ -457,6 +461,13 @@ export async function goToNextSlideInPowerPoint() {
                 
                 if (success) {
                     console.log('✅ Navigation successful');
+                    
+                    // Check if we reached or passed the last slide
+                    if (isLastSlide) {
+                        console.log('🏁 Reached last slide (or beyond) - notifying server to close game');
+                        await notifyGameComplete();
+                    }
+                    
                     return true;
                 } else {
                     console.error('❌ Navigation failed');
@@ -464,6 +475,13 @@ export async function goToNextSlideInPowerPoint() {
                 }
             } else {
                 console.log('📍 Already on target slide, no navigation needed');
+                
+                // Check if we're already on or past the last slide
+                if (isLastSlide) {
+                    console.log('🏁 Already on last slide (or beyond) - notifying server to close game');
+                    await notifyGameComplete();
+                }
+                
                 return true;
             }
         });
@@ -471,6 +489,49 @@ export async function goToNextSlideInPowerPoint() {
     } catch (error) {
         console.error('❌ Error in goToNextSlideInPowerPoint:', error);
         throw error;
+    }
+}
+
+/**
+ * Notify server that game is complete (reached last slide)
+ */
+async function notifyGameComplete() {
+    try {
+        // Get hash ID from window object (stored as currentHashId)
+        const hashId = window.currentHashId;
+        
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🏁 notifyGameComplete called');
+        console.log(`   Hash ID: ${hashId}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
+        if (!hashId) {
+            console.warn('⚠️ Cannot notify game complete - no hash ID available');
+            console.warn('   window.currentHashId is:', window.currentHashId);
+            return;
+        }
+        
+        console.log(`📤 Notifying server: game complete for hash ${hashId}`);
+        
+        // Import API_BASE if needed
+        const API_BASE = 'http://localhost:5000/';
+        const url = `${API_BASE}?close_game&hash_id=${hashId}`;
+        
+        console.log(`📡 Sending request to: ${url}`);
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        console.log('📥 Server response:', data);
+        
+        if (data.status === 'success') {
+            console.log('✅ Server notified successfully - game closed');
+        } else {
+            console.error('❌ Failed to notify server:', data.message);
+        }
+    } catch (error) {
+        console.error('❌ Error notifying game complete:', error);
+        console.error('   Error details:', error.message);
     }
 }
 

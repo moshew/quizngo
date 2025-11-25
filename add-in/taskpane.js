@@ -72,7 +72,8 @@ import {
     addQuestionTime,
     addRespondentsCount,
     addStatisticsImage,
-    updateAllQuestionTimeElements
+    updateAllQuestionTimeElements,
+    updateAllRespondentsCountElements
 } from './modules/powerpoint-shapes.js';
 import { 
     showStatus, 
@@ -185,7 +186,7 @@ Office.onReady((info) => {
         setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs, htmlCache));
         
         // Initialize WebSocket connection with event handlers
-        initializeWebSocket({
+        const socket = initializeWebSocket({
             onConnect: async (socket) => {
                 const hashId = await getGameHashId();
                 if (hashId) {
@@ -214,6 +215,12 @@ Office.onReady((info) => {
                     console.error('❌ Failed to update participants number:', err);
                 });
             },
+            onPlayerAnswer: (data, answersMap) => {
+                console.log(`📝 Player answer processed:`, data);
+                console.log(`📊 Total answers: ${answersMap.size}`);
+                // Answer processing is handled in websocket.js
+                // This callback is just for logging/debugging
+            },
             onGamePinRegistered: (data) => {
                 const gamePin = data.gamePin;
                 
@@ -236,6 +243,12 @@ Office.onReady((info) => {
                 const initialTime = window.presentationSettings?.questionWaitTime || 30;
                 updateAllQuestionTimeElements(initialTime).catch(err => {
                     console.error('❌ Failed to reset timer elements:', err);
+                });
+                
+                // Reset respondents count to 0 across all slides
+                console.log('🔄 Resetting respondents count to 0 across all slides...');
+                updateAllRespondentsCountElements(0).catch(err => {
+                    console.error('❌ Failed to reset respondents count elements:', err);
                 });
                 
                 // Reset participants list and number to 0
@@ -331,6 +344,10 @@ Office.onReady((info) => {
                 showError(message);
             }
         });
+        
+        // Store socket globally for use in other modules
+        window.socket = socket;
+        console.log('✅ Socket stored in window.socket');
         
         // Get initial slide number and load slide type
         setTimeout(async () => {
