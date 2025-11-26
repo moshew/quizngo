@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import './App.css'
 
@@ -25,7 +25,7 @@ const SOCKET_URL = SERVER_URL
 function App() {
   const [connectedPlayers, setConnectedPlayers] = useState(new Set())
   const [playerUIDs, setPlayerUIDs] = useState({}) // Store UID for each player
-  const [socket, setSocket] = useState(null)
+  const [playerSockets, setPlayerSockets] = useState({}) // Store WebSocket for each player
   const [gamePin, setGamePin] = useState('') // Changed from gameId to gamePin
   const [totalUsers, setTotalUsers] = useState(0)
   const [loading, setLoading] = useState({})
@@ -35,101 +35,45 @@ function App() {
   const [isAnswerTime, setIsAnswerTime] = useState(false) // Are we in answer time?
   const [playerAnswers, setPlayerAnswers] = useState({}) // playerId -> answerIndex (1-4)
   const [playerResults, setPlayerResults] = useState({}) // playerId -> { questionScore, cumulativeScore, rank, isCorrect }
+  const [currentQuestionTimestamp, setCurrentQuestionTimestamp] = useState(null) // Track current question
+
+  // Use ref to track current sockets without causing re-renders
+  const playerSocketsRef = useRef({})
 
   // Reset simulator when game PIN changes
   useEffect(() => {
+    // Only reset if gamePin actually has a value and changes
+    // Don't reset on initial mount
+    if (!gamePin) return;
+    
     console.log('🔄 Game PIN changed, resetting simulator')
+    
+    Object.values(playerSocketsRef.current).forEach(socket => {
+      if (socket) socket.disconnect()
+    })
+    
+    // Clear ref
+    playerSocketsRef.current = {}
+    
     setConnectedPlayers(new Set())
     setPlayerUIDs({})
+    setPlayerSockets({})
     setTotalUsers(0)
     setLoading({})
     setIsAnswerTime(false)
     setPlayerAnswers({})
     setPlayerResults({})
-  }, [gamePin])
+  }, [gamePin]) // Only when gamePin changes
 
-  // התחברות WebSocket
+  // Cleanup all sockets on unmount ONLY
   useEffect(() => {
-    console.log('🔌 Connecting to WebSocket:', SOCKET_URL)
-    const newSocket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling']
-    })
-
-    newSocket.on('connect', () => {
-      console.log('✅ WebSocket connected')
-    })
-
-    newSocket.on('disconnect', () => {
-      console.log('❌ WebSocket disconnected')
-    })
-    
-    newSocket.on('room_registered', (data) => {
-      if (data.status === 'success') {
-        console.log('✅ Successfully registered to room:', data.hashId)
-      } else {
-        console.error('❌ Room registration failed:', data.message)
-      }
-    })
-
-    // קבלת עדכוני משתתפים
-    newSocket.on('user_count', (data) => {
-      console.log('📊 User count update:', data)
-      setTotalUsers(data.count || 0)
-    })
-    
-    // Answer time events
-    newSocket.on('answer_time_started', (data) => {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log('🎯 ANSWER TIME STARTED!')
-      console.log('📦 Data:', data)
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      setIsAnswerTime(true)
-      setPlayerAnswers({}) // Reset answers for new question
-      setPlayerResults({}) // Reset results for new question
-    })
-    
-    // Player results event
-    newSocket.on('player_results', (data) => {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log('📊 PLAYER RESULTS RECEIVED!')
-      console.log('📦 Data:', data)
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      
-      // Store results by userId directly, we'll map to playerId in the render
-      setPlayerResults(prev => ({
-        ...prev,
-        [data.userId]: {
-          questionScore: data.questionScore,
-          cumulativeScore: data.cumulativeScore,
-          rank: data.rank,
-          isCorrect: data.isCorrect,
-          answered: data.answered,
-          nickname: data.nickname
-        }
-      }))
-      
-      console.log(`✅ Stored results for userId ${data.userId}:`, data)
-      
-      // When we receive results, it means answer time has ended
-      setIsAnswerTime(false)
-    })
-
-    setSocket(newSocket)
-
     return () => {
-      console.log('🔌 Disconnecting WebSocket')
-      newSocket.close()
+      console.log('🔌 Cleanup on unmount: Disconnecting all player WebSockets')
+      Object.values(playerSocketsRef.current).forEach(socket => {
+        if (socket) socket.disconnect()
+      })
     }
-  }, [])
-  
-  // Register to room when game PIN is complete
-  useEffect(() => {
-    if (socket && socket.connected && gamePin && gamePin.replace(/-/g, '').length === 6) {
-      const cleanPin = gamePin.replace(/-/g, '')
-      console.log('🔑 Registering sim to room with game PIN:', cleanPin)
-      socket.emit('register_room_by_pin', { gamePin: cleanPin })
-    }
-  }, [socket, gamePin])
+  }, []) // Empty deps - only run on unmount
 
   // חיבור משתתף
   const connectPlayer = async (player) => {
@@ -165,6 +109,95 @@ function App() {
         setPlayerUIDs(prev => ({ ...prev, [player.id]: data.uid }))
         setConnectedPlayers(prev => new Set([...prev, player.id]))
         console.log(`💾 Stored UID for ${player.name}: ${data.uid}`)
+        
+        // Create individual WebSocket for this player
+        console.log(`🔌 Creating WebSocket for player: ${player.name}`)
+        const playerSocket = io(SOCKET_URL, {
+          transports: ['websocket', 'polling'],
+          reconnection: false,  // Disable automatic reconnection
+          forceNew: true        // Force new Manager for each socket
+        })
+
+        playerSocket.on('connect', () => {
+          console.log(`✅ WebSocket connected for ${player.name}`)
+          
+          // Register this socket to the room AND link it to the player UID
+          playerSocket.emit('register_room_by_pin', { 
+            gamePin: cleanGamePin,
+            userId: data.uid  // Send UID so server can link socket to player
+          })
+        })
+
+        playerSocket.on('disconnect', () => {
+          console.log(`❌ WebSocket disconnected for ${player.name}`)
+        })
+        
+        playerSocket.on('room_registered', (roomData) => {
+          if (roomData.status === 'success') {
+            console.log(`✅ ${player.name} registered to room:`, roomData.hashId)
+          } else {
+            console.error(`❌ ${player.name} room registration failed:`, roomData.message)
+          }
+        })
+
+        // קבלת עדכוני משתתפים (כל socket יעדכן את המספר הכולל)
+        playerSocket.on('user_count', (countData) => {
+          console.log(`📊 User count update from ${player.name}:`, countData)
+          setTotalUsers(countData.count || 0)
+        })
+        
+        // Answer time events
+        playerSocket.on('answer_time_started', (answerData) => {
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          console.log(`🎯 ANSWER TIME STARTED! (detected by ${player.name})`)
+          console.log('📦 Data:', answerData)
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          
+          setIsAnswerTime(true)
+          
+          // Only reset answers/results if this is a NEW question (different timestamp)
+          setCurrentQuestionTimestamp(prev => {
+            if (prev !== answerData.timestamp) {
+              console.log(`🆕 New question detected, resetting state`)
+              setPlayerAnswers({}) // Reset answers for new question
+              setPlayerResults({}) // Reset results for new question
+            } else {
+              console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
+            }
+            return answerData.timestamp
+          })
+        })
+        
+        // Player results event
+        playerSocket.on('player_results', (resultsData) => {
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          console.log(`📊 PLAYER RESULTS RECEIVED by ${player.name}!`)
+          console.log('📦 Data:', resultsData)
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          
+          // Store results by userId directly, we'll map to playerId in the render
+          setPlayerResults(prev => ({
+            ...prev,
+            [resultsData.userId]: {
+              questionScore: resultsData.questionScore,
+              cumulativeScore: resultsData.cumulativeScore,
+              rank: resultsData.rank,
+              isCorrect: resultsData.isCorrect,
+              answered: resultsData.answered,
+              nickname: resultsData.nickname
+            }
+          }))
+          
+          console.log(`✅ Stored results for userId ${resultsData.userId}:`, resultsData)
+          
+          // When we receive results, it means answer time has ended
+          setIsAnswerTime(false)
+        })
+
+        // Store the socket for this player in both state and ref
+        playerSocketsRef.current[player.id] = playerSocket
+        setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
+        
       } else {
         alert(`שגיאה בחיבור ${player.name}: ${data.message || data.error}`)
       }
@@ -195,32 +228,155 @@ function App() {
     try {
       console.log(`📤 Disconnecting player: ${player.name} (UID: ${uid})`)
       
-      // Send UID as query parameter instead of header (CORS-friendly)
-      const response = await fetch(`${API_BASE}/?leave_player&uid=${encodeURIComponent(uid)}`, {
-        method: 'POST'
-      })
-
-      const data = await response.json()
-      console.log(`✅ Player disconnected:`, data)
-
-      if (response.ok) {
-        // Remove the UID and player from connected list
-        setPlayerUIDs(prev => {
-          const newUIDs = { ...prev }
-          delete newUIDs[player.id]
-          return newUIDs
-        })
-        setConnectedPlayers(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(player.id)
-          return newSet
-        })
-      } else {
-        alert(`שגיאה בניתוק ${player.name}: ${data.message || data.error}`)
+      const playerSocket = playerSockets[player.id]
+      if (playerSocket) {
+        console.log(`🔌 Closing WebSocket for ${player.name} (connected: ${playerSocket.connected})`)
+        playerSocket.disconnect()
       }
+      
+      // Remove from ref
+      delete playerSocketsRef.current[player.id]
+      
+      // NOTE: We don't call leave_player REST endpoint because
+      // the WebSocket disconnect handler already marks the player as disconnected
+      
+      // Remove socket and player from connected list, but KEEP the UID for reconnection
+      setPlayerSockets(prev => {
+        const newSockets = { ...prev }
+        delete newSockets[player.id]
+        return newSockets
+      })
+      setConnectedPlayers(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(player.id)
+        return newSet
+      })
+      // Note: We keep playerUIDs[player.id] so they can reconnect!
     } catch (error) {
       console.error(`❌ Error disconnecting player:`, error)
       alert('שגיאה בניתוק ${player.name}: ${error.message}')
+    } finally {
+      setLoading(prev => ({ ...prev, [player.id]: false }))
+    }
+  }
+  
+  // התחברות מחדש של משתתף
+  const reconnectPlayer = async (player) => {
+    if (!gamePin || gamePin.trim() === '') {
+      alert('יש להזין Game PIN קודם!')
+      return
+    }
+    
+    // Get the existing UID for this player
+    const uid = playerUIDs[player.id]
+    if (!uid) {
+      alert(`שגיאה: לא נמצא UID עבור ${player.name}. נא להצטרף מחדש.`)
+      return
+    }
+    
+    setLoading(prev => ({ ...prev, [player.id]: true }))
+    
+    try {
+      console.log(`🔄 Reconnecting player: ${player.name} (UID: ${uid})`)
+      
+      // Call rejoin_player endpoint
+      const response = await fetch(`${API_BASE}/rejoin_player`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: uid,
+          gamePin: gamePin.replace(/-/g, '')
+        })
+      })
+
+      const data = await response.json()
+      console.log(`✅ Rejoin response:`, data)
+
+      if (response.ok && data.status === 'success') {
+        // Create WebSocket connection
+        console.log(`🔌 Creating WebSocket for reconnected player: ${player.name}`)
+        const playerSocket = io(SOCKET_URL, {
+          transports: ['websocket', 'polling'],
+          reconnection: false,  // Disable automatic reconnection
+          forceNew: true        // Force new Manager for each socket
+        })
+
+        playerSocket.on('connect', () => {
+          console.log(`✅ WebSocket connected for ${player.name}`)
+          
+          // Register socket to room
+          playerSocket.emit('register_room_by_pin', { 
+            gamePin: gamePin.replace(/-/g, ''),
+            userId: uid
+          })
+        })
+
+        playerSocket.on('disconnect', () => {
+          console.log(`❌ WebSocket disconnected for ${player.name}`)
+        })
+        
+        playerSocket.on('room_registered', (roomData) => {
+          if (roomData.status === 'success') {
+            console.log(`✅ ${player.name} registered to room:`, roomData.hashId)
+          }
+        })
+
+        // Listen for participant updates
+        playerSocket.on('participant_update', (data) => {
+          console.log(`👥 Participant update for ${player.name}:`, data)
+          setTotalUsers(data.total || 0)
+        })
+
+        // Listen for answer_time_started to restore game state
+        playerSocket.on('answer_time_started', (data) => {
+          console.log(`⏰ Answer time started for ${player.name}:`, data)
+          
+          setIsAnswerTime(true)
+          
+          // Only reset answers/results if this is a NEW question (different timestamp)
+          setCurrentQuestionTimestamp(prev => {
+            if (prev !== data.timestamp) {
+              console.log(`🆕 New question detected, resetting state`)
+              setPlayerAnswers({}) // Reset answers for new question
+              setPlayerResults({}) // Reset results for new question
+            } else {
+              console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
+            }
+            return data.timestamp
+          })
+        })
+
+        // Listen for player_answer events (other players' answers)
+        playerSocket.on('player_answer', (data) => {
+          console.log(`👂 ${player.name} received player_answer:`, data)
+        })
+
+        // Listen for player results
+        playerSocket.on('player_results', (resultsData) => {
+          console.log(`📊 Results for ${player.name}:`, resultsData)
+          
+          // Store results by userId, we'll map to playerId in render
+          setPlayerResults(prev => ({
+            ...prev,
+            [resultsData.userId]: resultsData
+          }))
+        })
+
+        // Store socket in ref AND state
+        playerSocketsRef.current[player.id] = playerSocket
+        setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
+        
+        // Mark as connected
+        setConnectedPlayers(prev => new Set(prev).add(player.id))
+        
+      } else {
+        alert(`שגיאה בהתחברות מחדש: ${data.message || 'שגיאה לא ידועה'}`)
+      }
+    } catch (error) {
+      console.error(`❌ Error reconnecting player:`, error)
+      alert(`שגיאה בהתחברות מחדש ${player.name}: ${error.message}`)
     } finally {
       setLoading(prev => ({ ...prev, [player.id]: false }))
     }
@@ -280,22 +436,34 @@ function App() {
     }
     
     console.log(`📝 Player ${player.name} answered: ${answerIndex}`)
+    console.log(`   Using userId: ${uid}`)
     
-    // Send answer to server via WebSocket
-    if (socket && socket.connected) {
-      socket.emit('player_answer', {
+    // Send answer to server via REST API (only userId needed, gamePin already stored in server)
+    fetch(`${SERVER_URL}/submit_answer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
         userId: uid,
         answerIndex: answerIndex,
         timestamp: Date.now()
       })
-      
-      // Update local state
-      setPlayerAnswers(prev => ({ ...prev, [player.id]: answerIndex }))
-      
-      console.log(`✅ Answer sent for ${player.name}`)
-    } else {
-      alert('לא מחובר לשרת!')
-    }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.status === 'success') {
+        // Update local state
+        setPlayerAnswers(prev => ({ ...prev, [player.id]: answerIndex }))
+        console.log(`✅ Answer sent for ${player.name}`)
+      } else {
+        alert(`שגיאה: ${data.message}`)
+      }
+    })
+    .catch(error => {
+      console.error('Error sending answer:', error)
+      alert('שגיאה בשליחת התשובה!')
+    })
   }
 
   return (
@@ -437,7 +605,18 @@ function App() {
                   >
                     {isLoading ? '⏳' : '🚪'} התנתק
                   </button>
+                ) : playerUIDs[player.id] ? (
+                  // Has UID - show reconnect button
+                  <button 
+                    className="btn btn-connect"
+                    onClick={() => reconnectPlayer(player)}
+                    disabled={isLoading || isDisabled}
+                    style={{ background: '#f39c12' }}
+                  >
+                    {isLoading ? '⏳' : '🔄'} התחבר מחדש
+                  </button>
                 ) : (
+                  // No UID - show join button
                   <button 
                     className="btn btn-connect"
                     onClick={() => connectPlayer(player)}
@@ -587,7 +766,7 @@ function App() {
       </div>
 
       <footer className="footer">
-        <p>WebSocket: {socket?.connected ? '🟢 מחובר' : '🔴 לא מחובר'}</p>
+        <p>WebSockets פעילים: {Object.keys(playerSockets).length}</p>
         <p>Server: {SERVER_URL}</p>
         {SERVER_URL.includes('localhost') && (
           <p style={{ color: '#fbbf24', marginTop: '10px' }}>

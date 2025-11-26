@@ -110,16 +110,7 @@ function setupSocketEventHandlers(config) {
         }
     });
     
-    // Handle user updates
-    socket.on('user_update', (data) => {
-        console.log('👥 User update received:', data);
-        
-        if (onUserUpdate) {
-            onUserUpdate(data);
-        }
-    });
-    
-    // Handle participant updates (new message type)
+    // Handle participant updates (replaces old user_update)
     socket.on('participant_update', (data) => {
         console.log('🆕 Participant update received:', data);
         handleParticipantUpdate(data, onParticipantUpdate);

@@ -54,18 +54,22 @@ MIN_USERS = 1
 MAX_USERS = 100
 USER_FLUCTUATION_RANGE = 3
 
-# Timer and WebSocket settings
-active_timer = None
-timer_thread = None
-timer_duration = 30
-timer_start_time = None
+# WebSocket settings
 connected_clients = set()
 
 # Hash-based room system: maps session_id -> hash_id
 client_rooms = {}  # e.g., {'session123': 'a65445f6664e', 'session456': 'f049ebb08096'}
 
+# Socket ID to player UID mapping: maps socket_id -> uid
+# This allows us to find which player disconnected when a WebSocket closes
+socket_to_player = {}  # e.g., {'socket_abc': 'uid-123-456'}
+
 # Game sessions: maps hash_id -> session info
 game_sessions = {}  # e.g., {'a65445f6664e': {'sessionId': '123456', 'timestamp': 1234567890}}
+
+# Player registry: maps uid -> player info
+# Structure: {'uid123': {'nickname': 'name', 'hashId': 'abc123', 'connected': True, 'joinedAt': 1234567890}}
+player_registry = {}
 
 # Auto-close timeout (1 hour in seconds)
 GAME_TIMEOUT = 3600
@@ -85,23 +89,48 @@ def schedule_game_timeout(hash_id):
         if hash_id in game_sessions and game_sessions[hash_id].get('active', False):
             game.log(f'⏰ Auto-closing game {hash_id} after {GAME_TIMEOUT}s timeout')
             
-            # Mark as inactive
-            game_sessions[hash_id]['active'] = False
-            game_sessions[hash_id]['closedAt'] = time.time()
-            game_sessions[hash_id]['closedReason'] = 'timeout'
-            
-            # Notify clients
-            emit_to_room('game_closed', {
-                'hashId': hash_id,
-                'timestamp': time.time(),
-                'message': 'Game closed due to timeout (1 hour)',
-                'reason': 'timeout'
-            }, hash_id)
+            # Close game and clean up players
+            close_game_and_cleanup(hash_id, reason='timeout')
     
     timeout_thread = threading.Thread(target=timeout_worker)
     timeout_thread.daemon = True
     timeout_thread.start()
     game.log(f'⏰ Scheduled auto-close for game {hash_id} in {GAME_TIMEOUT}s (1 hour)')
+
+def close_game_and_cleanup(hash_id, reason='manual'):
+    """
+    Close a game session and remove all associated players.
+    
+    Args:
+        hash_id: The game hash ID to close
+        reason: Reason for closure (e.g., 'manual', 'timeout', 'ended')
+    """
+    if hash_id not in game_sessions:
+        game.log(f'⚠️ Cannot close game {hash_id} - not found')
+        return
+    
+    # Mark as inactive
+    game_sessions[hash_id]['active'] = False
+    game_sessions[hash_id]['closedAt'] = time.time()
+    game_sessions[hash_id]['closedReason'] = reason
+    
+    # Remove all players from this game
+    players_to_remove = [uid for uid, player in player_registry.items() if player.get('hashId') == hash_id]
+    
+    for uid in players_to_remove:
+        player_name = player_registry[uid].get('nickname', 'Unknown')
+        del player_registry[uid]
+        game.log(f'🗑️ Removed player {player_name} (UID: {uid}) from closed game {hash_id}')
+    
+    # Notify clients
+    emit_to_room('game_closed', {
+        'hashId': hash_id,
+        'timestamp': time.time(),
+        'message': f'Game closed due to {reason}',
+        'reason': reason
+    }, hash_id)
+    
+    game.log(f'🔒 Game {hash_id} closed. Removed {len(players_to_remove)} player(s). Reason: {reason}')
 
 def emit_to_room(event, data, target_hash_id):
     """
@@ -111,17 +140,24 @@ def emit_to_room(event, data, target_hash_id):
         event: The event name
         data: The data to send
         target_hash_id: The hash ID of the room to send to
+    
+    Returns:
+        Number of clients the message was sent to
     """
-    # Count clients in this room
-    sent_count = sum(1 for hash_id in client_rooms.values() if hash_id == target_hash_id)
+    # Socket.IO handles room membership automatically
+    # When a socket disconnects, it's automatically removed from all rooms
+    # So we can just emit to the room - only connected clients will receive it
     
-    if sent_count > 0:
-        game.log(f'📤 Sending {event} to room {target_hash_id} ({sent_count} client(s))')
-        socketio.emit(event, data, room=target_hash_id)
-    else:
-        game.log(f'⚠️ No clients in room {target_hash_id} to send {event}')
+    # Count active clients in this room (from our tracking)
+    # Note: This is an approximation - the actual count is managed by Socket.IO
+    tracked_count = sum(1 for hash_id in client_rooms.values() if hash_id == target_hash_id)
     
-    return sent_count
+    # Always emit to the room - Socket.IO will handle delivery to connected clients only
+    socketio.emit(event, data, room=target_hash_id)
+    
+    game.log(f'📤 WS → {event} to room {target_hash_id} (~{tracked_count} tracked client(s))')
+    
+    return tracked_count
 
 # Create directories if they don't exist
 DATA_DIR.mkdir(exist_ok=True)
@@ -282,118 +318,35 @@ class GameManager:
 # Initialize game manager
 game = GameManager()
 
-# Timer functions
-def start_user_increment_timer(duration=30):
-    """Start timer that increments users randomly during the specified duration"""
-    global active_timer, timer_thread, timer_start_time, timer_duration
-    
-    # Force stop any existing timer first
-    if active_timer or (timer_thread and timer_thread.is_alive()):
-        game.log("Stopping existing timer before starting new one")
-        stop_user_increment_timer()
-        time.sleep(0.5)  # Give time for cleanup
-    
-    timer_duration = duration
-    timer_start_time = time.time()
-    active_timer = True
-    
-    game.log(f"Starting NEW timer for {duration} seconds (Thread ID will be set)")
-    
-    def timer_worker():
-        global active_timer
-        start_time = time.time()
-        thread_id = threading.current_thread().ident
-        
-        game.log(f"Timer worker started - Thread ID: {thread_id}, Duration: {duration}s")
-        
-        while active_timer and (time.time() - start_time) < duration:
-            if not active_timer:
-                game.log(f"Timer worker {thread_id} stopping - active_timer is False")
-                break
-                
-            # Random delay between 0.5 to 2 seconds
-            delay = random.uniform(0.5, 2.0)
-            time.sleep(delay)
-            
-            if active_timer:
-                # Increment users by 1
-                game_data = game.get_game_status()
-                new_users = game_data['users'] + 1
-                
-                # Update game data
-                data = game.load_game_data()
-                data['users'] = new_users
-                game.save_game_data(data)
-                
-                # Send update via WebSocket - user count only
-                socketio.emit('user_update', {
-                    'users': new_users,
-                    'status': 'running'
-                })
-                
-                game.log(f'Thread {thread_id}: Users incremented to {new_users}')
-        
-        # Timer finished
-        if active_timer:  # Only if this thread is still the active one
-            active_timer = False
-            socketio.emit('timer_finished', {
-                'users': game.get_game_status()['users'],
-                'status': 'finished'
-            })
-            game.log(f'Timer {thread_id} finished normally, stopping user increments')
-        else:
-            game.log(f'Timer {thread_id} stopped by another thread')
-    
-    timer_thread = threading.Thread(target=timer_worker)
-    timer_thread.daemon = True
-    timer_thread.start()
-    
-    
-    game.log(f'Started user increment timer for {duration} seconds')
-
-def stop_user_increment_timer():
-    """Stop the user increment timer"""
-    global active_timer, timer_thread
-    
-    if active_timer or (timer_thread and timer_thread.is_alive()):
-        game.log('Stopping user increment timer...')
-        active_timer = False
-        
-        if timer_thread and timer_thread.is_alive():
-            game.log(f'Waiting for timer thread {timer_thread.ident} to finish...')
-            timer_thread.join(timeout=2)  # Increased timeout
-            
-            if timer_thread.is_alive():
-                game.log(f'Warning: Timer thread {timer_thread.ident} did not stop gracefully')
-        
-        socketio.emit('timer_stopped', {
-            'users': game.get_game_status()['users'],
-            'status': 'stopped'
-        })
-        game.log('User increment timer stopped successfully')
-    else:
-        game.log('No active timer to stop')
+# Timer functions - REMOVED (no longer used)
+# Previously used for incrementing user count during game
+# Now using participant_update for real-time participant tracking
 
 # WebSocket event handlers
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""
-    connected_clients.add(request.sid)
-    game.log(f'Client connected: {request.sid}')
-    
-    # Send current status to newly connected client
-    game_data = game.get_game_status()
-    
-    emit('status_update', {
-        'users': game_data['users'],
-        'status': 'running' if active_timer else 'stopped',
-        'current_slide': game_data['current_slide']
-    })
+    try:
+        connected_clients.add(request.sid)
+        game.log(f'📡 WS ← connect: {request.sid}')
+        
+        # Send current status to newly connected client
+        game_data = game.get_game_status()
+        
+        emit('status_update', {
+            'users': game_data['users'],
+            'current_slide': game_data['current_slide']
+        })
+    except Exception as e:
+        game.log(f'❌ Error in connect handler: {e}')
+        import traceback
+        traceback.print_exc()
 
 @socketio.on('register_room')
 def handle_register_room(data):
     """Register client with a specific hash ID (room)"""
     hash_id = data.get('hashId')
+    game.log(f'📡 WS ← register_room: hashId={hash_id}')
     if hash_id:
         # Join Socket.IO room
         join_room(hash_id)
@@ -410,44 +363,99 @@ def handle_register_room(data):
 @socketio.on('register_room_by_pin')
 def handle_register_room_by_pin(data):
     """Register client (sim) with a game PIN - find hash ID and join room"""
-    game_pin = data.get('gamePin')
-    if not game_pin:
-        game.log(f'❌ Client {request.sid} failed to register - no gamePin provided')
-        emit('room_registered', {'status': 'error', 'message': 'No gamePin provided'})
-        return
-    
-    # Find hash_id for this game_pin
-    hash_id = None
-    for h_id, session in game_sessions.items():
-        if session.get('gamePin') == game_pin:
-            hash_id = h_id
-            break
-    
-    if not hash_id:
-        game.log(f'❌ Client {request.sid} failed to register - no session found for PIN {game_pin}')
-        emit('room_registered', {'status': 'error', 'message': f'No active game found with PIN {game_pin}'})
-        return
-    
-    # Join Socket.IO room
-    join_room(hash_id)
-    
-    # Track in our mapping
-    client_rooms[request.sid] = hash_id
-    
-    game.log(f'✅ Sim client {request.sid} joined room (hash): {hash_id} via PIN: {game_pin}')
-    emit('room_registered', {'hashId': hash_id, 'gamePin': game_pin, 'status': 'success'})
+    try:
+        game_pin = data.get('gamePin')
+        user_id = data.get('userId')  # Optional: sim can send userId to link socket to player
+        
+        game.log(f'📡 WS ← register_room_by_pin: PIN={game_pin}, userId={user_id}')
+        if not game_pin:
+            game.log(f'❌ Client {request.sid} failed to register - no gamePin provided')
+            emit('room_registered', {'status': 'error', 'message': 'No gamePin provided'})
+            return
+        
+        # Find hash_id for this game_pin
+        hash_id = None
+        for h_id, session in game_sessions.items():
+            if session.get('gamePin') == game_pin:
+                hash_id = h_id
+                break
+        
+        if not hash_id:
+            game.log(f'❌ Client {request.sid} failed to register - no session found for PIN {game_pin}')
+            emit('room_registered', {'status': 'error', 'message': f'No active game found with PIN {game_pin}'})
+            return
+        
+        # Join Socket.IO room
+        join_room(hash_id)
+        
+        # Track in our mapping
+        client_rooms[request.sid] = hash_id
+        
+        # If userId provided, link this socket to the player
+        if user_id and user_id in player_registry:
+            socket_to_player[request.sid] = user_id
+            player = player_registry[user_id]
+            game.log(f'🔗 Linked socket {request.sid} to player {user_id}')
+            
+            # Check if player needs to sync with current game state (reconnection during game)
+            if player.get('needsAnswerTimeSync', False):
+                # Player reconnected during answer time - send them the current question
+                session = game_sessions.get(hash_id, {})
+                if session.get('currentState') == 'answering' and 'currentQuestion' in session:
+                    question_data = session['currentQuestion']
+                    game.log(f'📤 Sending answer_time_started sync to reconnected player {user_id}')
+                    emit('answer_time_started', question_data)
+                    
+                # Clear the flag
+                player['needsAnswerTimeSync'] = False
+        
+        game.log(f'✅ Sim client {request.sid} joined room (hash): {hash_id} via PIN: {game_pin}')
+        emit('room_registered', {'hashId': hash_id, 'gamePin': game_pin, 'status': 'success'})
+        
+    except Exception as e:
+        game.log(f'❌ Error in register_room_by_pin: {e}')
+        import traceback
+        traceback.print_exc()
+        emit('room_registered', {'status': 'error', 'message': str(e)})
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
     connected_clients.discard(request.sid)
+    game.log(f'📡 WS ← disconnect: {request.sid}')
     
-    # Leave Socket.IO room and remove from mapping
+    # Get room info before leaving
+    hash_id_from_room = client_rooms.get(request.sid)
+    
+    # Check if this socket belongs to a player (sim)
+    if request.sid in socket_to_player:
+        user_id = socket_to_player[request.sid]
+        
+        # Mark player as disconnected in registry
+        if user_id in player_registry:
+            player = player_registry[user_id]
+            player_name = player.get('nickname', 'Unknown')
+            hash_id = player.get('hashId')
+            
+            player['connected'] = False
+            player['disconnectedAt'] = time.time()
+            
+            game.log(f'👋 Player WebSocket disconnected: {player_name} (UID: {user_id})')
+            game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
+            
+            # NOTE: We do NOT send participant_update on disconnect during gameplay
+            # Reason: Player can reconnect and continue playing before timer ends
+            # The add-in will continue waiting for the original number of participants
+        
+        # Remove socket->player mapping
+        del socket_to_player[request.sid]
+    
+    # NOW leave Socket.IO room and remove from mapping
     if request.sid in client_rooms:
         hash_id = client_rooms[request.sid]
         leave_room(hash_id)
         del client_rooms[request.sid]
-        game.log(f'Client disconnected from room {hash_id}: {request.sid}')
+        game.log(f'🚪 Client left room {hash_id}: {request.sid}')
     else:
         game.log(f'Client disconnected: {request.sid}')
 
@@ -455,7 +463,7 @@ def handle_disconnect():
 def handle_participant_update(data):
     """Handle participant add/remove updates - room-aware"""
     try:
-        game.log(f'Received participant_update: {data}')
+        game.log(f'📡 WS ← participant_update: {data}')
         
         # Get hash ID from data or from sender's room
         hash_id = data.get('hashId')
@@ -463,58 +471,181 @@ def handle_participant_update(data):
             hash_id = client_rooms[request.sid]
         
         if hash_id:
-            # Broadcast to specific room only
+            # Broadcast to specific room only (add-in)
             emit_to_room('participant_update', data, hash_id)
-            
-            # Also send a general user update for compatibility
-            if 'total' in data:
-                emit_to_room('user_update', {
-                    'users': data['total'],
-                    'total': data['total']
-                }, hash_id)
-            
             game.log(f'Sent participant update to room {hash_id}: {data["nick"]} {data["type"]}')
         else:
             # Fallback: broadcast to all if no hash ID
             game.log(f'Warning: No hash ID for participant_update, broadcasting to all')
             socketio.emit('participant_update', data)
-            if 'total' in data:
-                socketio.emit('user_update', {
-                    'users': data['total'],
-                    'total': data['total']
-                })
         
     except Exception as e:
         game.log(f'Error handling participant update: {e}')
 
-@socketio.on('user_update')
-def handle_user_update(data):
-    """Handle general user count updates - room-aware"""
+# user_update handler removed - no longer used
+# Participants are now tracked via participant_update events only
+
+@app.route('/rejoin_player', methods=['POST'])
+def rejoin_player():
+    """Handle player rejoin - reconnect with existing UID"""
     try:
-        game.log(f'Received user_update: {data}')
+        data = request.get_json()
         
-        # Get hash ID from data or from sender's room
-        hash_id = data.get('hashId')
-        if not hash_id and request.sid in client_rooms:
-            hash_id = client_rooms[request.sid]
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
         
-        if hash_id:
-            # Broadcast to specific room only
-            emit_to_room('user_update', data, hash_id)
-            game.log(f'Sent user_update to room {hash_id}')
-        else:
-            # Fallback: broadcast to all if no hash ID
-            game.log(f'Warning: No hash ID for user_update, broadcasting to all')
-            socketio.emit('user_update', data)
+        game.log(f'📨 POST /rejoin - {data}')
+        
+        # Get userId and gamePin from data
+        user_id = data.get('userId')
+        game_pin = data.get('gamePin', '').strip()
+        
+        if not user_id or not game_pin:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing userId or gamePin'
+            }), 400
+        
+        # Verify player exists in registry
+        if user_id not in player_registry:
+            game.log(f'❌ Player UID {user_id} not found in registry')
+            return jsonify({
+                'status': 'error',
+                'message': 'Player not found. Please join the game again.'
+            }), 404
+        
+        player = player_registry[user_id]
+        player_name = player['nickname']
+        hash_id = player['hashId']
+        
+        # Verify game is still active
+        if hash_id not in game_sessions or not game_sessions[hash_id].get('active', False):
+            game.log(f'❌ Game {hash_id} is not active')
+            return jsonify({
+                'status': 'error',
+                'message': 'Game is no longer active'
+            }), 404
+        
+        # Verify game PIN matches
+        session = game_sessions[hash_id]
+        if session['gamePin'] != game_pin:
+            game.log(f'❌ Game PIN mismatch for {player_name}')
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid game PIN'
+            }), 403
+        
+        # Reconnect the player
+        player_registry[user_id]['connected'] = True
+        player_registry[user_id]['reconnectedAt'] = time.time()
+        
+        game.log(f'✅ Player {player_name} (UID: {user_id}) reconnected to game {hash_id}')
+        
+        # Check current game state and send appropriate status
+        game_state = session.get('currentState', 'waiting')
+        
+        response_data = {
+            'status': 'success',
+            'message': 'Reconnected successfully',
+            'userId': user_id,
+            'nickname': player_name,
+            'hashId': hash_id,
+            'gameState': game_state
+        }
+        
+        # If in answer time, send the current question info via WebSocket
+        # The WebSocket connection will be established by the client after this response
+        if game_state == 'answering':
+            # Store that this player needs to receive answer_time_started
+            # We'll send it when they register their WebSocket
+            player['needsAnswerTimeSync'] = True
+            response_data['needsSync'] = True
+        
+        return jsonify(response_data)
         
     except Exception as e:
-        game.log(f'Error handling user update: {e}')
+        game.log(f'❌ Error handling player rejoin: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/submit_answer', methods=['POST'])
+def submit_answer():
+    """Handle player answer submission from sim via REST API"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
+        
+        game.log(f'📨 POST /submit_answer - {data}')
+        
+        # Get userId from data - REQUIRED (no longer accepting gamePin)
+        user_id = data.get('userId')
+        
+        if not user_id:
+            game.log(f'❌ Missing userId in player answer')
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing userId'
+            }), 400
+        
+        # Verify player exists in registry
+        if user_id not in player_registry:
+            game.log(f'❌ Player UID {user_id} not found in registry')
+            return jsonify({
+                'status': 'error',
+                'message': 'Player not found. Please rejoin the game.'
+            }), 404
+        
+        player = player_registry[user_id]
+        
+        # Check if player is connected
+        if not player.get('connected', False):
+            game.log(f'⚠️ Player {player["nickname"]} (UID: {user_id}) is disconnected')
+            return jsonify({
+                'status': 'error',
+                'message': 'Player is disconnected. Please reconnect.'
+            }), 403
+        
+        # Get hash_id from player registry (already stored)
+        hash_id = player['hashId']
+        
+        # Note: No need to check check_game_active here because:
+        # - If game is closed, all players are deleted from player_registry
+        # - So we would have returned 404 above already
+        
+        game.log(f'✅ Answer from {player["nickname"]} (UID: {user_id}) in game {hash_id}')
+        
+        # Broadcast answer to add-in in this game room via WebSocket
+        emit_to_room('player_answer', data, hash_id)
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Answer received and forwarded'
+        })
+        
+    except Exception as e:
+        game.log(f'❌ Error handling player answer: {e}')
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @socketio.on('player_answer')
 def handle_player_answer(data):
-    """Handle player answer submission from sim"""
+    """Handle player answer submission from sim (deprecated - use REST API)"""
     try:
-        game.log(f'Received player_answer: {data}')
+        game.log(f'📡 WS ← player_answer: {data}')
         
         # Get hash ID from data or from sender's room
         hash_id = data.get('hashId')
@@ -524,7 +655,6 @@ def handle_player_answer(data):
         if hash_id:
             # Forward answer to add-in in this game room
             emit_to_room('player_answer', data, hash_id)
-            game.log(f'Forwarded player_answer to add-in in room {hash_id}')
         else:
             # Fallback: broadcast to all if no hash_id
             game.log(f'Warning: No hash ID for player_answer, broadcasting to all')
@@ -875,12 +1005,12 @@ def index():
         <div class="endpoint">
             <h3>� אירועים זמינים</h3>
             <div class="url">ws://localhost:5000</div>
-            <p><strong>participant_update:</strong> עדכון על הוספה/הסרה של משתתף בודד</p>
-            <p><strong>user_update:</strong> עדכון כללי על מספר המשתתפים</p>
-            <p><strong>slide_navigation:</strong> פקודות ניווט בין שקפים</p>
-            <p><strong>game_pin_registered:</strong> אישור רישום קוד משחק</p>
-            <p><strong>timer_finished:</strong> סיום טיימר</p>
-            <p><strong>timer_stopped:</strong> עצירה ידנית של טיימר</p>
+            <p><strong>participant_update:</strong> עדכון על הוספה/הסרה של משתתף בודד (נשלח רק ל-add-in)</p>
+            <p><strong>player_answer:</strong> תשובת שחקן מה-sim (נשלח רק ל-add-in)</p>
+            <p><strong>player_results:</strong> תוצאות שאלה (נשלח רק ל-sim הספציפי)</p>
+            <p><strong>slide_navigation:</strong> פקודות ניווט בין שקפים (נשלח רק ל-add-in)</p>
+            <p><strong>game_pin_registered:</strong> אישור רישום קוד משחק (נשלח רק ל-add-in)</p>
+            <p><strong>game_closed:</strong> סגירת משחק (נשלח לכל מי שבחדר המשחק)</p>
         </div>
         
         <h2>מידע נוכחי</h2>
@@ -1093,22 +1223,48 @@ def get_active_game_pins():
 
 @app.route('/answer_time_started', methods=['POST'])
 def answer_time_started():
-    """Handle answer time started via REST API"""
+    """
+    Handle answer time started via REST API.
+    Sends individual answer_time_started event to each player (sim) in the game.
+    """
     try:
         data = request.get_json()
         hash_id = data.get('hashId', 'N/A')
         
-        game.log(f'🎯 RECEIVED answer_time_started (REST)! hashId: {hash_id}')
+        game.log(f'📨 POST /answer_time_started - hashId: {hash_id}')
         
         if hash_id and hash_id != 'N/A':
-            # Broadcast to specific room via WebSocket
+            # Update session state
+            if hash_id in game_sessions:
+                game_sessions[hash_id]['currentState'] = 'answering'
+                game_sessions[hash_id]['currentQuestion'] = data
+                game.log(f'💾 Saved current question state for game {hash_id}')
+            
+            # Find all players in this game
+            players_in_game = [
+                (uid, player) for uid, player in player_registry.items() 
+                if player.get('hashId') == hash_id and player.get('connected', False)
+            ]
+            
+            if not players_in_game:
+                game.log(f'⚠️ No connected players found in game {hash_id}')
+                return jsonify({
+                    'status': 'warning',
+                    'message': 'No connected players in game',
+                    'hashId': hash_id
+                })
+            
+            # Send to each player individually via room broadcast
+            # (Each sim WebSocket is in the room, will receive the event)
             sent_count = emit_to_room('answer_time_started', data, hash_id)
-            game.log(f'✅ Broadcasted answer_time_started to {sent_count} client(s) in room {hash_id}')
+            
+            game.log(f'✅ Sent answer_time_started to {len(players_in_game)} player(s) in game {hash_id}')
             
             return jsonify({
                 'status': 'success',
-                'message': f'Broadcasted to {sent_count} client(s)',
-                'hashId': hash_id
+                'message': f'Sent to {len(players_in_game)} player(s)',
+                'hashId': hash_id,
+                'playerCount': len(players_in_game)
             })
         else:
             game.log(f'⚠️ Warning: No hash ID for answer_time_started')
@@ -1134,8 +1290,7 @@ def submit_results():
         data = request.get_json()
         
         # Log what we received
-        game.log(f'📊 RECEIVED results submission request')
-        game.log(f'📊 Raw data: {data}')
+        game.log(f'📨 POST /submit_results')
         
         if not data:
             game.log('❌ No JSON data received')
@@ -1147,8 +1302,14 @@ def submit_results():
         hash_id = data.get('hashId')
         results = data.get('results', [])
         
-        game.log(f'📊 hashId: {hash_id}')
-        game.log(f'📊 Results for {len(results)} players')
+        game.log(f'   hashId: {hash_id}, results: {len(results)} players')
+        
+        # Clear current question state (answer time ended)
+        if hash_id in game_sessions:
+            game_sessions[hash_id]['currentState'] = 'results'
+            if 'currentQuestion' in game_sessions[hash_id]:
+                del game_sessions[hash_id]['currentQuestion']
+            game.log(f'💾 Cleared current question state for game {hash_id}')
         
         if not hash_id:
             game.log('❌ Missing hashId in request')
@@ -1183,9 +1344,9 @@ def submit_results():
             # Send to all sims in this game room (they will filter by userId)
             emit_to_room('player_results', player_data, hash_id)
             
-            game.log(f'  📤 Sent results to player {result.get("nickname")}: Rank #{result.get("rank")}, Score: {result.get("cumulativeScore")}')
+            game.log(f'   → {result.get("nickname")}: Rank #{result.get("rank")}, Score: {result.get("cumulativeScore")}')
         
-        game.log(f'✅ Results broadcasted to {len(results)} player(s) in room {hash_id}')
+        game.log(f'✅ Results sent to {len(results)} player(s)')
         
         return jsonify({
             'status': 'success',
@@ -1578,7 +1739,17 @@ def api_handler():
                 import uuid
                 uid = str(uuid.uuid4())
                 
+                # Register player in player registry
+                player_registry[uid] = {
+                    'nickname': name,
+                    'hashId': hash_id,
+                    'gamePin': game_pin,
+                    'connected': True,
+                    'joinedAt': time.time()
+                }
+                
                 game.log(f'👥 Player joining: {name} (UID: {uid}) to game PIN: {game_pin} (hash: {hash_id})')
+                game.log(f'💾 Registered player in registry: {player_registry[uid]}')
                 
                 # Send participant update to add-ins in this specific game room
                 participant_data = {
@@ -1590,7 +1761,7 @@ def api_handler():
                 
                 sent = emit_to_room('participant_update', participant_data, hash_id)
                 
-                game.log(f'📤 Sent participant_update (add) to {sent} client(s) in room {hash_id}')
+                game.log(f'✅ Player joined, participant_update sent to {sent} client(s)')
                 
                 return jsonify({
                     'status': 'success',
@@ -1607,15 +1778,12 @@ def api_handler():
                 }), 500
         
         elif action == 'leave_player':
-            # Player leaves game by UID (from query param or header)
+            # Player disconnects (mark as disconnected but don't delete)
+            # Note: WebSocket disconnect also triggers this automatically
+            # This endpoint allows explicit disconnect via REST API
             try:
                 # Try to get UID from query param first, then from header
                 uid = request.args.get('uid', '').strip() or request.headers.get('access_token', '').strip()
-                
-                # Debug: log all headers
-                game.log(f'🔍 Query params: {dict(request.args)}')
-                game.log(f'🔍 All headers: {dict(request.headers)}')
-                game.log(f'🔍 UID value: "{uid}"')
                 
                 if not uid:
                     return jsonify({
@@ -1623,38 +1791,33 @@ def api_handler():
                         'message': 'Missing uid parameter or access_token header'
                     }), 400
                 
-                game.log(f'👋 Player leaving: UID: {uid}')
-                
-                # Find which game this UID belongs to by searching all game sessions
-                # Note: In a real implementation, you'd want to maintain a uid->hash_id mapping
-                hash_id = None
-                for h_id in game_sessions.keys():
-                    # For now, we'll send the leave event to all sessions
-                    # In production, you should track which session the UID belongs to
-                    hash_id = h_id
-                    break
-                
-                if not hash_id:
+                # Check if player exists in registry
+                if uid not in player_registry:
+                    game.log(f'⚠️ Player UID {uid} not found in registry')
                     return jsonify({
                         'status': 'error',
-                        'message': 'No active games found'
+                        'message': 'Player not found'
                     }), 404
                 
-                # Send participant update to add-ins in this specific game room
-                participant_data = {
-                    'nick': uid,  # Use uid as identifier
-                    'type': 'remove',
-                    'user_id': uid,
-                    'timestamp': time.time()
-                }
+                player = player_registry[uid]
+                player_name = player['nickname']
+                hash_id = player['hashId']
                 
-                sent = emit_to_room('participant_update', participant_data, hash_id)
+                game.log(f'👋 Player disconnecting: {player_name} (UID: {uid})')
                 
-                game.log(f'� Sent participant_update (remove) to {sent} client(s) in room {hash_id}')
+                # Mark as disconnected (but keep in registry)
+                player_registry[uid]['connected'] = False
+                player_registry[uid]['disconnectedAt'] = time.time()
+                
+                game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
+                
+                # NOTE: We do NOT send participant_update here!
+                # Reason: Player can reconnect during gameplay, add-in should keep waiting
+                # for the original number of participants
                 
                 return jsonify({
                     'status': 'success',
-                    'message': 'Player left the game'
+                    'message': 'Player disconnected (can reconnect)'
                 })
                 
             except Exception as e:
@@ -1695,6 +1858,34 @@ def api_handler():
                         'message': 'Game PIN must be 6 digits'
                     }), 400
                 
+                # Clean up previous game session if exists
+                if hash_id in game_sessions:
+                    game.log(f'🧹 Cleaning up previous game session: {hash_id}')
+                    
+                    # Remove all players from previous session
+                    players_to_remove = [
+                        uid for uid, player in list(player_registry.items())
+                        if player.get('hashId') == hash_id
+                    ]
+                    
+                    for uid in players_to_remove:
+                        player_name = player_registry[uid].get('nickname', 'Unknown')
+                        del player_registry[uid]
+                        game.log(f'  ❌ Removed player: {player_name} (UID: {uid})')
+                    
+                    # Clear socket mappings for this game
+                    sockets_to_remove = [
+                        sid for sid, h_id in list(client_rooms.items())
+                        if h_id == hash_id
+                    ]
+                    
+                    for sid in sockets_to_remove:
+                        if sid in socket_to_player:
+                            del socket_to_player[sid]
+                        del client_rooms[sid]
+                    
+                    game.log(f'✅ Cleaned up {len(players_to_remove)} players and {len(sockets_to_remove)} sockets')
+                
                 # Store session
                 game_sessions[hash_id] = {
                     'gamePin': game_pin,
@@ -1719,7 +1910,7 @@ def api_handler():
                     'timestamp': time.time()
                 }, hash_id)
                 
-                game.log(f'📤 Sent game_pin_registered to {sent} client(s)')
+                game.log(f'✅ Session registered, sent game_pin_registered to {sent} client(s)')
                 
                 # Also reset presentation to first slide (integrated logic)
                 game.log(f'📍 Resetting to first slide for game: {hash_id}')
@@ -1731,7 +1922,6 @@ def api_handler():
                 }
                 
                 reset_sent = emit_to_room('slide_navigation', reset_command, hash_id)
-                game.log(f'📤 Sent reset command to {reset_sent} client(s)')
                 
                 return jsonify({
                     'status': 'success',
@@ -1909,37 +2099,18 @@ def api_handler():
             })
         
         elif action == 'start':
-            # Get time parameter (default 30 seconds)
-            duration = int(request.args.get('time', 30))
-            duration = max(1, min(300, duration))  # Limit between 1-300 seconds
-            
-            # Reset users count and start timer
-            data = game.load_game_data()
-            data['users'] = 1  # Start with 1 user
-            data['time_remaining'] = duration
-            game.save_game_data(data)
-            
-            # Start the timer
-            start_user_increment_timer(duration)
-            
+            # Legacy timer start - no longer supported
             return jsonify({
-                'status': 'started',
-                'message': f'Timer started for {duration} seconds',
-                'duration': duration,
-                'users': 1
-            })
+                'status': 'error',
+                'message': 'Legacy timer endpoint is no longer supported. Use participant_update events instead.'
+            }), 410  # 410 Gone
         
         elif action == 'stop':
-            # Stop the timer
-            stop_user_increment_timer()
-            
-            game_data = game.get_game_status()
+            # Legacy timer stop - no longer supported
             return jsonify({
-                'status': 'stopped',
-                'message': 'Timer has been stopped',
-                'users': game_data['users'],
-                'time_remaining': 0
-            })
+                'status': 'error',
+                'message': 'Legacy timer endpoint is no longer supported.'
+            }), 410  # 410 Gone
         
         elif action == 'click_action':
             try:
@@ -2046,7 +2217,7 @@ def api_handler():
                 }), 500
         
         elif action == 'close_game':
-            # Close an active game session
+            # Close an active game session and clean up all players
             try:
                 hash_id = request.args.get('hash_id')
                 
@@ -2074,22 +2245,12 @@ def api_handler():
                         'message': 'Game session not found'
                     }), 404
                 
-                # Mark session as inactive
-                game_sessions[hash_id]['active'] = False
-                game_sessions[hash_id]['closedAt'] = time.time()
-                
-                game.log(f'🔒 Game closed: hash={hash_id}')
-                
-                # Notify clients in this room that game is closed
-                emit_to_room('game_closed', {
-                    'hashId': hash_id,
-                    'timestamp': time.time(),
-                    'message': 'Game has ended'
-                }, hash_id)
+                # Use centralized cleanup function
+                close_game_and_cleanup(hash_id, reason='manual')
                 
                 return jsonify({
                     'status': 'success',
-                    'message': 'Game closed successfully',
+                    'message': 'Game closed successfully and all players removed',
                     'hashId': hash_id
                 })
                 
@@ -2129,13 +2290,12 @@ if __name__ == '__main__':
     print("  /load           - Load presentation data by Window ID (POST)")
     print("")
     print("WebSocket Events (sent to add-in):")
-    print("  participant_update - Individual participant add/remove")
-    print("  user_update     - Real-time user count updates")
-    print("  slide_navigation - Next slide navigation commands")
-    print("  click_navigation - Click simulation commands")
-    print("  slide_change    - Slide navigation events (legacy)")
-    print("  timer_finished  - Timer completion")
-    print("  timer_stopped   - Timer manual stop")
+    print("  participant_update - Individual participant add/remove (→ add-in)")
+    print("  player_answer   - Player answer submission (→ add-in)")
+    print("  player_results  - Question results (→ sim)")
+    print("  slide_navigation - Next slide navigation commands (→ add-in)")
+    print("  click_navigation - Click simulation commands (→ add-in)")
+    print("  game_closed     - Game closed notification (→ all in room)")
     print("")
     print("Press Ctrl+C to stop the server")
     print("=" * 40)
