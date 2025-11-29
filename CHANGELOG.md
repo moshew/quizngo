@@ -1,5 +1,111 @@
 # 📝 Changelog - Kahoot PowerPoint System
 
+## [4.7.0] - 2025-11-28
+
+### 📊 תכונה חדשה - פילוג תשובות דינמי (Answers Distribution Bar Chart)
+
+#### מה השתנה?
+**החלפת תמונת סטטיסטיקה סטטית בגרף עמודות דינמי!**
+
+במקום כפתור "📊 הוסף תמונת סטטיסטיקה" שהיה טוען תמונה מהשרת, כעת:
+- ✅ **גרף עמודות אינטראקטיבי** עם 4 עמודות צבעוניות (אדום, כחול כהה, צהוב, ירוק)
+- ✅ **עדכון בזמן אמת** - הגובה והמספרים מתעדכנים אוטומטית
+- ✅ **מבוסס Shapes** - לא תלוי בשרת חיצוני, מובנה ב-PowerPoint
+- ✅ **סקייל פרופורציונלי** - העמודות משתנות יחסית לערך המקסימלי
+
+#### הדוגמה
+```
+ 25  ┃     20        
+ ┃  18  ┃     16    
+███████  ███████  ███████  ███████
+   1        2        3        4
+  🔴       🔵       🟡       🟢
+```
+
+#### קבצים ששונו
+
+**1. `add-in/slide-types/statistics.html`**
+- 🔴 **הוסר**: כפתור "📊 הוסף תמונת סטטיסטיקה"
+- ✅ **נוסף**: כפתור "📊 הוסף פילוג תשובות"
+- ✅ **נוסף**: כפתור "🔄 בדיקה: עדכון דוגמה" (לבדיקות)
+
+**2. `add-in/modules/powerpoint-shapes.js`**
+- 🔴 **הוסרה**: `addStatisticsImage()` - יצירת placeholder לתמונה מהשרת
+- ✅ **נוספה**: `addAnswersDistribution()` - יצירת גרף עמודות עם tags
+- ✅ **נוספה**: `updateAnswersDistribution(answersData)` - עדכון דינמי של הגרף
+
+**3. `add-in/taskpane.js`**
+- 🔄 **עודכן**: ייבוא `addAnswersDistribution` במקום `addStatisticsImage`
+- 🔄 **עודכן**: חשיפה ב-window objects
+
+**4. `instructions/DYNAMIC_BUTTONS_TAGS_GUIDE.md`**
+- 🔄 **עודכן**: הוחלף הדוגמה מ"Statistics Image" ל"Answers Distribution Bar Chart"
+- ✅ **נוספו**: Tags חדשים: `kahoot-answer-bar`, `kahoot-answer-value`
+
+#### איך זה עובד?
+
+**צד לקוח (יצירת הגרף):**
+```javascript
+// יצירת 4 עמודות עם tags
+for (let i = 0; i < 4; i++) {
+    const bar = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
+    bar.tags.add('kahoot-answer-bar', 'true');
+    bar.tags.add('answer-number', i.toString());
+    
+    const label = slide.shapes.addTextBox('0', {...});
+    label.tags.add('kahoot-answer-value', 'true');
+    label.tags.add('answer-number', i.toString());
+}
+```
+
+**עדכון דינמי:**
+```javascript
+// פורמט: { 1: 25, 2: 18, 3: 20, 4: 16 }
+updateAnswersDistribution({ 1: 25, 2: 18, 3: 20, 4: 16 });
+```
+
+המערכת:
+1. מחפשת את כל העמודות לפי tag `kahoot-answer-bar`
+2. מחשבת סקייל יחסי (max value = 100% height)
+3. מעדכנת את `height` ו-`top` של כל עמודה
+4. מעדכנת את הטקסט והמיקום של התוויות
+
+#### יתרונות הגישה החדשה
+
+| תכונה | תמונה מהשרת (ישן) | Shapes דינמיות (חדש) |
+|-------|-------------------|----------------------|
+| **תלות בשרת** | ✅ צריך שרת פעיל | ❌ עובד ללא שרת |
+| **עדכון בזמן אמת** | ❌ צריך לטעון מחדש | ✅ עדכון מיידי |
+| **התאמה אישית** | ❌ תלוי בשרת | ✅ שליטה מלאה |
+| **ביצועים** | ⚠️ איטי (download) | ✅ מהיר (native) |
+| **עיצוב** | ❌ קבוע | ✅ גמיש לחלוטין |
+
+#### Tags חדשים במערכת
+
+| Tag | תיאור | שימוש |
+|-----|-------|-------|
+| `kahoot-answer-bar` | עמודת תשובה | זיהוי העמודה לעדכון גובה |
+| `kahoot-answer-value` | תווית ערך | זיהוי התווית לעדכון טקסט ומיקום |
+| `answer-number` | מספר תשובה (1-4) | מזהה את התשובה הספציפית |
+
+#### בדיקה מהירה
+
+1. **הוסף שקף סטטיסטיקה**
+2. **לחץ**: "📊 הוסף פילוג תשובות" → רואה 4 עמודות עם גובה מינימלי
+3. **לחץ**: "🔄 בדיקה: עדכון דוגמה" → רואה את העמודות מתעדכנות לערכים: 25, 18, 20, 16
+4. **מהקונסול**: 
+   ```javascript
+   updateAnswersDistribution({ 1: 10, 2: 30, 3: 15, 4: 25 });
+   ```
+
+#### השפעה על מערכות אחרות
+
+- ✅ **שרת**: אין צורך בשינויים (אפשר להסיר endpoint `/statistics-image` בעתיד)
+- ✅ **Admin/Sim**: אין צורך בשינויים
+- ✅ **WebSocket**: צריך להוסיף event `answer-statistics` בעתיד
+
+---
+
 ## [4.6.0] - 2024-11-04
 
 ### 🎯 תכונה חדשה - שקפים משותפים (Shared Slides)

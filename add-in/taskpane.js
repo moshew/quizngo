@@ -71,7 +71,8 @@ import {
     insertQrCodeButton,
     addQuestionTime,
     addRespondentsCount,
-    addStatisticsImage,
+    addAnswersDistribution,
+    updateAnswersDistribution,
     updateAllQuestionTimeElements,
     updateAllRespondentsCountElements
 } from './modules/powerpoint-shapes.js';
@@ -414,7 +415,8 @@ window.insertParticipantsNumButton = insertParticipantsNumButton;
 window.insertQrCodeButton = insertQrCodeButton;
 window.addQuestionTime = addQuestionTime;
 window.addRespondentsCount = addRespondentsCount;
-window.addStatisticsImage = addStatisticsImage;
+window.addAnswersDistribution = addAnswersDistribution;
+window.updateAnswersDistribution = updateAnswersDistribution;
 window.showLeaderboard = showLeaderboard;
 window.insertLeaderboardTable = insertLeaderboardTable;
 window.showFinalResults = showFinalResults;

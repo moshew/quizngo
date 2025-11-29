@@ -339,6 +339,8 @@ for (let i = 0; i < tags.items.length; i++) {
 | `kahoot-participants-area` | Live participants area | `taskpane.js` |
 | `kahoot-participants-display` | Participants display | `taskpane.js` |
 | `kahoot-qr-code` | QR Code for game entry | `taskpane.js` |
+| `kahoot-answer-bar` | Answer distribution bar (with `answer-number`) | `powerpoint-shapes.js` |
+| `kahoot-answer-value` | Answer value label (with `answer-number`) | `powerpoint-shapes.js` |
 
 ---
 
@@ -379,52 +381,148 @@ async function debugShapeTags() {
 
 ---
 
-## Example: Statistics Image (Dynamic from Server)
+## Example: Answers Distribution Bar Chart (Dynamic Shapes)
 
 ### 1. HTML Button
 `add-in/slide-types/statistics.html`:
 ```html
-<button class="button" onclick="addStatisticsImage()" style="background-color: #3498db;">
-    📊 הוסף תמונת סטטיסטיקה
+<button class="button" onclick="addAnswersDistribution()" style="background-color: #3498db;">
+    📊 הוסף פילוג תשובות
 </button>
 ```
 
-### 2. Create Function (adds placeholder with tag)
-`add-in/taskpane.js`:
+### 2. Create Function (adds bar chart with tags)
+`add-in/modules/powerpoint-shapes.js`:
 ```javascript
-async function addStatisticsImage() {
+export async function addAnswersDistribution() {
     await PowerPoint.run(async (context) => {
         const slide = context.presentation.getSelectedSlides().items[0];
         
-        // Image: 70% width, lower 2/3 of slide
-        const imageWidth = 720 * 0.7;  // 504 points
-        const imageHeight = 540 * 0.6; // 324 points
-        const imageLeft = (720 - imageWidth) / 2;
-        const imageTop = 540 / 3;
+        // Chart configuration
+        const answers = [
+            { number: 1, color: '#e74c3c', value: 0, label: '1' },  // Red
+            { number: 2, color: '#2c3e50', value: 0, label: '2' },  // Dark Blue
+            { number: 3, color: '#f1c40f', value: 0, label: '3' },  // Yellow
+            { number: 4, color: '#27ae60', value: 0, label: '4' }   // Green
+        ];
         
-        const placeholder = slide.shapes.addTextBox('📊 תמונת סטטיסטיקה', {
-            left: imageLeft, top: imageTop,
-            width: imageWidth, height: imageHeight
-        });
-        
-        placeholder.load(['tags']);
-        await context.sync();
-        
-        // ⭐ Tag for dynamic updates
-        placeholder.tags.add('kahoot-statistics-image', 'true');
-        await context.sync();
+        // Create bars and labels for each answer
+        for (let i = 0; i < answers.length; i++) {
+            const answer = answers[i];
+            
+            // Create bar (rectangle)
+            const bar = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
+            bar.left = barLeft;
+            bar.top = chartTop + (maxBarHeight - 50);
+            bar.width = barWidth;
+            bar.height = 50; // Initial height
+            
+            bar.load(['fill', 'line', 'tags']);
+            await context.sync();
+            
+            bar.fill.setSolidColor(answer.color);
+            bar.line.visible = false;
+            
+            // ⭐ Add tags for dynamic updates
+            bar.tags.add('kahoot-answer-bar', 'true');
+            bar.tags.add('answer-number', answer.number.toString());
+            await context.sync();
+            
+            // Create value label on top
+            const valueLabel = slide.shapes.addTextBox(answer.value.toString(), {
+                left: barLeft, top: chartTop + (maxBarHeight - 80),
+                width: barWidth, height: 30
+            });
+            
+            valueLabel.load(['textFrame', 'tags']);
+            await context.sync();
+            
+            // ⭐ Tag value label
+            valueLabel.tags.add('kahoot-answer-value', 'true');
+            valueLabel.tags.add('answer-number', answer.number.toString());
+            await context.sync();
+        }
     });
 }
 ```
 
-### 3. Update Function (finds by tag and replaces with server image)
+### 3. Update Function (finds by tags and updates bar heights + values)
 ```javascript
-async function updateStatisticsImages() {
-    // Loop through all shapes, find by tag 'kahoot-statistics-image'
-    // Then replace with actual image from server
-    // (See full example in taskpane.js lines 2765-2821)
+export async function updateAnswersDistribution(answersData) {
+    // answersData format: { 1: 25, 2: 18, 3: 20, 4: 16 }
+    
+    await PowerPoint.run(async (context) => {
+        const slides = context.presentation.slides;
+        slides.load('items');
+        await context.sync();
+        
+        const maxValue = Math.max(...Object.values(answersData), 1);
+        
+        // ⭐ Search ALL slides for answer bars
+        for (let i = 0; i < slides.items.length; i++) {
+            const shapes = slides.items[i].shapes;
+            shapes.load(['items']);
+            await context.sync();
+            
+            for (let j = 0; j < shapes.items.length; j++) {
+                const shape = shapes.items[j];
+                const tags = shape.tags;
+                tags.load(['items']);
+                await context.sync();
+                
+                let isAnswerBar = false;
+                let answerNumber = null;
+                
+                for (let k = 0; k < tags.items.length; k++) {
+                    const tag = tags.items[k];
+                    tag.load(['key', 'value']);
+                    await context.sync();
+                    
+                    if (tag.key === 'kahoot-answer-bar' && tag.value === 'true') {
+                        isAnswerBar = true;
+                    } else if (tag.key === 'answer-number') {
+                        answerNumber = parseInt(tag.value);
+                    }
+                }
+                
+                // ⭐ Update bar height based on value
+                if (isAnswerBar && answerNumber && answersData[answerNumber]) {
+                    const value = answersData[answerNumber];
+                    const barHeight = (value / maxValue) * maxBarHeight;
+                    
+                    shape.load(['top', 'height']);
+                    await context.sync();
+                    
+                    shape.top = chartTop + (maxBarHeight - barHeight);
+                    shape.height = barHeight;
+                    await context.sync();
+                }
+            }
+        }
+    });
 }
 ```
+
+### 4. Trigger Update on Answer Events
+```javascript
+// From WebSocket events
+socket.on('answer-statistics', (data) => {
+    // data format: { 1: 25, 2: 18, 3: 20, 4: 16 }
+    updateAnswersDistribution(data);
+});
+
+// Manual testing from console
+updateAnswersDistribution({ 1: 25, 2: 18, 3: 20, 4: 16 });
+
+// Example with different values
+updateAnswersDistribution({ 1: 10, 2: 30, 3: 15, 4: 25 });
+```
+
+**Key features:**
+- ✅ **Multiple tags per shape**: Each bar has TWO tags (`kahoot-answer-bar` + `answer-number`)
+- ✅ **Proportional scaling**: Bars scale based on max value (tallest bar = max value)
+- ✅ **Synchronized updates**: Both bar height AND value label update together
+- ✅ **Cross-slide updates**: Place bars on any slide(s) - all update simultaneously
 
 ---
 

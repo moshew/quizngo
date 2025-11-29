@@ -12,21 +12,41 @@ import { getGameHashId } from './presentation-state.js';
 export function showStatus(message, type = 'info') {
     console.log(`Status (${type}): ${message}`);
     
-    // Only show in UI for warnings and errors
-    if (type === 'warning' || type === 'error') {
-        const detectedInfo = document.getElementById('detectedInfo');
-        if (detectedInfo) {
-            const color = type === 'warning' ? '#856404' : '#721c24';
-            const background = type === 'warning' ? '#fff3cd' : '#f8d7da';
-            
-            detectedInfo.innerHTML = `⚠️ ${message}`;
+    const detectedInfo = document.getElementById('detectedInfo');
+    if (detectedInfo) {
+        let color = '#000';
+        let background = '#f8f9fa';
+        
+        // Only show in UI for warnings, errors, and success
+        if (type === 'warning') {
+            color = '#856404';
+            background = '#fff3cd';
+        } else if (type === 'error') {
+            color = '#721c24';
+            background = '#f8d7da';
+        } else if (type === 'success') {
+            color = '#155724';
+            background = '#d4edda';
+        } else {
+            // For plain info, don't show unless explicitly needed
+            // return; 
+            // Uncomment above if we want to hide info messages
+        }
+
+        // Show message if it's one of the special types
+        if (['warning', 'error', 'success'].includes(type)) {
+            detectedInfo.innerHTML = type === 'success' ? `✅ ${message}` : (type === 'error' ? `❌ ${message}` : `⚠️ ${message}`);
             detectedInfo.style.display = 'block';
             detectedInfo.style.background = background;
             detectedInfo.style.color = color;
+            detectedInfo.style.padding = '10px';
+            detectedInfo.style.borderRadius = '4px';
+            detectedInfo.style.marginBottom = '10px';
             
             // Hide after 5 seconds
             setTimeout(() => {
-                if (detectedInfo.innerHTML.includes('⚠️')) {
+                // Only hide if content hasn't changed significantly
+                if (detectedInfo.style.display === 'block') {
                     detectedInfo.style.display = 'none';
                 }
             }, 5000);

@@ -173,6 +173,41 @@ async function handleQuestionEnd() {
         // Process answers and calculate scores
         const results = await processAnswersAndScores(slideId, questionStartTime, questionTime);
         
+        // --- UPDATE GRAPHS BEFORE SENDING RESULTS ---
+        try {
+            console.log('📊 Updating graphs with final answers...');
+            const { getCurrentQuestionAnswers } = await import('./websocket.js');
+            const answersMap = getCurrentQuestionAnswers();
+            
+            // Aggregate answers
+            const answersCount = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            let totalRespondents = 0;
+            
+            answersMap.forEach((answerData) => {
+                const idx = answerData.answerIndex;
+                if (answersCount[idx] !== undefined) {
+                    answersCount[idx]++;
+                    totalRespondents++;
+                }
+            });
+            
+            console.log('📊 Aggregated answers for graph update:', answersCount);
+            
+            const { updateAnswersDistribution, updateAllRespondentsCountElements } = await import('./powerpoint-shapes.js');
+            
+            // Update all answer distribution graphs (heights and value labels)
+            await updateAnswersDistribution(answersCount);
+            
+            // Update total respondents count text
+            await updateAllRespondentsCountElements(totalRespondents);
+            
+            console.log('✅ Graphs and respondent counts updated');
+            
+        } catch (updateError) {
+            console.error('❌ Error updating graphs:', updateError);
+        }
+        // --------------------------------------------
+        
         if (results) {
             // Send results to server (this also signals end of question)
             await sendResultsToServer(hashId, results);

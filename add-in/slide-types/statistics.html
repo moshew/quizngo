@@ -1,15 +1,18 @@
 <!-- תוכן ספציפי לסטטיסטיקת מענה -->
 <div class="status-section">
-    <!-- כפתור להוספת תמונת סטטיסטיקה דינמית -->
+    <!-- כפתור להוספת פילוג תשובות -->
     <div style="margin-top: 10px;">
         <h4 style="margin: 0 0 10px 0; color: #495057;">תצוגת תוצאות:</h4>
-        <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-            <button class="button" onclick="addStatisticsImage()" style="background-color: #3498db;">
-                📊 הוסף תמונת סטטיסטיקה
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button class="button" onclick="addAnswersDistribution()" style="background-color: #3498db;">
+                📊 הוסף פילוג תשובות
+            </button>
+            <button class="button" onclick="updateAnswersDistribution({1: 25, 2: 18, 3: 20, 4: 16})" style="background-color: #9b59b6;">
+                🔄 בדיקה: עדכון דוגמה
             </button>
         </div>
         <div style="margin-top: 10px; padding: 10px; background-color: #f3f2f1; border-radius: 4px; font-size: 12px; color: #605e5c;">
-            💡 התמונה תתעדכן אוטומטית בזמן אמת מהשרת
+            💡 הגרף יתעדכן אוטומטית בזמן אמת עם התוצאות
         </div>
     </div>
 </div>

@@ -6,7 +6,7 @@
 /* global PowerPoint, Office */
 
 import { API_BASE } from './api.js';
-import { showError } from './ui-manager.js';
+import { showError, showStatus } from './ui-manager.js';
 
 /**
  * Generate UUID v4
@@ -1070,9 +1070,10 @@ export async function addRespondentsCount() {
 }
 
 /**
- * Add Statistics Image placeholder
+ * Add Answers Distribution Bar Chart
+ * Creates a dynamic bar chart with 4 answer options using shapes and text
  */
-export async function addStatisticsImage() {
+export async function addAnswersDistribution() {
     try {
         await PowerPoint.run(async (context) => {
             const slides = context.presentation.getSelectedSlides();
@@ -1086,61 +1087,417 @@ export async function addStatisticsImage() {
             
             const slide = slides.items[0];
             
-            // Image dimensions: 70% of slide width, positioned in lower 2/3
-            const slideWidth = 720;  // Standard width
-            const slideHeight = 540; // Standard height
+            // Chart configuration
+            const slideWidth = 960; // 16:9 Aspect Ratio
+            const slideHeight = 540;
             
-            const imageWidth = slideWidth * 0.7;  // 504 points
-            const imageHeight = slideHeight * 0.6; // 324 points
+            // Chart dimensions - Narrower bars, wider spacing
+            const barWidth = 50; // Narrower bars
+            const barSpacing = 50; // Wider spacing
+            const maxBarHeight = slideHeight * 0.50; // 50% of slide height (270)
             
-            // Position: centered horizontally, in lower 2/3 vertically
-            const imageLeft = (slideWidth - imageWidth) / 2; // Centered
-            const imageTop = slideHeight / 3; // Start at 1/3 down
+            // Calculate total width to center properly
+            const totalChartWidth = (barWidth * 4) + (barSpacing * 3);
+            const chartLeft = (slideWidth - totalChartWidth) / 2;
             
-            // Create a placeholder shape with the statistics tag
-            const placeholder = slide.shapes.addTextBox('📊 תמונת סטטיסטיקה\n\nתמונה זו תתעדכן אוטומטית\nעם נתונים מהשרת', {
-                left: imageLeft,
-                top: imageTop,
-                width: imageWidth,
-                height: imageHeight
-            });
+            // Position: 15% from bottom (bottom at 85% of slide height)
+            const chartBottom = slideHeight * 0.85; 
+            const chartTop = chartBottom - maxBarHeight;
             
-            placeholder.load(['textFrame', 'tags', 'fill', 'line']);
-            await context.sync();
+            // Answer data with default values (Red 8, Blue 12, Yellow 0, Green 2)
+            const answers = [
+                { number: 1, color: '#C00000', borderColor: '#8C0000', value: 8, label: '1' }, // Very Dark Red
+                { number: 2, color: '#205285', borderColor: '#143255', value: 12, label: '2' }, // Very Dark Blue
+                { number: 3, color: '#FFD966', borderColor: '#CCAE33', value: 0, label: '3' }, // Dark Goldenrod
+                { number: 4, color: '#92D050', borderColor: '#649628', value: 2, label: '4' }  // Dark Green
+            ];
             
-            // Add tag for dynamic updates
-            placeholder.tags.add('kahoot-statistics-image', 'true');
+            // Helper to get color by number
+            const getColorByNumber = (num) => {
+                const ans = answers.find(a => a.number === num);
+                return ans ? ans.color : '#808080';
+            };
             
-            // Style the placeholder
-            try {
-                placeholder.fill.setSolidColor('#e8f4f8'); // Light blue background
-                placeholder.line.color = '#0078d4'; // Blue border
-                placeholder.line.weight = 2;
-                placeholder.line.dashStyle = 'Dash'; // Dashed border to show it's a placeholder
-            } catch (styleError) {
-                console.log('Could not apply all styles:', styleError);
+            const getBorderColorByNumber = (num) => {
+                const ans = answers.find(a => a.number === num);
+                return ans ? ans.borderColor : '#000000';
+            };
+            
+            // Find max value for initial scaling
+            const maxValue = Math.max(...answers.map(a => a.value), 1);
+            
+            // Underline color (Dark Navy/Black)
+            const underlineColor = '#0f243e';
+            
+            // Create bars and labels for each answer
+            for (let i = 0; i < answers.length; i++) {
+                const answer = answers[i];
+                const barLeft = chartLeft + i * (barWidth + barSpacing);
+                
+                // Calculate initial height based on default values
+                const calculatedHeight = (answer.value / maxValue) * maxBarHeight;
+                // If value is 0, height is effectively 0 (we'll hide it)
+                const barHeight = answer.value === 0 ? 0 : Math.max(calculatedHeight, 2);
+                
+                // 1. Create bar (rectangle)
+                const bar = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
+                bar.left = barLeft;
+                // If height is 0, we position it at the bottom line
+                bar.top = chartTop + (maxBarHeight - (barHeight || 1)); 
+                bar.width = barWidth;
+                bar.height = barHeight || 1; // Need non-zero height for creation
+                
+                // Load fill and tags first
+                bar.load(['fill', 'tags', 'line']); // Load line as well
+                await context.sync();
+                
+                // Set visibility based on value - COMPLETELY HIDE if 0
+                if (answer.value === 0) {
+                    bar.visible = false;
+                    // Also make line invisible just in case
+                    if (bar.line) bar.line.visible = false;
+                }
+                
+                // Style the bar fill
+                bar.fill.setSolidColor(answer.color);
+                
+                // Force load line to ensure it exists
+                bar.load(['line', 'lineFormat']);
+                await context.sync();
+                
+                // Set border properties - try line or lineFormat
+                if (bar.line) {
+                    bar.line.visible = true;
+                    bar.line.color = answer.borderColor;
+                    bar.line.weight = 1.5;
+                } else if (bar.lineFormat) {
+                    // Fallback for some API versions
+                    bar.lineFormat.visible = true;
+                    bar.lineFormat.color = answer.borderColor;
+                    bar.lineFormat.weight = 1.5;
+                } else {
+                    console.warn('Line property not found on bar shape (tried line and lineFormat)');
+                }
+                
+                await context.sync();
+                
+                // Add tags for dynamic updates
+                bar.tags.add('kahoot-answer-bar', 'true');
+                bar.tags.add('answer-number', answer.number.toString());
+                
+                await context.sync();
+                
+                // 2. Create Bottom Underline (Dark line below bar)
+                const underlineWidth = barWidth + 20; // Wider than bar
+                const underlineLeft = barLeft - 10;   // Centered relative to bar
+                
+                const underline = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
+                underline.left = underlineLeft;
+                // Move underline up slightly to overlap/hide the bottom border of the bar
+                underline.top = chartTop + maxBarHeight - 0.5;
+                underline.width = underlineWidth;
+                underline.height = 2; // Thin line
+                
+                // Load properties including line to remove border
+                underline.load(['fill', 'line']);
+                await context.sync();
+                
+                underline.fill.setSolidColor(underlineColor);
+                
+                // Remove border from underline shape to make it crisp
+                if (underline.line) {
+                    underline.line.visible = false;
+                } else if (underline.lineFormat) {
+                    underline.lineFormat.visible = false;
+                }
+                
+                await context.sync();
+                
+                // 3. Create value label on TOP of bar (Thinner font)
+                const valueLabel = slide.shapes.addTextBox(answer.value.toString(), {
+                    left: barLeft - 10, // Allow some overflow space
+                    top: chartTop + (maxBarHeight - barHeight) - 30, // 30px above the bar
+                    width: barWidth + 20,
+                    height: 30
+                });
+                
+                // Load textFrame
+                valueLabel.load(['textFrame', 'tags']);
+                await context.sync();
+                
+                // Set BOTH vertical and horizontal alignment using middleCentered
+                try {
+                    valueLabel.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                } catch (e) {
+                    console.log('Using string for middleCentered alignment');
+                    valueLabel.textFrame.verticalAlignment = 'MiddleCentered';
+                }
+                
+                // Disable auto-sizing to ensure centering works properly
+                try {
+                    valueLabel.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                } catch (e) {
+                    console.log('Could not set autoSizeSetting');
+                }
+                
+                // Style the text
+                const valueText = valueLabel.textFrame.textRange;
+                valueText.load(['font']);
+                await context.sync();
+                
+                // Set font properties
+                valueText.font.size = 16;
+                valueText.font.name = "Calibri Light";
+                valueText.font.color = '#000000';
+                valueText.font.bold = false;
+                
+                await context.sync();
+                
+                // Add tags for dynamic updates
+                valueLabel.tags.add('kahoot-answer-value', 'true');
+                valueLabel.tags.add('answer-number', answer.number.toString());
+                
+                await context.sync();
+                
+                // 4. Create answer number label BELOW the underline
+                const numberLabel = slide.shapes.addTextBox(answer.label, {
+                    left: barLeft,
+                    top: chartTop + maxBarHeight + 5, // Just below the underline
+                    width: barWidth,
+                    height: 30
+                });
+                
+                // Load textFrame
+                numberLabel.load(['textFrame']);
+                await context.sync();
+                
+                // Set BOTH vertical and horizontal alignment using middleCentered
+                try {
+                    numberLabel.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                } catch (e) {
+                    console.log('Using string for middleCentered alignment');
+                    numberLabel.textFrame.verticalAlignment = 'MiddleCentered';
+                }
+                
+                // Disable auto-sizing to ensure centering works properly
+                try {
+                    numberLabel.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                } catch (e) {
+                    console.log('Could not set autoSizeSetting');
+                }
+                
+                // Style the text
+                const numberText = numberLabel.textFrame.textRange;
+                numberText.load(['font']);
+                await context.sync();
+                
+                // Set font properties
+                numberText.font.size = 24;
+                numberText.font.name = "Arial";
+                numberText.font.color = answer.color;
+                numberText.font.bold = true;
+                
+                await context.sync();
+                
+                await context.sync();
             }
             
-            // Style the text
-            const textRange = placeholder.textFrame.textRange;
-            textRange.load(['font', 'paragraphFormat']);
-            await context.sync();
-            
-            textRange.font.size = 24;
-            textRange.font.color = '#0078d4';
-            textRange.font.bold = true;
-            textRange.paragraphFormat.alignment = PowerPoint.ParagraphAlignment.center;
-            
-            await context.sync();
-            
-            console.log('✅ Statistics image placeholder added to slide');
-            console.log(`   Position: ${imageLeft}, ${imageTop}`);
-            console.log(`   Size: ${imageWidth} x ${imageHeight}`);
-            showError('✅ תמונת סטטיסטיקה נוספה לשקף!');
+            console.log('✅ Answers distribution bar chart added to slide');
+            showStatus('פילוג תשובות נוסף לשקף!', 'success');
         });
     } catch (error) {
-        console.error('Error adding statistics image:', error);
-        showError('שגיאה בהוספת תמונת סטטיסטיקה');
+        console.error('Error adding answers distribution:', error);
+        showError('שגיאה בהוספת פילוג תשובות');
+    }
+}
+
+/**
+ * Update Answers Distribution Bar Chart
+ * Updates all bar charts across all slides based on answer data
+ * @param {Object} answersData - Object with answer counts: { 1: 25, 2: 18, 3: 20, 4: 16 }
+ */
+export async function updateAnswersDistribution(answersData) {
+    console.log('🔄 Updating answers distribution chart:', answersData);
+    
+    try {
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            // Configuration (Fallback values)
+            const slideHeight = 540;
+            const maxBarHeight = slideHeight * 0.50; // 270
+            const defaultChartBottom = slideHeight * 0.85; // 459
+            const defaultChartTop = defaultChartBottom - maxBarHeight; // 135
+            
+            // Answer colors configuration (must match creation logic)
+            const answerColors = {
+                1: { fill: '#C00000', border: '#8C0000' },
+                2: { fill: '#205285', border: '#143255' },
+                3: { fill: '#FFD966', border: '#CCAE33' },
+                4: { fill: '#92D050', border: '#649628' }
+            };
+            
+            // Find max value for scaling
+            const maxValue = Math.max(...Object.values(answersData), 1);
+            
+            // Search ALL slides for answer bar elements
+            for (let i = 0; i < slides.items.length; i++) {
+                const slide = slides.items[i];
+                const shapes = slide.shapes;
+                shapes.load(['items']);
+                await context.sync();
+                
+                const baselines = {}; // Store baseline Y for each answer number
+                const pendingLabels = []; // Store labels to update after finding baselines
+                
+                for (let j = 0; j < shapes.items.length; j++) {
+                    const shape = shapes.items[j];
+                    // Load tags FIRST to identify if we should process this shape
+                    const tags = shape.tags;
+                    tags.load(['items']);
+                    await context.sync();
+                    
+                    // Check if this is an answer bar or value label
+                    let isAnswerBar = false;
+                    let isAnswerValue = false;
+                    let answerNumber = null;
+                    
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        // Case insensitive comparison for keys
+                        const key = tag.key.toLowerCase();
+                        
+                        if (key === 'kahoot-answer-bar') {
+                            isAnswerBar = true;
+                        } else if (key === 'kahoot-answer-value') {
+                            isAnswerValue = true;
+                        } else if (key === 'answer-number') {
+                            answerNumber = parseInt(tag.value);
+                        }
+                    }
+                    
+                    // Update bar height
+                    if (isAnswerBar && answerNumber && answersData[answerNumber] !== undefined) {
+                        // Now safely load properties for the bar shape
+                        shape.load(['top', 'height', 'visible', 'line', 'fill']);
+                        await context.sync();
+
+                        // Calculate Baseline from CURRENT position
+                        // If currently height > 0, baseline = top + height.
+                        // If currently height == 0 (hidden), baseline = top.
+                        let currentBaseline = shape.top + shape.height;
+                        
+                        // Store baseline for the label to use
+                        baselines[answerNumber] = currentBaseline;
+                        
+                        const value = answersData[answerNumber];
+                        // Recalculate height logic
+                        const calculatedHeight = maxValue > 0 ? (value / maxValue) * maxBarHeight : 0;
+                        // If value is 0, we want height 0 (hidden). If > 0, min height 2.
+                        const finalHeight = value === 0 ? 0 : Math.max(calculatedHeight, 2); 
+                        
+                        if (value === 0) {
+                            // Force hide everything
+                            shape.visible = false;
+                            
+                            // Extra measures to ensure it's hidden
+                            if (shape.line) {
+                                shape.line.visible = false;
+                            }
+                            if (shape.fill) {
+                                shape.fill.clear();
+                            }
+                            
+                            // Set height to 0 and top to the baseline
+                            shape.height = 0;
+                            shape.top = currentBaseline; 
+                            
+                            console.log(`✅ Hiding bar ${answerNumber} (value 0) at baseline ${currentBaseline}`);
+                        } else {
+                            // Ensure it is visible
+                            shape.visible = true;
+                            
+                            // Restore fill if it was cleared
+                            if (shape.fill) {
+                                const colors = answerColors[answerNumber];
+                                if (colors) {
+                                    shape.fill.setSolidColor(colors.fill);
+                                }
+                            }
+                            
+                            // Restore border
+                            if (shape.line) {
+                                shape.line.visible = true;
+                                const colors = answerColors[answerNumber];
+                                if (colors) {
+                                    shape.line.color = colors.border;
+                                    shape.line.weight = 1.5;
+                                }
+                            }
+                            
+                            // Update bar: grow upwards from baseline
+                            shape.height = finalHeight;
+                            shape.top = currentBaseline - finalHeight;
+                            
+                            console.log(`✅ Updating bar ${answerNumber} to height ${finalHeight}, top ${shape.top}`);
+                        }
+                    }
+                    
+                    // Collect value label for later update
+                    if (isAnswerValue && answerNumber && answersData[answerNumber] !== undefined) {
+                        // Load properties needed for label
+                        shape.load(['top', 'height', 'textFrame']);
+                        await context.sync();
+
+                        pendingLabels.push({
+                            shape: shape,
+                            answerNumber: answerNumber
+                        });
+                    }
+                }
+                
+                // Pass 2: Update labels using collected baselines
+                for (const item of pendingLabels) {
+                    const { shape, answerNumber } = item;
+                    const value = answersData[answerNumber];
+                    
+                    // Calculate height again for label positioning
+                    const calculatedHeight = maxValue > 0 ? (value / maxValue) * maxBarHeight : 0;
+                    const finalHeight = Math.max(calculatedHeight, 2);
+                    const actualBarHeight = value === 0 ? 0 : finalHeight;
+                    
+                    // Determine baseline - use found one or fallback to default
+                    const baseline = baselines[answerNumber] !== undefined 
+                        ? baselines[answerNumber] 
+                        : (defaultChartTop + maxBarHeight);
+                    
+                    // Update text
+                    const textRange = shape.textFrame.textRange;
+                    textRange.text = value.toString();
+                    
+                    // Update position (above the bar)
+                    // baseline - barHeight - offset
+                    shape.top = baseline - actualBarHeight - 30;
+                    
+                    console.log(`✅ Updated value ${answerNumber}: ${value} at top ${shape.top}`);
+                }
+                
+                if (pendingLabels.length > 0) {
+                    await context.sync();
+                }
+            }
+            
+            console.log('✅ Answers distribution chart updated across all slides');
+        });
+    } catch (error) {
+        console.error('❌ Error updating answers distribution:', error);
+        throw error;
     }
 }
 

@@ -12,7 +12,7 @@
 - `insertQrCodeButton` - הוספת QR Code לשקף
 - `addQuestionTime` - הוספת זמן שאלה
 - `addRespondentsCount` - הוספת מספר עונים
-- `addStatisticsImage` - הוספת תמונת סטטיסטיקה
+- `addAnswersDistribution` - הוספת פילוג תשובות (גרף עמודות דינמי)
 - `insertLiveParticipantsArea` - הוספת אזור משתתפים חי
 - `createParticipantPillShapes` - יצירת pills למשתתפים
 - `endGame` - סיום המשחק
@@ -247,7 +247,7 @@ console.log('📍 Navigating to slide...');
 - `insertQrCodeButton` - הוספת QR Code עם placeholder
 - `addQuestionTime` - הוספת זמן לשאלה
 - `addRespondentsCount` - הוספת מונה עונים
-- `addStatisticsImage` - הוספת תמונת סטטיסטיקה
+- `addAnswersDistribution` - הוספת פילוג תשובות (4 עמודות צבעוניות)
 - `insertLiveParticipantsArea` - אזור משתתפים חי
 - `createParticipantPillShapes` - pills כחולים למשתתפים
 - `endGame` - סיום משחק עם קריאה לשרת
