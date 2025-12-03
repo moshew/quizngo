@@ -74,7 +74,9 @@ import {
     addAnswersDistribution,
     updateAnswersDistribution,
     updateAllQuestionTimeElements,
-    updateAllRespondentsCountElements
+    updateAllRespondentsCountElements,
+    addLeaderboardElements,
+    updateLeaderboard
 } from './modules/powerpoint-shapes.js';
 import { 
     showStatus, 
@@ -417,6 +419,8 @@ window.addQuestionTime = addQuestionTime;
 window.addRespondentsCount = addRespondentsCount;
 window.addAnswersDistribution = addAnswersDistribution;
 window.updateAnswersDistribution = updateAnswersDistribution;
+window.addLeaderboardElements = addLeaderboardElements;
+window.updateLeaderboard = updateLeaderboard;
 window.showLeaderboard = showLeaderboard;
 window.insertLeaderboardTable = insertLeaderboardTable;
 window.showFinalResults = showFinalResults;

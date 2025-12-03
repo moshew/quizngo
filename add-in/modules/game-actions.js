@@ -193,15 +193,25 @@ async function handleQuestionEnd() {
             
             console.log('📊 Aggregated answers for graph update:', answersCount);
             
-            const { updateAnswersDistribution, updateAllRespondentsCountElements } = await import('./powerpoint-shapes.js');
+            const { updateAnswersDistribution, updateAllRespondentsCountElements, updateLeaderboard } = await import('./powerpoint-shapes.js');
             
             // Update all answer distribution graphs (heights and value labels)
             await updateAnswersDistribution(answersCount);
             
             // Update total respondents count text
             await updateAllRespondentsCountElements(totalRespondents);
+
+            // Update leaderboard with current results
+            if (results && results.length > 0) {
+                console.log('🏆 Updating leaderboard with results...');
+                const leaderboardData = results.map(r => ({
+                    name: r.nickname,
+                    score: r.cumulativeScore
+                }));
+                await updateLeaderboard(leaderboardData);
+            }
             
-            console.log('✅ Graphs and respondent counts updated');
+            console.log('✅ Graphs, respondent counts, and leaderboard updated');
             
         } catch (updateError) {
             console.error('❌ Error updating graphs:', updateError);

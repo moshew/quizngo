@@ -1799,3 +1799,209 @@ export async function updateCurrentSlideRespondentsCount(count, slideNumber = nu
         throw error;
     }
 }
+
+/**
+ * Add Leaderboard Elements
+ * Creates 6 textboxes for top 3 players (Name + Score for each)
+ */
+export async function addLeaderboardElements() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const slides = context.presentation.getSelectedSlides();
+            slides.load('items');
+            await context.sync();
+            
+            if (slides.items.length === 0) {
+                showError('אנא בחר שקף תחילה');
+                return;
+            }
+            
+            const slide = slides.items[0];
+            
+            // Configuration
+            const startTop = 150;
+            const rowHeight = 80;
+            const gap = 30;
+            
+            // Default Data
+            const defaultData = [
+                { rank: 1, name: "שחקן מקום 1", score: "9999" },
+                { rank: 2, name: "שחקן מקום 2", score: "3333" },
+                { rank: 3, name: "שחקן מקום 3", score: "0" }
+            ];
+            
+            for (let i = 0; i < defaultData.length; i++) {
+                const item = defaultData[i];
+                const currentTop = startTop + i * (rowHeight + gap);
+                
+                // 1. Name Textbox (Right aligned)
+                const nameBox = slide.shapes.addTextBox(item.name, {
+                    left: 510, // Push to right side (Right edge at 910)
+                    top: currentTop,
+                    width: 400,
+                    height: rowHeight
+                });
+                
+                // 2. Score Textbox (Left side)
+                const scoreBox = slide.shapes.addTextBox(item.score, {
+                    left: 50, // Push further left (Left edge at 50)
+                    top: currentTop,
+                    width: 200,
+                    height: rowHeight
+                });
+                
+                // Load properties
+                nameBox.load(['textFrame', 'tags']);
+                scoreBox.load(['textFrame', 'tags']);
+                await context.sync();
+                
+                // Remove right margin for name box to ensure it sticks to the edge
+                nameBox.textFrame.marginRight = 0;
+                
+                // Add Tags
+                nameBox.tags.add('kahoot-leaderboard-name', 'true');
+                nameBox.tags.add('leaderboard-rank', item.rank.toString());
+                
+                scoreBox.tags.add('kahoot-leaderboard-score', 'true');
+                scoreBox.tags.add('leaderboard-rank', item.rank.toString());
+                
+                await context.sync();
+                
+                // Style Name
+                const nameTextRange = nameBox.textFrame.textRange;
+                // IMPORTANT: Load paragraphFormat explicitly on the textRange first
+                nameTextRange.load(['font', 'paragraphFormat']);
+                await context.sync();
+                
+                nameTextRange.font.size = 40;
+                nameTextRange.font.bold = true;
+                nameTextRange.font.color = '#000000';
+                
+                // Explicitly set alignment on the paragraphFormat property of the textRange
+                if (nameTextRange.paragraphFormat) {
+                    try {
+                        nameTextRange.paragraphFormat.alignment = "Right"; // Use string directly to be safe
+                    } catch (e) {
+                        console.log('Alignment setting failed:', e);
+                    }
+                } else {
+                    console.warn("Could not access paragraphFormat for nameBox");
+                }
+
+                // Disable auto-sizing to ensure alignment works properly
+                try {
+                    nameBox.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                } catch (e) {
+                    console.log('Could not set autoSizeSetting');
+                }
+                
+                // Style Score
+                const scoreTextRange = scoreBox.textFrame.textRange;
+                scoreTextRange.load(['font', 'paragraphFormat']);
+                await context.sync();
+                
+                scoreTextRange.font.size = 40;
+                scoreTextRange.font.bold = true;
+                scoreTextRange.font.color = '#0078d4'; // Blue for score
+                
+                if (scoreTextRange.paragraphFormat) {
+                    try {
+                        scoreTextRange.paragraphFormat.alignment = "Left"; // Use string directly
+                    } catch (e) {
+                        console.log('Alignment setting failed:', e);
+                    }
+                }
+                
+                await context.sync();
+            }
+            
+            console.log('✅ Leaderboard elements added');
+            showStatus('אלמנטים לטבלת מובילים נוספו בהצלחה!', 'success');
+        });
+    } catch (error) {
+        console.error('Error adding leaderboard elements:', error);
+        showError('שגיאה בהוספת אלמנטים לטבלת מובילים');
+    }
+}
+
+/**
+ * Update Leaderboard
+ * Updates leaderboard elements across all slides
+ * @param {Array} leaderboardData - Array of objects { name: "Player1", score: 1200 }
+ */
+export async function updateLeaderboard(leaderboardData) {
+    console.log('🏆 Updating leaderboard with data:', leaderboardData);
+    
+    try {
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            // We only care about top 3
+            const top3 = leaderboardData.slice(0, 3);
+            
+            // Search ALL slides
+            for (let i = 0; i < slides.items.length; i++) {
+                const slide = slides.items[i];
+                const shapes = slide.shapes;
+                shapes.load(['items']);
+                await context.sync();
+                
+                for (let j = 0; j < shapes.items.length; j++) {
+                    const shape = shapes.items[j];
+                    const tags = shape.tags;
+                    tags.load(['items']);
+                    await context.sync();
+                    
+                    let isLeaderboardName = false;
+                    let isLeaderboardScore = false;
+                    let rank = null;
+                    
+                    for (let k = 0; k < tags.items.length; k++) {
+                        const tag = tags.items[k];
+                        tag.load(['key', 'value']);
+                        await context.sync();
+                        
+                        const key = tag.key.toLowerCase();
+                        
+                        if (key === 'kahoot-leaderboard-name') {
+                            isLeaderboardName = true;
+                        } else if (key === 'kahoot-leaderboard-score') {
+                            isLeaderboardScore = true;
+                        } else if (key === 'leaderboard-rank') {
+                            rank = parseInt(tag.value);
+                        }
+                    }
+                    
+                    if (rank && (isLeaderboardName || isLeaderboardScore)) {
+                        const player = top3[rank - 1]; // rank 1 is index 0
+                        
+                        shape.load(['textFrame']);
+                        await context.sync();
+                        
+                        const textRange = shape.textFrame.textRange;
+                        
+                        if (player) {
+                            if (isLeaderboardName) {
+                                textRange.text = player.name || player.nickname || "Unknown";
+                            } else if (isLeaderboardScore) {
+                                textRange.text = (player.score || 0).toString();
+                            }
+                        } else {
+                            // Less than 3 players, clear text
+                            textRange.text = ""; 
+                        }
+                        
+                        await context.sync();
+                    }
+                }
+            }
+            
+            console.log('✅ Leaderboard updated across all slides');
+        });
+    } catch (error) {
+        console.error('❌ Error updating leaderboard:', error);
+    }
+}
