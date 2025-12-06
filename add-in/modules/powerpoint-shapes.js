@@ -1833,11 +1833,6 @@ export async function addLeaderboardElements() {
             for (let i = 0; i < defaultData.length; i++) {
                 const item = defaultData[i];
                 const currentTop = startTop + i * (rowHeight + gap);
-                
-                // Calculate centering
-                // Slide width: 960
-                // Total content width: 700 (200 + 500)
-                // Margin: (960 - 700) / 2 = 130
                 const startLeft = 175;
 
                 // 1. Name Textbox (Right aligned)
