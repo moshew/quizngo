@@ -1834,17 +1834,23 @@ export async function addLeaderboardElements() {
                 const item = defaultData[i];
                 const currentTop = startTop + i * (rowHeight + gap);
                 
+                // Calculate centering
+                // Slide width: 960
+                // Total content width: 700 (200 + 500)
+                // Margin: (960 - 700) / 2 = 130
+                const startLeft = 175;
+
                 // 1. Name Textbox (Right aligned)
                 const nameBox = slide.shapes.addTextBox(item.name, {
-                    left: 510, // Push to right side (Right edge at 910)
+                    left: startLeft + 200, // Starts where score box ends
                     top: currentTop,
-                    width: 400,
+                    width: 500,
                     height: rowHeight
                 });
                 
                 // 2. Score Textbox (Left side)
                 const scoreBox = slide.shapes.addTextBox(item.score, {
-                    left: 50, // Push further left (Left edge at 50)
+                    left: startLeft,
                     top: currentTop,
                     width: 200,
                     height: rowHeight
@@ -1880,7 +1886,12 @@ export async function addLeaderboardElements() {
                 // Explicitly set alignment on the paragraphFormat property of the textRange
                 if (nameTextRange.paragraphFormat) {
                     try {
-                        nameTextRange.paragraphFormat.alignment = "Right"; // Use string directly to be safe
+                        // Use Enum if available, otherwise fallback to string
+                        if (typeof PowerPoint.ParagraphAlignment !== 'undefined') {
+                            nameTextRange.paragraphFormat.alignment = PowerPoint.ParagraphAlignment.right;
+                        } else {
+                            nameTextRange.paragraphFormat.alignment = "Right";
+                        }
                     } catch (e) {
                         console.log('Alignment setting failed:', e);
                     }
@@ -1891,8 +1902,14 @@ export async function addLeaderboardElements() {
                 // Disable auto-sizing to ensure alignment works properly
                 try {
                     nameBox.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                    // Set Vertical Alignment to Middle
+                    if (typeof PowerPoint.TextVerticalAlignment !== 'undefined') {
+                         nameBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                    } else {
+                         nameBox.textFrame.verticalAlignment = "MiddleCentered";
+                    }
                 } catch (e) {
-                    console.log('Could not set autoSizeSetting');
+                    console.log('Could not set autoSizeSetting or verticalAlignment for nameBox', e);
                 }
                 
                 // Style Score
@@ -1906,10 +1923,27 @@ export async function addLeaderboardElements() {
                 
                 if (scoreTextRange.paragraphFormat) {
                     try {
-                        scoreTextRange.paragraphFormat.alignment = "Left"; // Use string directly
+                        // Use Enum if available
+                        if (typeof PowerPoint.ParagraphAlignment !== 'undefined') {
+                            scoreTextRange.paragraphFormat.alignment = PowerPoint.ParagraphAlignment.left;
+                        } else {
+                            scoreTextRange.paragraphFormat.alignment = "Left";
+                        }
                     } catch (e) {
                         console.log('Alignment setting failed:', e);
                     }
+                }
+
+                // Disable auto-sizing and set Vertical Alignment for Score
+                try {
+                    scoreBox.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                    if (typeof PowerPoint.TextVerticalAlignment !== 'undefined') {
+                         scoreBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                    } else {
+                         scoreBox.textFrame.verticalAlignment = "MiddleCentered";
+                    }
+                } catch (e) {
+                    console.log('Could not set autoSizeSetting or verticalAlignment for scoreBox', e);
                 }
                 
                 await context.sync();
