@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
+import { PLAYER_ICONS } from './icons'
 import './App.css'
 
 // 10 שחקנים פיקטיביים
@@ -89,6 +90,7 @@ function App() {
       
       // Remove hyphen from game PIN before sending to server
       const cleanGamePin = gamePin.replace(/-/g, '')
+      const playerIcon = PLAYER_ICONS[player.id] || '👤'; // Default if not found
       
       const response = await fetch(`${API_BASE}/?join_player`, {
         method: 'POST',
@@ -97,7 +99,8 @@ function App() {
         },
         body: JSON.stringify({
           game_pin: cleanGamePin,
-          name: player.name
+          name: player.name,
+          icon: playerIcon
         })
       })
 
@@ -228,6 +231,28 @@ function App() {
     try {
       console.log(`📤 Disconnecting player: ${player.name} (UID: ${uid})`)
       
+      // 1. Call leave_player endpoint to check if we should remove permanently (Lobby) or just disconnect
+      let shouldRemoveUID = false;
+      
+      try {
+        const response = await fetch(`${API_BASE}/?leave_player&uid=${uid}`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ Leave response for ${player.name}:`, data);
+          if (data.removed) {
+            shouldRemoveUID = true;
+            console.log(`🧹 Server indicated permanent removal for ${player.name} (Lobby)`);
+          }
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to call leave_player endpoint:`, err);
+        // Continue with local disconnect anyway
+      }
+
+      // 2. Disconnect socket
       const playerSocket = playerSockets[player.id]
       if (playerSocket) {
         console.log(`🔌 Closing WebSocket for ${player.name} (connected: ${playerSocket.connected})`)
@@ -237,10 +262,7 @@ function App() {
       // Remove from ref
       delete playerSocketsRef.current[player.id]
       
-      // NOTE: We don't call leave_player REST endpoint because
-      // the WebSocket disconnect handler already marks the player as disconnected
-      
-      // Remove socket and player from connected list, but KEEP the UID for reconnection
+      // Remove socket and player from connected list
       setPlayerSockets(prev => {
         const newSockets = { ...prev }
         delete newSockets[player.id]
@@ -251,7 +273,19 @@ function App() {
         newSet.delete(player.id)
         return newSet
       })
-      // Note: We keep playerUIDs[player.id] so they can reconnect!
+      
+      // 3. Clear UID if server said so (Lobby mode)
+      if (shouldRemoveUID) {
+         setPlayerUIDs(prev => {
+            const newUIDs = { ...prev }
+            delete newUIDs[player.id]
+            return newUIDs
+         })
+         console.log(`🧹 Cleared UID for ${player.name} - Reset to JOIN state`);
+      } else {
+         console.log(`💾 Note: We keep playerUIDs[player.id] so they can reconnect!`);
+      }
+
     } catch (error) {
       console.error(`❌ Error disconnecting player:`, error)
       alert('שגיאה בניתוק ${player.name}: ${error.message}')
@@ -372,7 +406,20 @@ function App() {
         setConnectedPlayers(prev => new Set(prev).add(player.id))
         
       } else {
-        alert(`שגיאה בהתחברות מחדש: ${data.message || 'שגיאה לא ידועה'}`)
+        console.warn(`❌ Rejoin failed with status ${response.status}: ${data.message}`)
+        
+        // If player not found (404), clear UID so they can join fresh
+        if (response.status === 404) {
+          console.log(`🧹 Player ${player.name} not found on server, clearing UID to allow fresh join`)
+          setPlayerUIDs(prev => {
+            const newUIDs = { ...prev }
+            delete newUIDs[player.id]
+            return newUIDs
+          })
+          alert(`שגיאה בהתחברות מחדש: השחקן לא נמצא בשרת (ייתכן שנמחק). אנא בצע הצטרפות מחדש.`) 
+        } else {
+          alert(`שגיאה בהתחברות מחדש: ${data.message || 'שגיאה לא ידועה'}`)
+        }
       }
     } catch (error) {
       console.error(`❌ Error reconnecting player:`, error)
@@ -569,8 +616,8 @@ function App() {
               key={player.id} 
               className={`player-card ${isConnected ? 'connected' : ''} ${isDisabled ? 'disabled' : ''}`}
             >
-              <div className="player-avatar">
-                {player.name.charAt(0)}
+              <div className="player-avatar" style={{ fontSize: '40px', background: 'transparent', boxShadow: 'none' }}>
+                {PLAYER_ICONS[player.id]}
               </div>
               <div className="player-info">
                 <div className="player-name">{player.name}</div>

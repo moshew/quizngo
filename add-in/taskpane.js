@@ -68,6 +68,8 @@ import {
     updateQrCodeInSlides, 
     insertGameIdButton,
     insertParticipantsNumButton,
+    insertParticipantsListButton,
+    updateParticipantsListInSlides,
     insertQrCodeButton,
     addQuestionTime,
     addRespondentsCount,
@@ -214,8 +216,15 @@ Office.onReady((info) => {
                 // Update kahoot-participants-num with current count
                 const participantCount = participantsList.length;
                 console.log(`👥 Updating participant count to: ${participantCount}`);
+                
+                // Update numeric count
                 updateParticipantsNumInSlides(participantCount).catch(err => {
                     console.error('❌ Failed to update participants number:', err);
+                });
+                
+                // Update participants list visual (icons + names)
+                updateParticipantsListInSlides().catch(err => {
+                    console.error('❌ Failed to update participants list visual:', err);
                 });
             },
             onPlayerAnswer: (data, answersMap) => {
@@ -414,6 +423,7 @@ window.triggerAutoSave = triggerAutoSave; // Exposed for ui-manager.js
 // PowerPoint insertion functions
 window.insertGameIdButton = insertGameIdButton;
 window.insertParticipantsNumButton = insertParticipantsNumButton;
+window.insertParticipantsListButton = insertParticipantsListButton;
 window.insertQrCodeButton = insertQrCodeButton;
 window.addQuestionTime = addQuestionTime;
 window.addRespondentsCount = addRespondentsCount;

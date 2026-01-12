@@ -57,7 +57,7 @@ export function showStatus(message, type = 'info') {
 /**
  * Show error message
  */
-export function showError(message) {
+export function showError(message, error = null) {
     const errorElement = document.getElementById('errorMessage');
     if (errorElement) {
         errorElement.textContent = message;
@@ -69,7 +69,11 @@ export function showError(message) {
         }, 5000);
     }
     
-    console.error('Error:', message);
+    if (error) {
+        console.error('Error:', message, error);
+    } else {
+        console.error('Error:', message);
+    }
 }
 
 /**

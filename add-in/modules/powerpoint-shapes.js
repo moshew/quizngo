@@ -7,6 +7,7 @@
 
 import { API_BASE } from './api.js';
 import { showError, showStatus } from './ui-manager.js';
+import { getParticipantsData } from './websocket.js';
 
 /**
  * Generate UUID v4
@@ -2032,5 +2033,325 @@ export async function updateLeaderboard(leaderboardData) {
         });
     } catch (error) {
         console.error('❌ Error updating leaderboard:', error);
+    }
+}
+
+/**
+ * Insert a button/area to display the participants list
+ */
+export async function insertParticipantsListButton() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const slides = context.presentation.getSelectedSlides();
+            slides.load('items');
+            await context.sync();
+            
+            if (slides.items.length === 0) return;
+            const slide = slides.items[0];
+
+            // Create a text box that will act as the "participants list area"
+            const textBox = slide.shapes.addTextBox('אזור רשימת משתתפים', {
+                left: 50,
+                top: 200,
+                width: 600,
+                height: 300
+            });
+            
+            // Add tags so we can find it later
+            textBox.tags.add('kahoot-content-type', 'participants-list');
+            
+            // Load line property before using it
+            textBox.load(['line', 'lineFormat', 'fill', 'textFrame']);
+            await context.sync();
+            
+            // Style it
+            try {
+                textBox.fill.setSolidColor('#F3F2F1');
+                
+                // Set border - try line first, then lineFormat
+                if (textBox.line) {
+                    textBox.line.color = '#0078D4';
+                    textBox.line.weight = 2;
+                } else if (textBox.lineFormat) {
+                    textBox.lineFormat.visible = true;
+                    textBox.lineFormat.color = '#0078D4';
+                    textBox.lineFormat.weight = 2;
+                }
+                
+                textBox.textFrame.textRange.font.color = '#0078D4';
+                textBox.textFrame.textRange.paragraphFormat.alignment = 'Center';
+                
+                if (typeof PowerPoint.TextVerticalAlignment !== 'undefined') {
+                    textBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                } else {
+                    textBox.textFrame.verticalAlignment = 'MiddleCentered';
+                }
+            } catch (styleError) {
+                console.warn('Could not apply some styling to participants list area:', styleError);
+            }
+            
+            await context.sync();
+            console.log('✅ Participants list area inserted');
+        });
+    } catch (error) {
+        showError('שגיאה בהוספת רשימת משתתפים', error);
+    }
+}
+
+/**
+ * Update the participants list in all slides
+ * Creates icon + name display for each participant
+ */
+/**
+ * Update the participants list in all slides
+ * Creates icon + name display for each participant
+ */
+export async function updateParticipantsListInSlides() {
+    console.log('📋 Starting updateParticipantsListInSlides...');
+    try {
+        const participantsData = getParticipantsData();
+        console.log(`📋 Participants data has ${participantsData.size} participants`);
+        
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+            
+            console.log(`📋 Searching for participants-list tags in ${slides.items.length} slides...`);
+            let foundCount = 0;
+            
+            for (const slide of slides.items) {
+                 slide.shapes.load('items');
+                 await context.sync();
+                 
+                 // First pass: find container and existing participant shapes
+                 let containerShape = null;
+                 let containerLeft = 0;
+                 let containerTop = 0;
+                 let containerWidth = 600;
+                 const existingParticipantIds = new Set(); // Track existing participants
+                 const existingParticipantShapes = new Map(); // Track shapes by participant ID
+                 const allParticipantItems = []; // Track ALL participant items regardless of ID
+                 
+                 for (const shape of slide.shapes.items) {
+                     shape.tags.load('items');
+                     shape.load(['id', 'left', 'top', 'width', 'height']);
+                     await context.sync();
+                     
+                     let isParticipantsList = false;
+                     let isParticipantItem = false;
+                     let participantId = null;
+                     
+                     for(let t=0; t<shape.tags.items.length; t++) {
+                         const tagKey = shape.tags.items[t].key.toLowerCase();
+                         const tagValue = shape.tags.items[t].value;
+                         if(tagKey === 'kahoot-content-type' && tagValue.toLowerCase() === 'participants-list') {
+                             isParticipantsList = true;
+                         }
+                         if(tagKey === 'kahoot-participant-item' && tagValue === 'true') {
+                             isParticipantItem = true;
+                         }
+                         if(tagKey === 'participant-id' && tagValue) {
+                             participantId = tagValue;
+                         }
+                     }
+                     
+                     if (isParticipantsList) {
+                         containerShape = shape;
+                         containerLeft = shape.left;
+                         containerTop = shape.top;
+                         containerWidth = shape.width;
+                         foundCount++;
+                     }
+                     
+                     if (isParticipantItem) {
+                         allParticipantItems.push(shape);
+                     }
+                     
+                     // Track existing participant IDs and their shapes
+                     if (participantId) {
+                         existingParticipantIds.add(participantId);
+                         if (!existingParticipantShapes.has(participantId)) {
+                             existingParticipantShapes.set(participantId, []);
+                         }
+                         existingParticipantShapes.get(participantId).push(shape);
+                     }
+                 }
+                 
+                 if (containerShape) {
+                     // Clear the container text only if there are participants
+                     const participants = Array.from(participantsData.values());
+                     
+                     if (participants.length > 0) {
+                         try {
+                             containerShape.textFrame.textRange.text = '';
+                         } catch (e) {
+                             // Ignore if no text frame
+                         }
+                     }
+                     
+                     // Layout settings
+                     const itemWidth = 90;   // Width per participant
+                     const iconHeight = 72;  // Height for icon (72 points = 1 inch)
+                     const nameHeight = 22;  // Height for name (14 font + small padding)
+                     const itemHeight = iconHeight + nameHeight; // Total height
+                     const gapX = 15;
+                     const gapY = 10;
+                     const itemsPerRow = Math.floor((containerWidth - 40) / (itemWidth + gapX));
+                     const startY = containerTop + 15;
+                     
+                     // Find NEW participants only (not already displayed)
+                     const newParticipants = participants.filter(p => !existingParticipantIds.has(p.userId || p.id));
+                     
+                     // Helper to check if row needs rebuild
+                     // Count actual shapes (divide by 2 assuming icon+text) to get count
+                     const actualVisualCount = Math.floor(allParticipantItems.length / 2);
+                     console.log(`📋 Existing tracked: ${existingParticipantIds.size}, Visual count: ${actualVisualCount}, New: ${newParticipants.length}, Total target: ${participants.length}, ItemsPerRow: ${itemsPerRow}`);
+                     
+                     if (participants.length === 0) {
+                         // Show waiting message
+                         try {
+                             containerShape.textFrame.textRange.text = 'מחכים למשתתפים...';
+                             // Also clear any lingering items
+                             for (const s of allParticipantItems) {
+                                 try { s.delete(); } catch(e) {}
+                             }
+                         } catch (e) {}
+                     } else if (newParticipants.length > 0 || actualVisualCount > 0) {
+                         // Smart Update Strategy
+                         
+                         const totalCount = participants.length;
+                         
+                         // Determine start index for update logic
+                         // Default: Full Refresh (Start at 0) - handles removals, shuffles, re-ordering
+                         let firstItemInLastRow = 0;
+                         
+                         // OPTIMIZATION: If this is purely an ADDITION to the end, we can skip earlier rows
+                         // Condition: We have exactly as many visible items as (Total - New), meaning no deletions occurred
+                         const purelyAdding = (newParticipants.length > 0) && (actualVisualCount === totalCount - newParticipants.length);
+                         
+                         if (purelyAdding) {
+                             const existingCount = actualVisualCount;
+                             const lastRowBeforeNew = existingCount > 0 ? Math.floor((existingCount - 1) / itemsPerRow) : -1;
+                             const isLastRowFull = existingCount > 0 && (existingCount % itemsPerRow === 0);
+                             
+                             firstItemInLastRow = isLastRowFull ? existingCount : (lastRowBeforeNew >= 0 ? lastRowBeforeNew * itemsPerRow : 0);
+                             console.log(`📋 Optimization: Purely adding ${newParticipants.length} items. Starting at index ${firstItemInLastRow}`);
+                         } else {
+                             console.log(`📋 Full Refresh: Visual(${actualVisualCount}) vs Target(${totalCount}). Doing full layout update to handle removal/centering.`);
+                         }
+                         
+                         console.log(`📋 Smart Update: StartIndex=${firstItemInLastRow}`);
+                         
+                         // Determine visual cleanup zone (Y threshold)
+                         const rowOfStartIndex = Math.floor(firstItemInLastRow / itemsPerRow);
+                         const yThreshold = startY + rowOfStartIndex * (itemHeight + gapY) - 5; 
+                         
+                         console.log(`📋 Updating/Creating items at Y >= ${yThreshold} (Row ${rowOfStartIndex})`);
+                         
+                         // Track which shape IDs we are keeping/updating so we don't delete them
+                         const keptShapeIds = new Set();
+                         
+                         // Rebuild/Update from the clean slate point
+                         const participantsToProcess = participants.slice(firstItemInLastRow);
+                         
+                         for (let i = 0; i < participantsToProcess.length; i++) {
+                             const participant = participantsToProcess[i];
+                             const pId = participant.userId || participant.id;
+                             
+                             const totalIndex = firstItemInLastRow + i;
+                             const row = Math.floor(totalIndex / itemsPerRow);
+                             const col = totalIndex % itemsPerRow;
+                             
+                             const totalItemsInThisRow = Math.min(totalCount - row * itemsPerRow, itemsPerRow);
+                             const thisRowWidth = totalItemsInThisRow * itemWidth + (totalItemsInThisRow - 1) * gapX;
+                             const rowStartX = containerLeft + (containerWidth - thisRowWidth) / 2;
+                             
+                             const x = rowStartX + col * (itemWidth + gapX);
+                             const y = startY + row * (itemHeight + gapY);
+                             
+                             // Check if we have existing shapes for this participant
+                             let reused = false;
+                             if (pId && existingParticipantShapes.has(pId)) {
+                                 const shapes = existingParticipantShapes.get(pId);
+                                 // We expect roughly 2 shapes (Icon ~70px height, Name ~22px height)
+                                 let iconFound = false;
+                                 let nameFound = false;
+                                 
+                                 for (const s of shapes) {
+                                     // Simple heuristic by height
+                                     if (Math.abs(s.height - iconHeight) < 10) {
+                                         // It's the icon
+                                         s.left = x;
+                                         s.top = y;
+                                         keptShapeIds.add(s.id);
+                                         iconFound = true;
+                                     } else if (Math.abs(s.height - nameHeight) < 10) {
+                                         // It's the name
+                                         s.left = x;
+                                         s.top = y + iconHeight;
+                                         keptShapeIds.add(s.id);
+                                         nameFound = true;
+                                     }
+                                 }
+                                 
+                                 if (iconFound && nameFound) {
+                                     reused = true;
+                                    //  console.log(`♻️ Reused shapes for ${participant.nickname}`);
+                                 }
+                             }
+                             
+                             if (!reused) {
+                                 // Create new if not reused
+                                 // Icon
+                                 const iconBox = slide.shapes.addTextBox(participant.icon || '👤', { left: x, top: y, width: itemWidth, height: iconHeight });
+                                 
+                                 // Batch Configure Icon (No internal syncs)
+                                 iconBox.fill.setSolidColor('#98E37E'); // Light Green Background
+                                 iconBox.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                                 iconBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                                 iconBox.textFrame.textRange.font.size = 65; 
+                                 
+                                 iconBox.tags.add('kahoot-participant-item', 'true');
+                                 iconBox.tags.add('participant-id', pId || '');
+                                 
+                                 // Name
+                                 const nameBox = slide.shapes.addTextBox(participant.nickname || '', { left: x, top: y + iconHeight, width: itemWidth, height: nameHeight });
+                                 
+                                 // Batch Configure Name
+                                 nameBox.fill.setSolidColor('#F68038'); // Orange Background
+                                 nameBox.textFrame.autoSizeSetting = PowerPoint.ShapeAutoSize.autoSizeNone;
+                                 nameBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+                                 nameBox.textFrame.textRange.font.size = 14; 
+                                 nameBox.textFrame.textRange.font.bold = true;
+                                 nameBox.textFrame.textRange.font.color = '#FFFFFF'; // White text
+                                 
+                                 nameBox.tags.add('kahoot-participant-item', 'true');
+                                 nameBox.tags.add('participant-id', pId || '');
+                             }
+                        }
+                        
+                        // Delete orphans (shapes in the visual zone that were NOT reused)
+                        for (const shape of allParticipantItems) {
+                             if (shape.top >= yThreshold) {
+                                 if (!keptShapeIds.has(shape.id)) {
+                                     try { shape.delete(); } catch(e) {}
+                                 }
+                             }
+                        }
+                        
+                        // Execute updates, creations, and deletions in ONE atomic batch
+                        await context.sync();
+                     }
+                 }
+            }
+             
+            console.log(`📋 Found ${foundCount} participants-list shapes`);
+            await context.sync();
+        });
+        
+    } catch (error) {
+        console.error('❌ Error updating participants list:', error);
     }
 }

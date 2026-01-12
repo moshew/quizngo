@@ -185,9 +185,9 @@ function setupSocketEventHandlers(config) {
  */
 function handleParticipantUpdate(data, callback) {
     // Expected data format:
-    // { nick: "username", type: "add"/"remove", user_id: "uid" }
+    // { nick: "username", icon: "icon", type: "add"/"remove", user_id: "uid" }
     
-    const { nick, type, user_id } = data;
+    const { nick, type, user_id, icon } = data;
     
     if (!nick || !type) {
         console.error('❌ Invalid participant update data:', data);
@@ -203,6 +203,7 @@ function handleParticipantUpdate(data, callback) {
             participantsData.set(user_id, {
                 userId: user_id,
                 nickname: nick,
+                icon: icon || '👤', // Default icon if missing
                 score: 0,
                 lastAnswerTime: null,
                 lastAnswerCorrect: null

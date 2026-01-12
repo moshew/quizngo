@@ -443,9 +443,32 @@ def handle_disconnect():
             game.log(f'👋 Player WebSocket disconnected: {player_name} (UID: {user_id})')
             game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
             
-            # NOTE: We do NOT send participant_update on disconnect during gameplay
-            # Reason: Player can reconnect and continue playing before timer ends
-            # The add-in will continue waiting for the original number of participants
+            # Logic for sending participant_update on disconnect:
+            # - If in Lobby (Opening slide/acceptingParticipants=True): Send 'remove' update so UI updates
+            # - If in Game (answering/results): Do NOT send update, allow reconnection without disrupting game state
+            should_send_remove = False
+            
+            if hash_id in game_sessions:
+                if game_sessions[hash_id].get('acceptingParticipants', False):
+                    # We are in the lobby, user should be removed from screen
+                    should_send_remove = True
+                    game.log(f'📢 Lobby active - sending remove update for {player_name}')
+                    
+                    # Also remove from registry so they must join anew (not reconnect)
+                    if user_id in player_registry:
+                        del player_registry[user_id]
+                        game.log(f'🗑️ Removed player {player_name} from registry (Lobby disconnect)')
+                else:
+                    # We are in game, user might reconnect
+                    game.log(f'🤫 Game active - NOT sending remove update (allow reconnect) for {player_name}')
+            
+            if should_send_remove:
+                emit_to_room('participant_update', {
+                    'nick': player_name,
+                    'type': 'remove',
+                    'user_id': user_id,
+                    'timestamp': time.time()
+                }, hash_id)
         
         # Remove socket->player mapping
         del socket_to_player[request.sid]
@@ -543,6 +566,21 @@ def rejoin_player():
         player_registry[user_id]['reconnectedAt'] = time.time()
         
         game.log(f'✅ Player {player_name} (UID: {user_id}) reconnected to game {hash_id}')
+        
+        # Always send add update on rejoin to ensure add-in has the player
+        # (especially if they were removed during lobby disconnect)
+        emit_to_room('participant_update', {
+            'nick': player_name,
+            'icon': player.get('icon', '👤'),
+            'type': 'add',
+            'user_id': user_id,
+            'timestamp': time.time()
+        }, hash_id)
+        
+        if session.get('acceptingParticipants', False):
+             game.log(f'📢 Lobby active - sent add update for reconnected player {player_name}')
+        else:
+             game.log(f'📢 Game active - sent add update for reconnected player {player_name} (restoring if removed)')
         
         # Check current game state and send appropriate status
         game_state = session.get('currentState', 'waiting')
@@ -1687,6 +1725,7 @@ def api_handler():
                 
                 game_pin = data.get('game_pin', '').strip()
                 name = data.get('name', '').strip()
+                icon = data.get('icon', '').strip()
                 
                 if not game_pin or not name:
                     return jsonify({
@@ -1717,8 +1756,58 @@ def api_handler():
                         'message': f'No active game found with PIN {game_pin}'
                     }), 404
                 
+                # Check for existing player with same name in this game (Rejoin logic)
+                existing_uid = None
+                for uid, player in player_registry.items():
+                    if player.get('hashId') == hash_id and player.get('nickname') == name:
+                        existing_uid = uid
+                        break
+                
+                if existing_uid:
+                    # Player exists - check if connected
+                    if player_registry[existing_uid].get('connected', False):
+                        # Currently connected - reject (Name taken)
+                        game.log(f'🚫 Rejected join attempt - name {name} already taken and connected')
+                        return jsonify({
+                            'status': 'error',
+                            'message': f'The name "{name}" is already in use.'
+                        }), 409
+                    else:
+                        # Disconnected - Allow REJOIN (Recover session)
+                        game.log(f'♻️ Player {name} rejoining with existing UID: {existing_uid}')
+                        
+                        # Use existing UID
+                        uid = existing_uid
+                        
+                        # Update status
+                        player_registry[uid]['connected'] = True
+                        player_registry[uid]['reconnectedAt'] = time.time()
+                        
+                        # If icon changed, update it
+                        if icon:
+                            player_registry[uid]['icon'] = icon
+                        
+                        # Send ADD event to add-in (to ensure they are restored in UI/logic)
+                        participant_data = {
+                            'nick': name,
+                            'icon': player_registry[uid].get('icon', '👤'),
+                            'type': 'add',
+                            'user_id': uid,
+                            'timestamp': time.time()
+                        }
+                        
+                        sent = emit_to_room('participant_update', participant_data, hash_id)
+                        game.log(f'✅ Player rejoined, participant_update sent to {sent} client(s)')
+                        
+                        return jsonify({
+                            'status': 'success',
+                            'uid': uid,
+                            'message': 'Rejoined successfully'
+                        })
+
                 # Check if game is active
                 if not check_game_active(hash_id):
+
                     game.log(f'🚫 Rejected join attempt - game {hash_id} is closed')
                     return jsonify({
                         'status': 'warning',
@@ -1742,6 +1831,7 @@ def api_handler():
                 # Register player in player registry
                 player_registry[uid] = {
                     'nickname': name,
+                    'icon': icon,
                     'hashId': hash_id,
                     'gamePin': game_pin,
                     'connected': True,
@@ -1754,6 +1844,7 @@ def api_handler():
                 # Send participant update to add-ins in this specific game room
                 participant_data = {
                     'nick': name,
+                    'icon': icon,
                     'type': 'add',
                     'user_id': uid,
                     'timestamp': time.time()
@@ -1805,20 +1896,46 @@ def api_handler():
                 
                 game.log(f'👋 Player disconnecting: {player_name} (UID: {uid})')
                 
-                # Mark as disconnected (but keep in registry)
-                player_registry[uid]['connected'] = False
-                player_registry[uid]['disconnectedAt'] = time.time()
+                # Check if we are in Lobby (acceptingParticipants=True)
+                # If so, remove player permanently so they can join fresh
+                should_remove_permanently = False
+                if hash_id in game_sessions and game_sessions[hash_id].get('acceptingParticipants', False):
+                    should_remove_permanently = True
                 
-                game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
-                
-                # NOTE: We do NOT send participant_update here!
-                # Reason: Player can reconnect during gameplay, add-in should keep waiting
-                # for the original number of participants
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Player disconnected (can reconnect)'
-                })
+                if should_remove_permanently:
+                    # Remove from registry
+                    del player_registry[uid]
+                    game.log(f'🗑️ Removed player {player_name} from registry (Lobby disconnect)')
+                    
+                    # Notify add-in to remove from screen
+                    emit_to_room('participant_update', {
+                        'nick': player_name,
+                        'type': 'remove',
+                        'user_id': uid,
+                        'timestamp': time.time()
+                    }, hash_id)
+                    
+                    return jsonify({
+                        'status': 'success',
+                        'message': 'Player removed permanently (Lobby)',
+                        'removed': True
+                    })
+                else:
+                    # Mark as disconnected (but keep in registry)
+                    player_registry[uid]['connected'] = False
+                    player_registry[uid]['disconnectedAt'] = time.time()
+                    
+                    game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
+                    
+                    # NOTE: We do NOT send participant_update here!
+                    # Reason: Player can reconnect during gameplay, add-in should keep waiting
+                    # for the original number of participants
+                    
+                    return jsonify({
+                        'status': 'success',
+                        'message': 'Player disconnected (can reconnect)',
+                        'removed': False
+                    })
                 
             except Exception as e:
                 game.log(f'❌ Error in leave_player: {str(e)}')
