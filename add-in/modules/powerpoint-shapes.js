@@ -7,7 +7,8 @@
 
 import { API_BASE } from './api.js';
 import { showError, showStatus } from './ui-manager.js';
-import { getParticipantsData } from './websocket.js';
+import { getParticipantsData, getVisibleParticipantsData } from './websocket.js';
+import { hideParticipants, getHiddenParticipantIds } from './presentation-state.js';
 
 /**
  * Generate UUID v4
@@ -2098,8 +2099,9 @@ export async function insertParticipantsListButton() {
 export async function updateParticipantsListInSlides() {
     console.log('📋 Starting updateParticipantsListInSlides...');
     try {
-        const participantsData = getParticipantsData();
-        console.log(`📋 Participants data has ${participantsData.size} participants`);
+        // Get VISIBLE participants only (excludes hidden ones)
+        const visibleParticipantsData = getVisibleParticipantsData();
+        console.log(`📋 Visible participants: ${visibleParticipantsData.size}`);
         
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
@@ -2118,6 +2120,7 @@ export async function updateParticipantsListInSlides() {
                  let containerShape = null;
                  let containerLeft = 0;
                  let containerTop = 0;
+                 let containerHeight = 0; // Track container height for overflow detection
                  let containerWidth = 600;
                  const existingParticipantIds = new Set(); // Track existing participants
                  const existingParticipantShapes = new Map(); // Track shapes by participant ID
@@ -2151,6 +2154,7 @@ export async function updateParticipantsListInSlides() {
                          containerLeft = shape.left;
                          containerTop = shape.top;
                          containerWidth = shape.width;
+                         containerHeight = shape.height; // Track height for overflow detection
                          foundCount++;
                      }
                      
@@ -2168,8 +2172,8 @@ export async function updateParticipantsListInSlides() {
                      }
                  }
                  
-                 // 1. Get participants
-                 const participants = Array.from(participantsData.values());
+                 // 1. Get VISIBLE participants only (excludes permanently hidden ones)
+                 const participants = Array.from(visibleParticipantsData.values());
 
                  // 2. Universal cleanup if no participants (Works even if container is missing)
                  if (participants.length === 0) {
@@ -2195,18 +2199,64 @@ export async function updateParticipantsListInSlides() {
                      const gapY = 10;
                      const itemsPerRow = Math.floor((containerWidth - 40) / (itemWidth + gapX));
                      const startY = containerTop + 15;
+                     const paddingBottom = 15; // Bottom padding inside container
                      
-                     // Find NEW participants only (not already displayed)
-                     const newParticipants = participants.filter(p => !existingParticipantIds.has(p.userId || p.id));
+                     // Calculate maximum rows that fit in container
+                     const availableHeight = containerHeight - 30; // 15 top + 15 bottom padding
+                     const maxRows = Math.floor(availableHeight / (itemHeight + gapY));
+                     const maxVisibleParticipants = maxRows * itemsPerRow;
+                     
+                     console.log(`📋 Container: height=${containerHeight}, maxRows=${maxRows}, maxVisible=${maxVisibleParticipants}, itemsPerRow=${itemsPerRow}`);
+                     
+                     // === OVERFLOW HANDLING ===
+                     // Check if adding new participants would exceed container bounds
+                     // If so, hide the first row permanently
+                     let participantsToDisplay = participants;
+                     
+                     const totalRequiredRows = Math.ceil(participants.length / itemsPerRow);
+                     if (totalRequiredRows > maxRows && participants.length > 0) {
+                         console.log(`⚠️ OVERFLOW DETECTED: Need ${totalRequiredRows} rows but only ${maxRows} fit`);
+                         
+                         // Get the first row's participants (they will be hidden permanently)
+                         const firstRowParticipants = participants.slice(0, itemsPerRow);
+                         const firstRowIds = firstRowParticipants.map(p => p.userId || p.id);
+                         
+                         // Hide these participants permanently
+                         hideParticipants(firstRowIds);
+                         console.log(`👻 Hiding first row: ${firstRowIds.join(', ')}`);
+                         
+                         // Remove them from display list (they're now hidden)
+                         participantsToDisplay = participants.slice(itemsPerRow);
+                         console.log(`📋 After hiding: ${participantsToDisplay.length} participants to display`);
+                         
+                         // Delete shapes for hidden participants
+                         for (const hiddenId of firstRowIds) {
+                             if (existingParticipantShapes.has(hiddenId)) {
+                                 const shapes = existingParticipantShapes.get(hiddenId);
+                                 for (const s of shapes) {
+                                     try { s.delete(); } catch(e) {}
+                                 }
+                                 existingParticipantShapes.delete(hiddenId);
+                                 existingParticipantIds.delete(hiddenId);
+                             }
+                         }
+                     }
+                     
+                     // Find NEW participants only (not already displayed, excluding hidden)
+                     const hiddenIds = getHiddenParticipantIds();
+                     const newParticipants = participantsToDisplay.filter(p => {
+                         const pId = p.userId || p.id;
+                         return !existingParticipantIds.has(pId) && !hiddenIds.has(pId);
+                     });
                      
                      // Helper to check if row needs rebuild
                      const actualVisualCount = Math.floor(allParticipantItems.length / 2);
-                     console.log(`📋 Update: Visual(${actualVisualCount}), New(${newParticipants.length}), Total(${participants.length})`);
+                     console.log(`📋 Update: Visual(${actualVisualCount}), New(${newParticipants.length}), ToDisplay(${participantsToDisplay.length})`);
                      
                      if (newParticipants.length > 0 || actualVisualCount > 0) {
                          // Smart Update Strategy
                          
-                         const totalCount = participants.length;
+                         const totalCount = participantsToDisplay.length;
                          
                          // Determine start index for update logic
                          // Default: Full Refresh (Start at 0) - handles removals, shuffles, re-ordering
@@ -2239,7 +2289,7 @@ export async function updateParticipantsListInSlides() {
                          const keptShapeIds = new Set();
                          
                          // Rebuild/Update from the clean slate point
-                         const participantsToProcess = participants.slice(firstItemInLastRow);
+                         const participantsToProcess = participantsToDisplay.slice(firstItemInLastRow);
                          
                          for (let i = 0; i < participantsToProcess.length; i++) {
                              const participant = participantsToProcess[i];

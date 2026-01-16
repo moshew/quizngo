@@ -3,6 +3,8 @@
  * Handles all WebSocket connections and real-time updates
  */
 
+import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './presentation-state.js';
+
 // WebSocket URL
 export const WEBSOCKET_URL = 'http://localhost:5000';
 
@@ -197,6 +199,9 @@ function handleParticipantUpdate(data, callback) {
     console.log(`📢 Participant ${type}: ${nick} (user_id: ${user_id})`);
     console.log(`📊 Current participants BEFORE update:`, participantsData.size, Array.from(participantsData.keys()));
     
+    // Check if this participant is hidden (from row overflow)
+    const isHidden = isParticipantHidden(user_id);
+    
     // Update the participants data map
     if (type === 'add') {
         if (!participantsData.has(user_id)) {
@@ -208,12 +213,23 @@ function handleParticipantUpdate(data, callback) {
                 lastAnswerTime: null,
                 lastAnswerCorrect: null
             });
-            console.log(`✅ Added participant: ${nick} (${user_id})`);
+            
+            if (isHidden) {
+                console.log(`👻 Participant ${nick} added but HIDDEN (was in hidden row)`);
+            } else {
+                console.log(`✅ Added participant: ${nick} (${user_id})`);
+            }
         } else {
             console.log(`⚠️ Participant ${user_id} already in list`);
         }
     } else if (type === 'remove') {
-        if (participantsData.has(user_id)) {
+        if (isHidden) {
+            // Hidden participant leaves - remove from data AND from hidden set
+            // This allows them to reappear at the end if they reconnect
+            participantsData.delete(user_id);
+            unhideParticipant(user_id);
+            console.log(`👻 Hidden participant ${user_id} removed (no visual change, can reappear if reconnects)`);
+        } else if (participantsData.has(user_id)) {
             participantsData.delete(user_id);
             console.log(`✅ Removed participant: ${user_id}`);
         } else {
@@ -252,6 +268,20 @@ export function getParticipantsData() {
 }
 
 /**
+ * Get visible participants data (excluding hidden ones)
+ * Returns only participants that are not in hiddenParticipantIds
+ */
+export function getVisibleParticipantsData() {
+    const visibleData = new Map();
+    for (const [userId, data] of participantsData) {
+        if (!isParticipantHidden(userId)) {
+            visibleData.set(userId, data);
+        }
+    }
+    return visibleData;
+}
+
+/**
  * Reset participants list
  */
 export function resetParticipantsList() {
@@ -261,7 +291,10 @@ export function resetParticipantsList() {
     // Clear the map
     participantsData.clear();
     
-    console.log('✅ Participants list cleared');
+    // Also reset hidden participants (from presentation-state.js)
+    resetHiddenParticipants();
+    
+    console.log('✅ Participants list cleared (including hidden state)');
     console.log('📊 After reset, participants:', participantsData.size, Array.from(participantsData.keys()));
 }
 

@@ -13,6 +13,66 @@ let autoSaveTimer = null;
 let hasUnsavedChanges = false;
 const AUTO_SAVE_DELAY = 0; // Immediate save
 
+// Hidden participants tracking (for row overflow management)
+// Once a row is "hidden" due to overflow, participants in it are permanently hidden until reset
+let hiddenParticipantIds = new Set(); // Set of userId that are hidden and won't be displayed
+let hiddenRowsCount = 0; // Number of rows that have been hidden
+
+/**
+ * Get hidden participant IDs
+ */
+export function getHiddenParticipantIds() {
+    return new Set(hiddenParticipantIds);
+}
+
+/**
+ * Get hidden rows count
+ */
+export function getHiddenRowsCount() {
+    return hiddenRowsCount;
+}
+
+/**
+ * Mark participants as hidden (called when row overflows)
+ * @param {string[]} participantIds - Array of participant IDs to hide
+ */
+export function hideParticipants(participantIds) {
+    for (const id of participantIds) {
+        hiddenParticipantIds.add(id);
+    }
+    hiddenRowsCount++;
+    console.log(`👻 Hidden ${participantIds.length} participants (row ${hiddenRowsCount}). Total hidden: ${hiddenParticipantIds.size}`);
+}
+
+/**
+ * Reset hidden participants state (call on new game/session)
+ */
+export function resetHiddenParticipants() {
+    console.log(`🔄 Resetting hidden participants. Was: ${hiddenParticipantIds.size} hidden in ${hiddenRowsCount} rows`);
+    hiddenParticipantIds.clear();
+    hiddenRowsCount = 0;
+}
+
+/**
+ * Check if a participant is hidden
+ */
+export function isParticipantHidden(userId) {
+    return hiddenParticipantIds.has(userId);
+}
+
+/**
+ * Remove a participant from hidden set (when they disconnect)
+ * This allows them to reappear at the end if they reconnect
+ */
+export function unhideParticipant(userId) {
+    if (hiddenParticipantIds.has(userId)) {
+        hiddenParticipantIds.delete(userId);
+        console.log(`👻 Unhidden participant ${userId}. Remaining hidden: ${hiddenParticipantIds.size}`);
+        return true;
+    }
+    return false;
+}
+
 /**
  * Get presentation file info (path and display name)
  */
