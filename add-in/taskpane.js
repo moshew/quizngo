@@ -217,15 +217,15 @@ Office.onReady((info) => {
                 const participantCount = participantsList.length;
                 console.log(`👥 Updating participant count to: ${participantCount}`);
                 
-                // Update numeric count
-                updateParticipantsNumInSlides(participantCount).catch(err => {
-                    console.error('❌ Failed to update participants number:', err);
-                });
-                
-                // Update participants list visual (icons + names)
-                updateParticipantsListInSlides().catch(err => {
-                    console.error('❌ Failed to update participants list visual:', err);
-                });
+                // Update numeric count first, then update list
+                updateParticipantsNumInSlides(participantCount)
+                    .then(() => {
+                        // Update participants list visual (icons + names)
+                        return updateParticipantsListInSlides();
+                    })
+                    .catch(err => {
+                        console.error('❌ Failed to update participants visual/number:', err);
+                    });
             },
             onPlayerAnswer: (data, answersMap) => {
                 console.log(`📝 Player answer processed:`, data);

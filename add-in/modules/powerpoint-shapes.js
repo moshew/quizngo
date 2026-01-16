@@ -211,41 +211,60 @@ export async function updateParticipantsNumInSlides(count) {
             
             let foundElements = 0;
             
+            // Optimization: Iterate per slide and load data in batches to avoid rate limits/errors
             for (let i = 0; i < slides.items.length; i++) {
                 const slide = slides.items[i];
                 const shapes = slide.shapes;
-                shapes.load(['items']);
+                
+                // Step 1: Load all shapes in the slide
+                shapes.load('items');
                 await context.sync();
                 
+                // Step 2: Load tags for all shapes in the slide
+                for (let j = 0; j < shapes.items.length; j++) {
+                    // Load the items of the tags collection, and specifically key/value of those items
+                    shapes.items[j].tags.load('items/key, items/value');
+                }
+                
+                // Sync once for all tags in the slide
+                await context.sync();
+                
+                const shapesToUpdate = [];
+
+                // Step 3: Identify shapes that need updating
                 for (let j = 0; j < shapes.items.length; j++) {
                     const shape = shapes.items[j];
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
                     let hasParticipantsNumTag = false;
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
-                        
-                        // Case-insensitive comparison
-                        if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
-                            hasParticipantsNumTag = true;
-                            break;
+                    
+                    if (shape.tags && shape.tags.items) {
+                        for (let k = 0; k < shape.tags.items.length; k++) {
+                            const tag = shape.tags.items[k];
+                            // Case-insensitive comparison
+                            if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
+                                hasParticipantsNumTag = true;
+                                break;
+                            }
                         }
                     }
                     
                     if (hasParticipantsNumTag) {
-                        console.log(`📝 Updating participants number in slide ${i + 1} to ${count}`);
-                        shape.load(['textFrame', 'name', 'type']);
-                        await context.sync();
-                        
+                        shapesToUpdate.push(shape);
+                    }
+                }
+
+                // Step 4: Load textFrame for ONLY the relevant shapes (safer than loading for all)
+                if (shapesToUpdate.length > 0) {
+                    for (const shape of shapesToUpdate) {
+                        shape.textFrame.load('textRange');
+                    }
+                    
+                    // Sync once for all textFrames
+                    await context.sync();
+                    
+                    // Step 5: Update the text
+                    for (const shape of shapesToUpdate) {
                         try {
-                            const textRange = shape.textFrame.textRange;
-                            textRange.text = String(count);
-                            await context.sync();
-                            
+                            shape.textFrame.textRange.text = String(count);
                             foundElements++;
                             console.log(`✅ Updated participants number to ${count} in slide ${i + 1}`);
                         } catch (textError) {
@@ -255,11 +274,15 @@ export async function updateParticipantsNumInSlides(count) {
                 }
             }
             
+            // No final sync needed as we synced in batches
+
+            
             console.log(`✅ Total participants number elements updated: ${foundElements}`);
         });
     } catch (error) {
         console.error('❌ Error updating participants number in slides:', error);
         console.error('Error details:', error.message, error.stack);
+        throw error;
     }
 }
 
@@ -1130,6 +1153,9 @@ export async function addAnswersDistribution() {
             // Underline color (Dark Navy/Black)
             const underlineColor = '#0f243e';
             
+            // Track bars that need to be hidden (value = 0)
+            const barsToHide = [];
+            
             // Create bars and labels for each answer
             for (let i = 0; i < answers.length; i++) {
                 const answer = answers[i];
@@ -1137,47 +1163,33 @@ export async function addAnswersDistribution() {
                 
                 // Calculate initial height based on default values
                 const calculatedHeight = (answer.value / maxValue) * maxBarHeight;
-                // If value is 0, height is effectively 0 (we'll hide it)
-                const barHeight = answer.value === 0 ? 0 : Math.max(calculatedHeight, 2);
+                // Minimum bar height of 5 to avoid PowerPoint errors
+                const barHeight = answer.value === 0 ? 5 : Math.max(calculatedHeight, 5);
                 
-                // 1. Create bar (rectangle)
+                // 1. Create bar (rectangle) - always create with minimum height
                 const bar = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
                 bar.left = barLeft;
-                // If height is 0, we position it at the bottom line
-                bar.top = chartTop + (maxBarHeight - (barHeight || 1)); 
+                bar.top = chartTop + (maxBarHeight - barHeight); 
                 bar.width = barWidth;
-                bar.height = barHeight || 1; // Need non-zero height for creation
+                bar.height = barHeight;
+                
+                // Track bar for later hiding if value is 0
+                if (answer.value === 0) {
+                    barsToHide.push(bar);
+                }
                 
                 // Load fill and tags first
-                bar.load(['fill', 'tags', 'line']); // Load line as well
+                bar.load(['fill', 'tags', 'line']);
                 await context.sync();
-                
-                // Set visibility based on value - COMPLETELY HIDE if 0
-                if (answer.value === 0) {
-                    bar.visible = false;
-                    // Also make line invisible just in case
-                    if (bar.line) bar.line.visible = false;
-                }
                 
                 // Style the bar fill
                 bar.fill.setSolidColor(answer.color);
                 
-                // Force load line to ensure it exists
-                bar.load(['line', 'lineFormat']);
-                await context.sync();
-                
-                // Set border properties - try line or lineFormat
+                // Set border properties
                 if (bar.line) {
                     bar.line.visible = true;
                     bar.line.color = answer.borderColor;
                     bar.line.weight = 1.5;
-                } else if (bar.lineFormat) {
-                    // Fallback for some API versions
-                    bar.lineFormat.visible = true;
-                    bar.lineFormat.color = answer.borderColor;
-                    bar.lineFormat.weight = 1.5;
-                } else {
-                    console.warn('Line property not found on bar shape (tried line and lineFormat)');
                 }
                 
                 await context.sync();
@@ -1299,7 +1311,14 @@ export async function addAnswersDistribution() {
                 numberText.font.bold = true;
                 
                 await context.sync();
-                
+            }
+            
+            // AFTER all shapes are created and styled, hide bars with value 0
+            // This must be done last to avoid PowerPoint API issues
+            if (barsToHide.length > 0) {
+                for (const bar of barsToHide) {
+                    bar.visible = false;
+                }
                 await context.sync();
             }
             
@@ -1348,149 +1367,191 @@ export async function updateAnswersDistribution(answersData) {
             for (let i = 0; i < slides.items.length; i++) {
                 const slide = slides.items[i];
                 const shapes = slide.shapes;
-                shapes.load(['items']);
+                
+                // Optimized: Load all items in one go
+                shapes.load('items');
+                await context.sync();
+                
+                // Optimized: Load tags for all items
+                for(let j=0; j < shapes.items.length; j++) {
+                    shapes.items[j].tags.load('items/key, items/value');
+                }
                 await context.sync();
                 
                 const baselines = {}; // Store baseline Y for each answer number
-                const pendingLabels = []; // Store labels to update after finding baselines
-                
+                const shapesToUpdate = []; // Collect shapes first, then process
+
+                // First pass: identify shapes and collect data
                 for (let j = 0; j < shapes.items.length; j++) {
                     const shape = shapes.items[j];
-                    // Load tags FIRST to identify if we should process this shape
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
-                    // Check if this is an answer bar or value label
                     let isAnswerBar = false;
                     let isAnswerValue = false;
                     let answerNumber = null;
                     
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
-                        
-                        // Case insensitive comparison for keys
-                        const key = tag.key.toLowerCase();
-                        
-                        if (key === 'kahoot-answer-bar') {
-                            isAnswerBar = true;
-                        } else if (key === 'kahoot-answer-value') {
-                            isAnswerValue = true;
-                        } else if (key === 'answer-number') {
-                            answerNumber = parseInt(tag.value);
+                    if (shape.tags && shape.tags.items) {
+                        for (let k = 0; k < shape.tags.items.length; k++) {
+                            const tag = shape.tags.items[k];
+                            const key = tag.key.toLowerCase();
+                            
+                            if (key === 'kahoot-answer-bar') {
+                                isAnswerBar = true;
+                            } else if (key === 'kahoot-answer-value') {
+                                isAnswerValue = true;
+                            } else if (key === 'answer-number') {
+                                answerNumber = parseInt(tag.value);
+                            }
                         }
                     }
-                    
-                    // Update bar height
-                    if (isAnswerBar && answerNumber && answersData[answerNumber] !== undefined) {
-                        // Now safely load properties for the bar shape
-                        shape.load(['top', 'height', 'visible', 'line', 'fill']);
-                        await context.sync();
 
-                        // Calculate Baseline from CURRENT position
-                        // If currently height > 0, baseline = top + height.
-                        // If currently height == 0 (hidden), baseline = top.
-                        let currentBaseline = shape.top + shape.height;
+                    if (isAnswerBar && answerNumber && answersData[answerNumber] !== undefined) {
+                        shapesToUpdate.push({ type: 'bar', shape, answerNumber });
+                    }
+                    if (isAnswerValue && answerNumber && answersData[answerNumber] !== undefined) {
+                         shapesToUpdate.push({ type: 'label', shape, answerNumber });
+                    }
+                }
+
+                // Load properties for identifying baselines and updating
+                if (shapesToUpdate.length > 0) {
+                     // Load bar shapes only first
+                     const barItems = shapesToUpdate.filter(item => item.type === 'bar');
+                     const labelItems = shapesToUpdate.filter(item => item.type === 'label');
+                     
+                     for(const item of barItems) {
+                         item.shape.load(['top', 'height', 'visible', 'line', 'fill']);
+                     }
+                     for(const item of labelItems) {
+                         item.shape.load(['top', 'height']);
+                     }
+                     await context.sync();
+
+                     // Track bars to hide (defer visibility change)
+                     const barsToHide = [];
+                     const barsToShow = [];
+                     
+                     // Second pass: Update bars and collect baselines (NO visibility changes yet)
+                     for(const item of barItems) {
+                        const { shape, answerNumber } = item;
                         
-                        // Store baseline for the label to use
+                        // Calculate using loaded properties
+                        let currentBaseline = shape.top + shape.height;
                         baselines[answerNumber] = currentBaseline;
                         
                         const value = answersData[answerNumber];
-                        // Recalculate height logic
                         const calculatedHeight = maxValue > 0 ? (value / maxValue) * maxBarHeight : 0;
-                        // If value is 0, we want height 0 (hidden). If > 0, min height 2.
-                        const finalHeight = value === 0 ? 0 : Math.max(calculatedHeight, 2); 
+                        // Minimum height of 5 to avoid PowerPoint errors
+                        const finalHeight = value === 0 ? 5 : Math.max(calculatedHeight, 5); 
                         
-                        if (value === 0) {
-                            // Force hide everything
-                            shape.visible = false;
-                            
-                            // Extra measures to ensure it's hidden
-                            if (shape.line) {
-                                shape.line.visible = false;
-                            }
-                            if (shape.fill) {
-                                shape.fill.clear();
-                            }
-                            
-                            // Set height to 0 and top to the baseline
-                            shape.height = 0;
-                            shape.top = currentBaseline; 
-                            
-                            console.log(`✅ Hiding bar ${answerNumber} (value 0) at baseline ${currentBaseline}`);
-                        } else {
-                            // Ensure it is visible
-                            shape.visible = true;
-                            
-                            // Restore fill if it was cleared
-                            if (shape.fill) {
-                                const colors = answerColors[answerNumber];
-                                if (colors) {
-                                    shape.fill.setSolidColor(colors.fill);
-                                }
-                            }
-                            
-                            // Restore border
+                        // Always set fill and line properties
+                        try { if (shape.fill) shape.fill.setSolidColor(answerColors[answerNumber].fill); } catch(e) {}
+                        
+                        try {
                             if (shape.line) {
                                 shape.line.visible = true;
-                                const colors = answerColors[answerNumber];
-                                if (colors) {
-                                    shape.line.color = colors.border;
-                                    shape.line.weight = 1.5;
-                                }
+                                shape.line.color = answerColors[answerNumber].border;
+                                shape.line.weight = 1.5;
                             }
-                            
-                            // Update bar: grow upwards from baseline
-                            shape.height = finalHeight;
-                            shape.top = currentBaseline - finalHeight;
-                            
-                            console.log(`✅ Updating bar ${answerNumber} to height ${finalHeight}, top ${shape.top}`);
+                        } catch(e) {}
+                        
+                        if (value === 0) {
+                           // Keep minimum height
+                           shape.height = 5;
+                           shape.top = currentBaseline - 5;
+                           // Track for later hiding
+                           barsToHide.push(shape);
+                           console.log(`✅ Preparing to hide bar ${answerNumber} (value 0) at baseline ${currentBaseline}`);
+                        } else {
+                           shape.height = finalHeight;
+                           // Important: grow upwards (Top = Baseline - Height)
+                           shape.top = currentBaseline - finalHeight;
+                           // Track for showing
+                           barsToShow.push(shape);
+                           console.log(`✅ Updating bar ${answerNumber} to height ${finalHeight}, top ${shape.top}`);
+                        }
+                     }
+                    
+                    // Sync all property changes first (before visibility)
+                    try {
+                        await context.sync();
+                        console.log(`✅ Bar properties synced for slide ${i + 1}`);
+                    } catch (barSyncError) {
+                        console.warn(`⚠️ Bar property sync warning for slide ${i + 1}:`, barSyncError.message);
+                    }
+                    
+                    // NOW set visibility (after all other properties are synced)
+                    for (const bar of barsToShow) {
+                        bar.visible = true;
+                    }
+                    for (const bar of barsToHide) {
+                        bar.visible = false;
+                    }
+                    
+                    // Sync visibility changes
+                    try {
+                        await context.sync();
+                        console.log(`✅ Bar visibility synced for slide ${i + 1}`);
+                    } catch (visSyncError) {
+                        console.warn(`⚠️ Bar visibility sync warning for slide ${i + 1}:`, visSyncError.message);
+                    }
+
+                    // Third pass: Update label positions first
+                    for (const item of labelItems) {
+                        const { shape, answerNumber } = item;
+                        const value = answersData[answerNumber];
+                        const calculatedHeight = maxValue > 0 ? (value / maxValue) * maxBarHeight : 0;
+                        const finalHeight = Math.max(calculatedHeight, 5);
+                        const actualBarHeight = value === 0 ? 5 : finalHeight;
+                        
+                        const baseline = baselines[answerNumber] !== undefined 
+                            ? baselines[answerNumber] 
+                            : (defaultChartTop + maxBarHeight);
+                        
+                        // Update position
+                        shape.top = baseline - actualBarHeight - 30;
+                        console.log(`✅ Updated label ${answerNumber} position, top ${shape.top}`);
+                    }
+
+                    // Sync label positions
+                    try {
+                        await context.sync();
+                    } catch (labelPosSyncError) {
+                        console.warn(`⚠️ Label position sync warning for slide ${i + 1}:`, labelPosSyncError.message);
+                    }
+                    
+                    // Fourth pass: Update label TEXT (must be separate from position)
+                    for (const item of labelItems) {
+                        const { shape, answerNumber } = item;
+                        const value = answersData[answerNumber];
+                        
+                        // Load textFrame for text update
+                        shape.load(['textFrame']);
+                    }
+                    
+                    try {
+                        await context.sync();
+                    } catch (e) {}
+                    
+                    // Now update the text
+                    for (const item of labelItems) {
+                        const { shape, answerNumber } = item;
+                        const value = answersData[answerNumber];
+                        
+                        try {
+                            if (shape.textFrame && shape.textFrame.textRange) {
+                                shape.textFrame.textRange.text = value.toString();
+                                console.log(`✅ Updated label ${answerNumber} text to ${value}`);
+                            }
+                        } catch(textError) {
+                            console.warn(`⚠️ Could not update label ${answerNumber} text:`, textError.message);
                         }
                     }
-                    
-                    // Collect value label for later update
-                    if (isAnswerValue && answerNumber && answersData[answerNumber] !== undefined) {
-                        // Load properties needed for label
-                        shape.load(['top', 'height', 'textFrame']);
-                        await context.sync();
 
-                        pendingLabels.push({
-                            shape: shape,
-                            answerNumber: answerNumber
-                        });
+                    // Sync label text
+                    try {
+                        await context.sync();
+                    } catch (labelTextSyncError) {
+                        console.warn(`⚠️ Label text sync warning for slide ${i + 1}:`, labelTextSyncError.message);
                     }
-                }
-                
-                // Pass 2: Update labels using collected baselines
-                for (const item of pendingLabels) {
-                    const { shape, answerNumber } = item;
-                    const value = answersData[answerNumber];
-                    
-                    // Calculate height again for label positioning
-                    const calculatedHeight = maxValue > 0 ? (value / maxValue) * maxBarHeight : 0;
-                    const finalHeight = Math.max(calculatedHeight, 2);
-                    const actualBarHeight = value === 0 ? 0 : finalHeight;
-                    
-                    // Determine baseline - use found one or fallback to default
-                    const baseline = baselines[answerNumber] !== undefined 
-                        ? baselines[answerNumber] 
-                        : (defaultChartTop + maxBarHeight);
-                    
-                    // Update text
-                    const textRange = shape.textFrame.textRange;
-                    textRange.text = value.toString();
-                    
-                    // Update position (above the bar)
-                    // baseline - barHeight - offset
-                    shape.top = baseline - actualBarHeight - 30;
-                    
-                    console.log(`✅ Updated value ${answerNumber}: ${value} at top ${shape.top}`);
-                }
-                
-                if (pendingLabels.length > 0) {
-                    await context.sync();
                 }
             }
             
