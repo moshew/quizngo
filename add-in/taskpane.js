@@ -269,6 +269,9 @@ Office.onReady((info) => {
                 resetParticipantsNumInSlides().catch(err => {
                     console.error('❌ Failed to reset participants number:', err);
                 });
+                updateParticipantsListInSlides().catch(err => {
+                    console.error('❌ Failed to reset participants list visual:', err);
+                });
                 
                 // Reset participant acceptance state
                 resetParticipantAcceptanceState();

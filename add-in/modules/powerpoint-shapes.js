@@ -1153,9 +1153,6 @@ export async function addAnswersDistribution() {
             // Underline color (Dark Navy/Black)
             const underlineColor = '#0f243e';
             
-            // Track bars that need to be hidden (value = 0)
-            const barsToHide = [];
-            
             // Create bars and labels for each answer
             for (let i = 0; i < answers.length; i++) {
                 const answer = answers[i];
@@ -1173,23 +1170,29 @@ export async function addAnswersDistribution() {
                 bar.width = barWidth;
                 bar.height = barHeight;
                 
-                // Track bar for later hiding if value is 0
-                if (answer.value === 0) {
-                    barsToHide.push(bar);
-                }
-                
                 // Load fill and tags first
-                bar.load(['fill', 'tags', 'line']);
+                bar.load(['fill', 'tags', 'line']); // Load line as well
                 await context.sync();
+                
+                // Set visibility based on value - COMPLETELY HIDE if 0
+                if (answer.value === 0) {
+                    bar.visible = false;
+                    // Also make line invisible just in case
+                    try { if (bar.line) bar.line.visible = false; } catch(e) {}
+                }
                 
                 // Style the bar fill
                 bar.fill.setSolidColor(answer.color);
                 
-                // Set border properties
-                if (bar.line) {
-                    bar.line.visible = true;
-                    bar.line.color = answer.borderColor;
-                    bar.line.weight = 1.5;
+                // Set border properties - wrap in try/catch
+                try {
+                    if (bar.line) {
+                        bar.line.visible = answer.value !== 0;
+                        bar.line.color = answer.borderColor;
+                        bar.line.weight = 1.5;
+                    }
+                } catch (lineError) {
+                    console.warn('Could not set line properties:', lineError.message);
                 }
                 
                 await context.sync();
@@ -1311,14 +1314,7 @@ export async function addAnswersDistribution() {
                 numberText.font.bold = true;
                 
                 await context.sync();
-            }
-            
-            // AFTER all shapes are created and styled, hide bars with value 0
-            // This must be done last to avoid PowerPoint API issues
-            if (barsToHide.length > 0) {
-                for (const bar of barsToHide) {
-                    bar.visible = false;
-                }
+                
                 await context.sync();
             }
             
@@ -1418,18 +1414,16 @@ export async function updateAnswersDistribution(answersData) {
                      const labelItems = shapesToUpdate.filter(item => item.type === 'label');
                      
                      for(const item of barItems) {
-                         item.shape.load(['top', 'height', 'visible', 'line', 'fill']);
+                         // Removed 'line' and 'fill' to prevent issues and isolated geometry updates
+                         item.shape.load(['top', 'height', 'visible']);
                      }
                      for(const item of labelItems) {
-                         item.shape.load(['top', 'height']);
+                         // Added textFrame for label update
+                         item.shape.load(['top', 'height', 'textFrame']);
                      }
                      await context.sync();
 
-                     // Track bars to hide (defer visibility change)
-                     const barsToHide = [];
-                     const barsToShow = [];
-                     
-                     // Second pass: Update bars and collect baselines (NO visibility changes yet)
+                     // Second pass: Update bars and collect baselines
                      for(const item of barItems) {
                         const { shape, answerNumber } = item;
                         
@@ -1442,59 +1436,21 @@ export async function updateAnswersDistribution(answersData) {
                         // Minimum height of 5 to avoid PowerPoint errors
                         const finalHeight = value === 0 ? 5 : Math.max(calculatedHeight, 5); 
                         
-                        // Always set fill and line properties
-                        try { if (shape.fill) shape.fill.setSolidColor(answerColors[answerNumber].fill); } catch(e) {}
-                        
-                        try {
-                            if (shape.line) {
-                                shape.line.visible = true;
-                                shape.line.color = answerColors[answerNumber].border;
-                                shape.line.weight = 1.5;
-                            }
-                        } catch(e) {}
-                        
-                        if (value === 0) {
-                           // Keep minimum height
-                           shape.height = 5;
-                           shape.top = currentBaseline - 5;
-                           // Track for later hiding
-                           barsToHide.push(shape);
-                           console.log(`✅ Preparing to hide bar ${answerNumber} (value 0) at baseline ${currentBaseline}`);
-                        } else {
-                           shape.height = finalHeight;
-                           // Important: grow upwards (Top = Baseline - Height)
-                           shape.top = currentBaseline - finalHeight;
-                           // Track for showing
-                           barsToShow.push(shape);
-                           console.log(`✅ Updating bar ${answerNumber} to height ${finalHeight}, top ${shape.top}`);
-                        }
+                        // Round values to avoid potential precision issues
+                        const safeHeight = Math.round(finalHeight * 10) / 10;
+                        const safeTop = Math.round((currentBaseline - safeHeight) * 10) / 10;
+
+                        // Always update geometry only - avoid visible property which causes GeneralException
+                        shape.height = safeHeight;
+                        shape.top = safeTop;
+                        console.log(`✅ Updating bar ${answerNumber} to height ${safeHeight}, top ${safeTop} (value: ${value})`);
                      }
                     
-                    // Sync all property changes first (before visibility)
-                    try {
-                        await context.sync();
-                        console.log(`✅ Bar properties synced for slide ${i + 1}`);
-                    } catch (barSyncError) {
-                        console.warn(`⚠️ Bar property sync warning for slide ${i + 1}:`, barSyncError.message);
-                    }
-                    
-                    // NOW set visibility (after all other properties are synced)
-                    for (const bar of barsToShow) {
-                        bar.visible = true;
-                    }
-                    for (const bar of barsToHide) {
-                        bar.visible = false;
-                    }
-                    
-                    // Sync visibility changes
-                    try {
-                        await context.sync();
-                        console.log(`✅ Bar visibility synced for slide ${i + 1}`);
-                    } catch (visSyncError) {
-                        console.warn(`⚠️ Bar visibility sync warning for slide ${i + 1}:`, visSyncError.message);
-                    }
+                    // Sync bars first - this is the critical part
+                    await context.sync();
+                    console.log(`✅ Bars synced for slide ${i + 1}`);
 
-                    // Third pass: Update label positions first
+                    // Third pass: Update labels (position AND text)
                     for (const item of labelItems) {
                         const { shape, answerNumber } = item;
                         const value = answersData[answerNumber];
@@ -1506,51 +1462,23 @@ export async function updateAnswersDistribution(answersData) {
                             ? baselines[answerNumber] 
                             : (defaultChartTop + maxBarHeight);
                         
-                        // Update position
-                        shape.top = baseline - actualBarHeight - 30;
-                        console.log(`✅ Updated label ${answerNumber} position, top ${shape.top}`);
-                    }
-
-                    // Sync label positions
-                    try {
-                        await context.sync();
-                    } catch (labelPosSyncError) {
-                        console.warn(`⚠️ Label position sync warning for slide ${i + 1}:`, labelPosSyncError.message);
-                    }
-                    
-                    // Fourth pass: Update label TEXT (must be separate from position)
-                    for (const item of labelItems) {
-                        const { shape, answerNumber } = item;
-                        const value = answersData[answerNumber];
-                        
-                        // Load textFrame for text update
-                        shape.load(['textFrame']);
-                    }
-                    
-                    try {
-                        await context.sync();
-                    } catch (e) {}
-                    
-                    // Now update the text
-                    for (const item of labelItems) {
-                        const { shape, answerNumber } = item;
-                        const value = answersData[answerNumber];
-                        
+                        // Update position and text
                         try {
-                            if (shape.textFrame && shape.textFrame.textRange) {
-                                shape.textFrame.textRange.text = value.toString();
-                                console.log(`✅ Updated label ${answerNumber} text to ${value}`);
-                            }
-                        } catch(textError) {
-                            console.warn(`⚠️ Could not update label ${answerNumber} text:`, textError.message);
+                             shape.top = baseline - actualBarHeight - 30;
+                             if(shape.textFrame) {
+                                 shape.textFrame.textRange.text = value.toString();
+                             }
+                             console.log(`✅ Updated label ${answerNumber} to "${value}" position, top ${shape.top}`);
+                        } catch(labelError) {
+                             console.error(`⚠️ Failed to update label ${answerNumber}:`, labelError);
                         }
                     }
 
-                    // Sync label text
+                    // Sync labels separately
                     try {
                         await context.sync();
-                    } catch (labelTextSyncError) {
-                        console.warn(`⚠️ Label text sync warning for slide ${i + 1}:`, labelTextSyncError.message);
+                    } catch (labelSyncError) {
+                        console.warn(`⚠️ Label sync warning for slide ${i + 1}:`, labelSyncError.message);
                     }
                 }
             }
@@ -2240,17 +2168,23 @@ export async function updateParticipantsListInSlides() {
                      }
                  }
                  
-                 if (containerShape) {
-                     // Clear the container text only if there are participants
-                     const participants = Array.from(participantsData.values());
-                     
-                     if (participants.length > 0) {
-                         try {
-                             containerShape.textFrame.textRange.text = '';
-                         } catch (e) {
-                             // Ignore if no text frame
-                         }
-                     }
+                 // 1. Get participants
+                 const participants = Array.from(participantsData.values());
+
+                 // 2. Universal cleanup if no participants (Works even if container is missing)
+                 if (participants.length === 0) {
+                     console.log('🗑️ No participants - clearing all user items on slide');
+                     try {
+                         for (const s of allParticipantItems) s.delete();
+                         if (containerShape) containerShape.textFrame.textRange.text = 'מחכים למשתתפים...';
+                         await context.sync();
+                     } catch(e) { console.warn('Cleanup error:', e); }
+                 }
+
+                 // 3. Render logic (Requires container)
+                 if (containerShape && participants.length > 0) {
+                     // Clear "Waiting..."
+                     try { containerShape.textFrame.textRange.text = ''; } catch(e) {}
                      
                      // Layout settings
                      const itemWidth = 90;   // Width per participant
@@ -2266,20 +2200,10 @@ export async function updateParticipantsListInSlides() {
                      const newParticipants = participants.filter(p => !existingParticipantIds.has(p.userId || p.id));
                      
                      // Helper to check if row needs rebuild
-                     // Count actual shapes (divide by 2 assuming icon+text) to get count
                      const actualVisualCount = Math.floor(allParticipantItems.length / 2);
-                     console.log(`📋 Existing tracked: ${existingParticipantIds.size}, Visual count: ${actualVisualCount}, New: ${newParticipants.length}, Total target: ${participants.length}, ItemsPerRow: ${itemsPerRow}`);
+                     console.log(`📋 Update: Visual(${actualVisualCount}), New(${newParticipants.length}), Total(${participants.length})`);
                      
-                     if (participants.length === 0) {
-                         // Show waiting message
-                         try {
-                             containerShape.textFrame.textRange.text = 'מחכים למשתתפים...';
-                             // Also clear any lingering items
-                             for (const s of allParticipantItems) {
-                                 try { s.delete(); } catch(e) {}
-                             }
-                         } catch (e) {}
-                     } else if (newParticipants.length > 0 || actualVisualCount > 0) {
+                     if (newParticipants.length > 0 || actualVisualCount > 0) {
                          // Smart Update Strategy
                          
                          const totalCount = participants.length;

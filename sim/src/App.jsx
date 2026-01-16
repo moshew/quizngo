@@ -3,7 +3,7 @@ import { io } from 'socket.io-client'
 import { PLAYER_ICONS } from './icons'
 import './App.css'
 
-// 10 שחקנים פיקטיביים
+// 30 שחקנים פיקטיביים
 const FAKE_PLAYERS = [
   { id: 'p1', name: 'אלכס כהן' },
   { id: 'p2', name: 'שרה לוי' },
@@ -14,7 +14,27 @@ const FAKE_PLAYERS = [
   { id: 'p7', name: 'רונן שמיר' },
   { id: 'p8', name: 'תמר פרידמן' },
   { id: 'p9', name: 'עומר דהן' },
-  { id: 'p10', name: 'ליאת בר' }
+  { id: 'p10', name: 'ליאת בר' },
+  { id: 'p11', name: 'אביגיל ספקטור' },
+  { id: 'p12', name: 'דודו המלך' },
+  { id: 'p13', name: 'רותי אהרוני' },
+  { id: 'p14', name: 'שלמה שרף' },
+  { id: 'p15', name: 'גלית גוטמן' },
+  { id: 'p16', name: 'חיים יבין' },
+  { id: 'p17', name: 'יונית לוי' },
+  { id: 'p18', name: 'עודד בן עמי' },
+  { id: 'p19', name: 'אילנה דיין' },
+  { id: 'p20', name: 'רפי רשף' },
+  { id: 'p21', name: 'ארז טל' },
+  { id: 'p22', name: 'אסי עזר' },
+  { id: 'p23', name: 'רותם סלע' },
+  { id: 'p24', name: 'גיא זוהר' },
+  { id: 'p25', name: 'לוסי אהריש' },
+  { id: 'p26', name: 'דני קושמרו' },
+  { id: 'p27', name: 'קרן מרציאנו' },
+  { id: 'p28', name: 'עמית סגל' },
+  { id: 'p29', name: 'אמנון אברמוביץ\'' },
+  { id: 'p30', name: 'רינה מצליח' }
 ]
 
 // Get server URL from environment or use default
