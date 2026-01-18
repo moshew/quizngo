@@ -82,14 +82,6 @@ function setupSocketEventHandlers(config) {
         }
     });
     
-    socket.on('room_registered', (data) => {
-        if (data.status === 'success') {
-            console.log('✅ Successfully registered to room:', data.hashId);
-        } else {
-            console.error('❌ Room registration failed:', data.message);
-        }
-    });
-    
     socket.on('disconnect', () => {
         console.log('❌ WebSocket disconnected');
         

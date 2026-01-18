@@ -72,3 +72,30 @@ export async function stopAcceptingParticipants(hashId) {
     }
 }
 
+// Register socket to room by hash ID
+export async function registerRoom(socketId, hashId) {
+    try {
+        console.log('🔗 Registering socket to room:', { socketId, hashId });
+        const response = await makeApiCall('register_room', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ socketId, hashId })
+        });
+        
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('❌ Failed to register room:', text);
+            return { status: 'error', message: text };
+        }
+        
+        const data = await response.json();
+        console.log('✅ Register room response:', data);
+        return data;
+    } catch (error) {
+        console.error('❌ Error registering room:', error);
+        return { status: 'error', message: error.message };
+    }
+}
+

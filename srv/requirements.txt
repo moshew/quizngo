@@ -12,6 +12,7 @@ python-dotenv==1.0.0
 
 # WebSocket support
 flask-socketio==5.3.0
+eventlet==0.35.2
 
 # QR Code generation
 qrcode[pil]==7.4.2

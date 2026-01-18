@@ -112,6 +112,25 @@ function App() {
       const cleanGamePin = gamePin.replace(/-/g, '')
       const playerIcon = PLAYER_ICONS[player.id] || '👤'; // Default if not found
       
+      // 1. Create WebSocket FIRST to get socketId
+      console.log(`🔌 Creating WebSocket for player: ${player.name}`)
+      const playerSocket = io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: false,
+        forceNew: true
+      })
+
+      // Wait for socket to connect
+      await new Promise((resolve, reject) => {
+        playerSocket.on('connect', resolve)
+        playerSocket.on('connect_error', reject)
+        // Timeout after 5 seconds
+        setTimeout(() => reject(new Error('Socket connection timeout')), 5000)
+      })
+
+      console.log(`✅ WebSocket connected for ${player.name}, socketId: ${playerSocket.id}`)
+
+      // 2. Send single REST request with socketId to join AND register to room
       const response = await fetch(`${API_BASE}/?join_player`, {
         method: 'POST',
         headers: {
@@ -120,7 +139,8 @@ function App() {
         body: JSON.stringify({
           game_pin: cleanGamePin,
           name: player.name,
-          icon: playerIcon
+          icon: playerIcon,
+          socketId: playerSocket.id  // Include socketId to register socket to room
         })
       })
 
@@ -131,36 +151,11 @@ function App() {
         // Store the UID for this player
         setPlayerUIDs(prev => ({ ...prev, [player.id]: data.uid }))
         setConnectedPlayers(prev => new Set([...prev, player.id]))
-        console.log(`💾 Stored UID for ${player.name}: ${data.uid}`)
-        
-        // Create individual WebSocket for this player
-        console.log(`🔌 Creating WebSocket for player: ${player.name}`)
-        const playerSocket = io(SOCKET_URL, {
-          transports: ['websocket', 'polling'],
-          reconnection: false,  // Disable automatic reconnection
-          forceNew: true        // Force new Manager for each socket
-        })
+        console.log(`💾 Stored UID for ${player.name}: ${data.uid}, socket registered to room ${data.hashId}`)
 
-        playerSocket.on('connect', () => {
-          console.log(`✅ WebSocket connected for ${player.name}`)
-          
-          // Register this socket to the room AND link it to the player UID
-          playerSocket.emit('register_room_by_pin', { 
-            gamePin: cleanGamePin,
-            userId: data.uid  // Send UID so server can link socket to player
-          })
-        })
-
+        // Setup socket event handlers (socket was already created and connected above)
         playerSocket.on('disconnect', () => {
           console.log(`❌ WebSocket disconnected for ${player.name}`)
-        })
-        
-        playerSocket.on('room_registered', (roomData) => {
-          if (roomData.status === 'success') {
-            console.log(`✅ ${player.name} registered to room:`, roomData.hashId)
-          } else {
-            console.error(`❌ ${player.name} room registration failed:`, roomData.message)
-          }
         })
 
         // קבלת עדכוני משתתפים (כל socket יעדכן את המספר הכולל)
@@ -190,7 +185,55 @@ function App() {
             return answerData.timestamp
           })
         })
-        
+                // Game closed event - reset player to "join" state
+        playerSocket.on('game_closed', (closeData) => {
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          console.log(`🚫 GAME CLOSED for ${player.name}!`)
+          console.log('📦 Data:', closeData)
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          
+          // Disconnect this player's socket
+          playerSocket.disconnect()
+          
+          // Remove from ref
+          delete playerSocketsRef.current[player.id]
+          
+          // Reset player to "join" state - clear UID so they need to rejoin
+          setPlayerUIDs(prev => {
+            const newUIDs = { ...prev }
+            delete newUIDs[player.id]
+            return newUIDs
+          })
+          
+          // Remove from connected players
+          setConnectedPlayers(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(player.id)
+            return newSet
+          })
+          
+          // Remove socket from state
+          setPlayerSockets(prev => {
+            const newSockets = { ...prev }
+            delete newSockets[player.id]
+            return newSockets
+          })
+          
+          // Clear answer state
+          setPlayerAnswers(prev => {
+            const newAnswers = { ...prev }
+            delete newAnswers[player.id]
+            return newAnswers
+          })
+          
+          setPlayerResults(prev => {
+            const newResults = { ...prev }
+            delete newResults[player.id]
+            return newResults
+          })
+          
+          console.log(`✅ ${player.name} reset to JOIN state due to game_closed (reason: ${closeData.reason})`)
+        })
         // Player results event
         playerSocket.on('player_results', (resultsData) => {
           console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
@@ -222,6 +265,8 @@ function App() {
         setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
         
       } else {
+        // Join failed - disconnect the socket we created
+        playerSocket.disconnect()
         alert(`שגיאה בחיבור ${player.name}: ${data.message || data.error}`)
       }
     } catch (error) {
@@ -333,7 +378,26 @@ function App() {
     try {
       console.log(`🔄 Reconnecting player: ${player.name} (UID: ${uid})`)
       
-      // Call rejoin_player endpoint
+      const cleanGamePin = gamePin.replace(/-/g, '')
+      
+      // 1. Create WebSocket FIRST to get socketId
+      console.log(`🔌 Creating WebSocket for reconnected player: ${player.name}`)
+      const playerSocket = io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: false,
+        forceNew: true
+      })
+
+      // Wait for socket to connect
+      await new Promise((resolve, reject) => {
+        playerSocket.on('connect', resolve)
+        playerSocket.on('connect_error', reject)
+        setTimeout(() => reject(new Error('Socket connection timeout')), 5000)
+      })
+
+      console.log(`✅ WebSocket connected for ${player.name}, socketId: ${playerSocket.id}`)
+
+      // 2. Send single REST request with socketId to rejoin AND register to room
       const response = await fetch(`${API_BASE}/rejoin_player`, {
         method: 'POST',
         headers: {
@@ -341,7 +405,8 @@ function App() {
         },
         body: JSON.stringify({
           userId: uid,
-          gamePin: gamePin.replace(/-/g, '')
+          gamePin: cleanGamePin,
+          socketId: playerSocket.id  // Include socketId to register socket to room
         })
       })
 
@@ -349,43 +414,29 @@ function App() {
       console.log(`✅ Rejoin response:`, data)
 
       if (response.ok && data.status === 'success') {
-        // Create WebSocket connection
-        console.log(`🔌 Creating WebSocket for reconnected player: ${player.name}`)
-        const playerSocket = io(SOCKET_URL, {
-          transports: ['websocket', 'polling'],
-          reconnection: false,  // Disable automatic reconnection
-          forceNew: true        // Force new Manager for each socket
-        })
+        console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.hashId}`)
+        
+        // Handle sync data if player reconnected during answer time
+        if (data.syncData) {
+          console.log(`🔄 Received sync data for ${player.name}:`, data.syncData)
+          setIsAnswerTime(true)
+          setCurrentQuestionTimestamp(data.syncData.timestamp)
+        }
 
-        playerSocket.on('connect', () => {
-          console.log(`✅ WebSocket connected for ${player.name}`)
-          
-          // Register socket to room
-          playerSocket.emit('register_room_by_pin', { 
-            gamePin: gamePin.replace(/-/g, ''),
-            userId: uid
-          })
-        })
-
+        // Setup socket event handlers
         playerSocket.on('disconnect', () => {
           console.log(`❌ WebSocket disconnected for ${player.name}`)
         })
-        
-        playerSocket.on('room_registered', (roomData) => {
-          if (roomData.status === 'success') {
-            console.log(`✅ ${player.name} registered to room:`, roomData.hashId)
-          }
-        })
 
         // Listen for participant updates
-        playerSocket.on('participant_update', (data) => {
-          console.log(`👥 Participant update for ${player.name}:`, data)
-          setTotalUsers(data.total || 0)
+        playerSocket.on('participant_update', (updateData) => {
+          console.log(`👥 Participant update for ${player.name}:`, updateData)
+          setTotalUsers(updateData.total || 0)
         })
 
         // Listen for answer_time_started to restore game state
-        playerSocket.on('answer_time_started', (data) => {
-          console.log(`⏰ Answer time started for ${player.name}:`, data)
+        playerSocket.on('answer_time_started', (answerData) => {
+          console.log(`⏰ Answer time started for ${player.name}:`, answerData)
           
           setIsAnswerTime(true)
           
@@ -402,11 +453,6 @@ function App() {
           })
         })
 
-        // Listen for player_answer events (other players' answers)
-        playerSocket.on('player_answer', (data) => {
-          console.log(`👂 ${player.name} received player_answer:`, data)
-        })
-
         // Listen for player results
         playerSocket.on('player_results', (resultsData) => {
           console.log(`📊 Results for ${player.name}:`, resultsData)
@@ -418,6 +464,56 @@ function App() {
           }))
         })
 
+        // Game closed event - reset player to "join" state
+        playerSocket.on('game_closed', (closeData) => {
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          console.log(`🚫 GAME CLOSED for ${player.name}!`)
+          console.log('📦 Data:', closeData)
+          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          
+          // Disconnect this player's socket
+          playerSocket.disconnect()
+          
+          // Remove from ref
+          delete playerSocketsRef.current[player.id]
+          
+          // Reset player to "join" state - clear UID so they need to rejoin
+          setPlayerUIDs(prev => {
+            const newUIDs = { ...prev }
+            delete newUIDs[player.id]
+            return newUIDs
+          })
+          
+          // Remove from connected players
+          setConnectedPlayers(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(player.id)
+            return newSet
+          })
+          
+          // Remove socket from state
+          setPlayerSockets(prev => {
+            const newSockets = { ...prev }
+            delete newSockets[player.id]
+            return newSockets
+          })
+          
+          // Clear answer state
+          setPlayerAnswers(prev => {
+            const newAnswers = { ...prev }
+            delete newAnswers[player.id]
+            return newAnswers
+          })
+          
+          setPlayerResults(prev => {
+            const newResults = { ...prev }
+            delete newResults[player.id]
+            return newResults
+          })
+          
+          console.log(`✅ ${player.name} reset to JOIN state due to game_closed (reason: ${closeData.reason})`)
+        })
+
         // Store socket in ref AND state
         playerSocketsRef.current[player.id] = playerSocket
         setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
@@ -427,6 +523,9 @@ function App() {
         
       } else {
         console.warn(`❌ Rejoin failed with status ${response.status}: ${data.message}`)
+        
+        // Rejoin failed - disconnect the socket we created
+        playerSocket.disconnect()
         
         // If player not found (404), clear UID so they can join fresh
         if (response.status === 404) {

@@ -35,7 +35,7 @@
 console.log('📄 taskpane.js loaded (Refactored Version)!');
 
 // Import modules
-import { API_BASE, makeApiCall, makeJsonApiCall, initializeQuiz, startAcceptingParticipants, stopAcceptingParticipants } from './modules/api.js';
+import { API_BASE, makeApiCall, makeJsonApiCall, initializeQuiz, startAcceptingParticipants, stopAcceptingParticipants, registerRoom } from './modules/api.js';
 import { 
     initializeWebSocket, 
     getSocket, 
@@ -195,9 +195,15 @@ Office.onReady((info) => {
             onConnect: async (socket) => {
                 const hashId = await getGameHashId();
                 if (hashId) {
-                    console.log('🔑 Registering with hash ID:', hashId);
-                    socket.emit('register_room', { hashId: hashId });
-                    window.currentHashId = hashId;
+                    console.log('🔑 Registering with hash ID via REST:', hashId);
+                    // Use REST API to register socket to room
+                    const result = await registerRoom(socket.id, hashId);
+                    if (result.status === 'success') {
+                        console.log('✅ Successfully registered to room:', result.hashId);
+                        window.currentHashId = hashId;
+                    } else {
+                        console.error('❌ Failed to register to room:', result.message);
+                    }
                 } else {
                     console.log('⚠️ No hash ID available - running without room registration');
                 }
