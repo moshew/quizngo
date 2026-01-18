@@ -201,6 +201,33 @@ Office.onReady((info) => {
                     if (result.status === 'success') {
                         console.log('✅ Successfully registered to room:', result.hashId);
                         window.currentHashId = hashId;
+                        
+                        // Check if there's an active game
+                        if (result.hasActiveGame) {
+                            console.log('🎮 Active game found with PIN:', result.gamePin);
+                            window.gamePIN = result.gamePin;
+                        } else {
+                            console.log('⏳ No active game - waiting for admin to start a game');
+                        }
+                        
+                        // Re-initialize presentation state after reconnection
+                        console.log('🔄 Re-initializing presentation state after reconnection...');
+                        try {
+                            // Reload presentation data from server
+                            await loadPresentationData();
+                            console.log('✅ Presentation data reloaded');
+                            
+                            // Get current slide and load its type
+                            await getCurrentSlideNumber();
+                            loadSlideType(htmlCache);
+                            console.log('✅ Current slide type loaded:', window.currentSlideNumber);
+                            
+                            // Process current slide to update UI and trigger any needed actions
+                            await processSlideChange(htmlCache, false);
+                            console.log('✅ Current slide processed');
+                        } catch (error) {
+                            console.error('⚠️ Error during reconnection re-initialization:', error);
+                        }
                     } else {
                         console.error('❌ Failed to register to room:', result.message);
                     }
@@ -370,28 +397,9 @@ Office.onReady((info) => {
         window.socket = socket;
         console.log('✅ Socket stored in window.socket');
         
-        // Get initial slide number and load slide type
-        setTimeout(async () => {
-            console.log('🔄 Starting initial slide detection...');
-            try {
-                await getCurrentSlideNumber();
-                
-                console.log('📍 Current slide detected:', window.currentSlideNumber, 'ID:', window.currentSlideId);
-                
-                try {
-                    await loadPresentationData();
-                } catch (error) {
-                    console.log('No existing presentation data found:', error);
-                }
-                
-                loadSlideType(htmlCache);
-                console.log('🎯 Loaded slide type for current slide:', window.currentSlideNumber);
-                
-                console.log('✅ Initial setup completed - current slide:', window.currentSlideNumber);
-            } catch (error) {
-                console.error('Error in initial setup:', error);
-            }
-        }, 0); // Wait for PowerPoint to be fully ready
+        // Note: Initial slide detection and presentation data loading is handled
+        // in onConnect callback after WebSocket connects and registers to room.
+        // This ensures proper sequencing: connect → register room → load data → process slide
         
         console.log('🎯 Kahoot Quiz Manager Add-in initialized - VERSION 5.0.0 (Refactored)');
         console.log('📦 Using modular architecture');

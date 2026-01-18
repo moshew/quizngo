@@ -13,6 +13,11 @@ add-in/certs/
 srv/venv/
 venv/
 
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
 # Server data and logs
 srv/data/
 srv/logs/

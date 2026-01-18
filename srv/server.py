@@ -87,7 +87,7 @@ register_websocket_handlers(
 
 # Create and register blueprints
 player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
-game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
+game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, DATA_DIR)
 presentation_bp = create_presentation_routes(game, DATA_DIR)
 navigation_bp = create_navigation_routes(socketio, game, game_sessions, client_rooms)
 info_bp = create_info_routes(game)

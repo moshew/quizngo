@@ -10,7 +10,7 @@ from flask import Blueprint, request, jsonify
 from utils.room_utils import emit_to_room, check_game_active, close_game_and_cleanup, schedule_game_timeout
 
 
-def create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player):
+def create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, data_dir=None):
     """
     Create game management routes blueprint.
     
@@ -21,6 +21,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
         player_registry: Dict of registered players
         client_rooms: Dict mapping socket ID to hash ID
         socket_to_player: Dict mapping socket ID to player UID
+        data_dir: Path to data directory for saved presentations
     
     Returns:
         Blueprint with game routes
@@ -401,10 +402,13 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
 
     @game_bp.route('/register_room', methods=['POST'])
     def register_room():
-        """REST endpoint to register a socket to a room by hash ID (for add-in)"""
+        """REST endpoint to register a socket to a room by hash ID (for add-in).
+        
+        This just registers the socket to the room for receiving events.
+        It does NOT require an active game - the add-in can be connected and waiting
+        for the admin to start a game.
+        """
         try:
-            from flask_socketio import join_room as socketio_join_room
-            
             data = request.get_json()
             socket_id = data.get('socketId')
             hash_id = data.get('hashId')
@@ -417,26 +421,31 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'message': 'Missing socketId or hashId'
                 }), 400
             
-            # Validate hash_id exists
-            if hash_id not in game_sessions:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'No active game found with hash {hash_id}'
-                }), 404
-            
             # Join Socket.IO room using socketio.server API
+            # This allows the add-in to receive events when admin starts a game
             socketio.server.enter_room(socket_id, hash_id, namespace='/')
             
             # Track in our mapping
             client_rooms[socket_id] = hash_id
             
-            game.log(f'✅ Client {socket_id} joined room (hash): {hash_id} via REST')
+            # Check if there's an active game session
+            has_active_game = hash_id in game_sessions and game_sessions[hash_id].get('active', False)
             
-            return jsonify({
+            game.log(f'✅ Client {socket_id} joined room (hash): {hash_id} via REST')
+            game.log(f'   Active game: {has_active_game}')
+            
+            response_data = {
                 'status': 'success',
                 'hashId': hash_id,
-                'socketId': socket_id
-            })
+                'socketId': socket_id,
+                'hasActiveGame': has_active_game
+            }
+            
+            # If there's an active game, include the game PIN
+            if has_active_game:
+                response_data['gamePin'] = game_sessions[hash_id].get('gamePin')
+            
+            return jsonify(response_data)
             
         except Exception as e:
             game.log(f'❌ Error in register_room: {str(e)}')
