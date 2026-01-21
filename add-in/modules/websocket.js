@@ -351,8 +351,8 @@ export function getCurrentQuestionAnswers() {
  */
 async function updateRespondentsCount(count) {
     try {
-        // Import PowerPoint shapes module dynamically to avoid circular dependency
-        const { updateCurrentSlideRespondentsCount } = await import('./powerpoint-shapes.js');
+        // Import question timer module dynamically to avoid circular dependency
+        const { updateCurrentSlideRespondentsCount } = await import('./elements/question_timer.js');
         await updateCurrentSlideRespondentsCount(count);
     } catch (error) {
         console.error('❌ Error updating respondents count:', error);

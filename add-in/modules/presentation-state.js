@@ -3,10 +3,30 @@
  * Handles presentation data saving, loading, file management, and auto-save
  */
 
-/* global Office */
+/* global Office, PowerPoint */
 
 import { API_BASE } from './api.js';
 import { updateAutoSaveStatus } from './ui-manager.js';
+
+/**
+ * Generate UUID v4
+ */
+export function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+/**
+ * Get or create unique ID for slide
+ */
+export async function getSlideUniqueId(slide, context) {
+    slide.load('id');
+    await context.sync();
+    return slide.id;
+}
 
 // Auto-save mechanism variables
 let autoSaveTimer = null;

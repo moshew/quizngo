@@ -8,7 +8,7 @@
 import { API_BASE } from './api.js';
 import { getGameHashId, getSlideData } from './presentation-state.js';
 import { showStatus, showError, updateUIForSlideType, initializeStartScreen } from './ui-manager.js';
-import { updateCurrentSlideQuestionTime } from './powerpoint-shapes.js';
+import { updateCurrentSlideQuestionTime } from './elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
 
 /**
@@ -193,7 +193,8 @@ async function handleQuestionEnd() {
             
             console.log('📊 Aggregated answers for graph update:', answersCount);
             
-            const { updateAnswersDistribution, updateAllRespondentsCountElements, updateLeaderboard } = await import('./powerpoint-shapes.js');
+            const { updateAnswersDistribution, updateLeaderboard } = await import('./elements/answers_analysis.js');
+            const { updateAllRespondentsCountElements } = await import('./elements/question_timer.js');
             
             // Update all answer distribution graphs (heights and value labels)
             await updateAnswersDistribution(answersCount);

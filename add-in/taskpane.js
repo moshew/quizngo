@@ -63,23 +63,29 @@ import {
 } from './modules/presentation-state.js';
 import { 
     updateGameIdInSlides, 
-    resetParticipantsNumInSlides,
-    updateParticipantsNumInSlides,
     updateQrCodeInSlides, 
     insertGameIdButton,
+    insertQrCodeButton
+} from './modules/elements/game_management.js';
+import {
+    resetParticipantsNumInSlides,
+    updateParticipantsNumInSlides,
     insertParticipantsNumButton,
     insertParticipantsListButton,
-    updateParticipantsListInSlides,
-    insertQrCodeButton,
+    updateParticipantsListInSlides
+} from './modules/elements/participants_management.js';
+import {
     addQuestionTime,
     addRespondentsCount,
+    updateAllQuestionTimeElements,
+    updateAllRespondentsCountElements
+} from './modules/elements/question_timer.js';
+import {
     addAnswersDistribution,
     updateAnswersDistribution,
-    updateAllQuestionTimeElements,
-    updateAllRespondentsCountElements,
     addLeaderboardElements,
     updateLeaderboard
-} from './modules/powerpoint-shapes.js';
+} from './modules/elements/answers_analysis.js';
 import { 
     showStatus, 
     showError, 
