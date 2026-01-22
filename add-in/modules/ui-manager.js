@@ -118,11 +118,6 @@ export function updateAutoSaveStatus(status) {
             statusElement.style.color = '#ffc107';
             statusElement.style.display = 'block';
             break;
-        case 'waiting':
-            statusElement.textContent = '⏳ ממתין לשמירת הקובץ (Save As)...';
-            statusElement.style.color = '#ff9800';
-            statusElement.style.display = 'block';
-            break;
         case 'saving':
             statusElement.textContent = '💾 שומר...';
             statusElement.style.color = '#0078d4';

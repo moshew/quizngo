@@ -105,6 +105,9 @@ export function loadSlideType(htmlCache) {
         slideTypeDropdown.value = slideType;
     }
     
+    // Load hidden state
+    loadHiddenSlideState();
+    
     updateUIForSlideType(slideType, htmlCache).then(() => {
         // For question slides, attach event listener to correctAnswer dropdown
         if (slideType === 'question') {
@@ -117,6 +120,71 @@ export function loadSlideType(htmlCache) {
     }).catch(err => {
         console.error('❌ Error in updateUIForSlideType:', err);
     });
+}
+
+/**
+ * Load hidden slide state from slideTypeData
+ */
+export function loadHiddenSlideState() {
+    const slideId = window.currentSlideId;
+    if (!slideId) return;
+    
+    const hideSlideCheckbox = document.getElementById('hideSlide');
+    if (!hideSlideCheckbox) return;
+    
+    const slideData = window.slideTypeData[slideId];
+    const isHidden = slideData && slideData.isHidden === true;
+    
+    hideSlideCheckbox.checked = isHidden;
+    console.log(`👁️ Slide ${window.currentSlideNumber} hidden state: ${isHidden}`);
+}
+
+/**
+ * Save hidden slide state to slideTypeData
+ */
+export function saveHiddenSlideState(isHidden) {
+    const slideId = window.currentSlideId;
+    if (!slideId) {
+        console.warn('⚠️ No slide ID available, cannot save hidden state');
+        return;
+    }
+    
+    // Ensure slideTypeData entry exists
+    if (!window.slideTypeData[slideId]) {
+        window.slideTypeData[slideId] = {
+            type: 'transition'
+        };
+    } else if (typeof window.slideTypeData[slideId] === 'string') {
+        // Convert from string to object
+        window.slideTypeData[slideId] = {
+            type: window.slideTypeData[slideId]
+        };
+    }
+    
+    window.slideTypeData[slideId].isHidden = isHidden;
+    
+    console.log(`🙈 Slide ${window.currentSlideNumber} hidden state saved: ${isHidden}`);
+    console.log('🗺️ Current slideTypeData:', window.slideTypeData);
+    
+    // Trigger auto-save
+    triggerAutoSave();
+}
+
+/**
+ * Setup hide slide checkbox event listener
+ */
+export function setupHideSlideListener() {
+    const hideSlideCheckbox = document.getElementById('hideSlide');
+    if (!hideSlideCheckbox) {
+        console.warn('⚠️ hideSlide checkbox not found');
+        return;
+    }
+    
+    hideSlideCheckbox.addEventListener('change', () => {
+        saveHiddenSlideState(hideSlideCheckbox.checked);
+    });
+    
+    console.log('✅ Hide slide listener attached');
 }
 
 /**

@@ -172,12 +172,13 @@ def create_presentation_routes(game, data_dir):
                 }), 400
             
             if not save_file.exists():
-                print(f"❌ No saved file found: {save_file}")
-                game.log(f'No saved data found for hash ID: {hash_id}')
+                print(f"ℹ️ No saved file found: {save_file} (first time)")
+                game.log(f'No saved data found for hash ID: {hash_id} (first time)')
                 return jsonify({
-                    'status': 'error',
-                    'message': 'No saved data found for this presentation'
-                }), 404
+                    'status': 'not_found',
+                    'message': 'No saved data found for this presentation',
+                    'data': None
+                }), 200  # Return 200 to avoid browser console error
             
             # Load the data directly from file
             with open(save_file, 'r', encoding='utf-8') as f:

@@ -296,10 +296,10 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             
             if not check_game_active(game_sessions, hash_id):
                 return jsonify({
-                    'status': 'warning',
-                    'message': 'Game session is not active or does not exist',
+                    'status': 'no_game',
+                    'message': 'No active game session - waiting for game to start',
                     'game_closed': True
-                }), 403
+                }), 200  # Return 200 to avoid browser console error
             
             # Enable participant acceptance
             game_sessions[hash_id]['acceptingParticipants'] = True
@@ -373,6 +373,11 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'message': 'Invalid hash ID length'
                 }), 400
             
+            # Check if this presentation exists (has saved data)
+            saved_files_dir = data_dir / 'saved_presentations'
+            save_file = saved_files_dir / f'{hash_id}.json'
+            presentation_exists = save_file.exists()
+            
             # Check if session exists and is active
             if hash_id in game_sessions and game_sessions[hash_id].get('active', False):
                 session = game_sessions[hash_id]
@@ -381,15 +386,17 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 return jsonify({
                     'status': 'success',
                     'active': True,
+                    'presentationExists': presentation_exists,
                     'gamePin': session.get('gamePin'),
                     'timestamp': session.get('timestamp'),
                     'hashId': hash_id
                 })
             else:
-                game.log(f'❌ No active game found for hash {hash_id}')
+                game.log(f'ℹ️ No active game for hash {hash_id}, presentation exists: {presentation_exists}')
                 return jsonify({
                     'status': 'success',
                     'active': False,
+                    'presentationExists': presentation_exists,
                     'hashId': hash_id
                 })
                 

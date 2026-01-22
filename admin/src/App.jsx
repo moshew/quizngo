@@ -56,6 +56,14 @@ function App() {
       const response = await fetch(url)
       const data = await response.json()
       
+      // Check if presentation exists
+      if (data.presentationExists === false) {
+        console.error('❌ Presentation not found for hash:', hashId)
+        setError('❌ המצגת לא נמצאה - וודא שהמצגת פתוחה ב-PowerPoint')
+        setGameActive(false)
+        return
+      }
+      
       if (data.status === 'success' && data.active) {
         // Active game found - use existing game PIN
         console.log('✅ Active game found! Game PIN:', data.gamePin)

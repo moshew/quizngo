@@ -37,8 +37,13 @@ export async function startAcceptingParticipants(hashId) {
         const response = await makeApiCall(`?start_accepting_participants&hash_id=${hashId}`);
         
         if (!response.ok) {
+            // 403 is expected when no game session exists yet - not an error
+            if (response.status === 403) {
+                console.log('ℹ️ No active game session yet - waiting for game to start');
+                return false;
+            }
             const text = await response.text();
-            console.error('❌ Failed to start accepting participants:', text);
+            console.warn('⚠️ Could not start accepting participants:', text);
             return false;
         }
         
@@ -46,7 +51,7 @@ export async function startAcceptingParticipants(hashId) {
         console.log('✅ Start accepting participants response:', data);
         return data.status === 'success';
     } catch (error) {
-        console.error('❌ Error calling start_accepting_participants:', error);
+        console.log('ℹ️ Could not start accepting participants:', error.message);
         return false;
     }
 }

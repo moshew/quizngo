@@ -229,93 +229,56 @@ export async function getPresentationFileName() {
 }
 
 /**
- * Create hash from path (client-side implementation)
+ * Generate a unique ID for the presentation
+ * Uses crypto.randomUUID() for a truly unique identifier
  */
-export function createHashFromPath(path) {
-    try {
-        console.log('🔑 Creating hash from path:', path);
-        
-        // VALIDATION: Check if path exists and is not empty/whitespace
-        if (!path || typeof path !== 'string' || path.trim() === '') {
-            console.warn('⚠️ Invalid path: empty or not a string');
-            return null;
-        }
-        
-        // VALIDATION: Check if this looks like a valid file path
-        const isValidPath = 
-            /^[a-zA-Z]:[\\\/]/.test(path) ||  // Windows drive (C:\ or C:/)
-            /^\\\\/.test(path) ||              // UNC path (\\server\share)
-            /^\//.test(path) ||                // Unix path (/)
-            /^file:\/\/\//.test(path) ||       // File URL (file:///)
-            /^https?:\/\//.test(path);         // HTTP(S) URL
-        
-        if (!isValidPath) {
-            console.warn('⚠️ Invalid path format:', path);
-            return null;
-        }
-        
-        // VALIDATION: Check path length
-        if (path.length < 3 || path.length > 1000) {
-            console.warn('⚠️ Path length out of range:', path.length);
-            return null;
-        }
-        
-        // Normalize the path (lowercase for consistency)
-        let normalizedPath = path.toLowerCase();
-        
-        // Replace backslashes with forward slashes for consistency
-        normalizedPath = normalizedPath.replace(/\\/g, '/');
-        
-        // Simple hash implementation
-        let hash = 0;
-        for (let i = 0; i < normalizedPath.length; i++) {
-            const char = normalizedPath.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32-bit integer
-        }
-        
-        // Convert to hex and take first 12 characters
-        const hashHex = Math.abs(hash).toString(16).padStart(12, '0').substring(0, 12);
-        
-        console.log('✅ Generated hash ID:', hashHex);
-        return hashHex;
-        
-    } catch (error) {
-        console.error('❌ Error creating hash:', error);
-        return null;
+function generateUniqueId() {
+    // Use crypto.randomUUID() if available, otherwise fallback
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID().replace(/-/g, '').substring(0, 12);
     }
+    // Fallback: generate a random hex string
+    return Math.random().toString(16).substring(2, 14).padStart(12, '0');
 }
 
 /**
- * Get the game hash ID
+ * Get or create a persistent Kahoot ID stored in presentation tags
+ * This ID is saved inside the .pptx file and persists across file moves/renames
  */
 export async function getGameHashId() {
     try {
-        console.log('🔑 Getting game hash ID...');
+        console.log('🔑 Getting/creating Kahoot ID from presentation tags...');
         
-        // Get presentation file info
-        const fileInfo = await getPresentationFileInfo();
-        
-        if (!fileInfo || !fileInfo.fullPath) {
-            console.log('⚠️ Presentation not saved yet - no hash ID available');
-            return null;
-        }
-        
-        console.log('📁 Full path:', fileInfo.fullPath);
-        
-        // Generate hash client-side
-        const hashId = createHashFromPath(fileInfo.fullPath);
-        
-        if (hashId) {
-            console.log('✅ Hash ID generated client-side:', hashId);
-        } else {
-            console.error('❌ Failed to generate hash ID');
-        }
-        
-        return hashId;
+        return await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            presentation.tags.load("items");
+            await context.sync();
+            
+            // Check if kahoot_id already exists
+            for (const tag of presentation.tags.items) {
+                if (tag.key.toLowerCase() === 'kahoot_id') {
+                    console.log('✅ Found existing Kahoot ID:', tag.value);
+                    window.currentHashId = tag.value;
+                    return tag.value;
+                }
+            }
+            
+            // Create new unique ID
+            const newId = generateUniqueId();
+            console.log('🆕 Creating new Kahoot ID:', newId);
+            
+            presentation.tags.add('kahoot_id', newId);
+            await context.sync();
+            
+            console.log('✅ Kahoot ID created and saved to presentation tags');
+            console.log('💾 Remember to save the presentation to persist the ID!');
+            
+            window.currentHashId = newId;
+            return newId;
+        });
         
     } catch (error) {
-        console.error('❌ Error getting hash ID:', error);
+        console.error('❌ Error getting/creating Kahoot ID:', error);
         return null;
     }
 }
@@ -368,35 +331,15 @@ export async function savePresentationData() {
     try {
         console.log('🚀 Starting save process...');
         
-        // CRITICAL: Check if presentation is saved first
-        const isSaved = await isPresentationSaved();
-        
-        if (!isSaved) {
-            console.error('❌ Cannot save - presentation is not saved to disk');
-            return;
-        }
-        
-        // Get file info (full path + display name)
-        const fileInfo = await getPresentationFileInfo();
-        
-        if (!fileInfo || !fileInfo.fullPath) {
-            console.log('🚫 Could not get file info');
-            return;
-        }
-        
-        console.log('✅ Presentation is saved');
-        console.log('📄 Display name:', fileInfo.displayName);
-        console.log('📁 Full path:', fileInfo.fullPath);
-        
-        // Generate hash ID client-side
-        const hashId = createHashFromPath(fileInfo.fullPath);
+        // Get Kahoot ID from presentation tags (creates one if doesn't exist)
+        const hashId = await getGameHashId();
         
         if (!hashId) {
-            console.error('❌ Failed to generate hash ID');
+            console.error('❌ Failed to get Kahoot ID');
             return;
         }
         
-        console.log('🔑 Hash ID:', hashId);
+        console.log('🔑 Kahoot ID:', hashId);
         
         // Prepare game state to save
         const gameState = {
@@ -412,7 +355,7 @@ export async function savePresentationData() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 hashId: hashId,
-                data: gameState  // Server expects 'data' not 'gameState'
+                data: gameState
             })
         });
 
@@ -443,35 +386,15 @@ export async function loadPresentationData() {
     try {
         console.log('📂 Starting load process...');
         
-        // Check if presentation is saved (has a file name)
-        const isSaved = await isPresentationSaved();
-        
-        if (!isSaved) {
-            console.log('ℹ️ Presentation not saved yet - no data to load');
-            console.log('ℹ️ Save the presentation first to enable data persistence');
-            return;
-        }
-        
-        // Get file info (full path)
-        const fileInfo = await getPresentationFileInfo();
-        
-        if (!fileInfo || !fileInfo.fullPath) {
-            console.log('📋 No valid file path for loading - skipping');
-            return;
-        }
-        
-        console.log('📂 Loading data for presentation:', fileInfo.displayName);
-        console.log('📁 Full path:', fileInfo.fullPath);
-        
-        // Generate hash ID client-side
-        const hashId = createHashFromPath(fileInfo.fullPath);
+        // Get Kahoot ID from presentation tags (creates one if doesn't exist)
+        const hashId = await getGameHashId();
         
         if (!hashId) {
-            console.error('❌ Failed to generate hash ID for loading');
+            console.error('❌ Failed to get Kahoot ID for loading');
             return;
         }
         
-        console.log('🔑 Generated hash ID:', hashId);
+        console.log('🔑 Kahoot ID:', hashId);
         
         const response = await fetch(API_BASE + 'load', {
             method: 'POST',
@@ -481,6 +404,13 @@ export async function loadPresentationData() {
 
         if (response.ok) {
             const result = await response.json();
+            
+            // Handle 'not_found' status (no saved data yet - normal for new presentations)
+            if (result.status === 'not_found') {
+                console.log('ℹ️ No saved data found for this presentation (first time)');
+                return null;
+            }
+            
             console.log('📦 Server response:', JSON.stringify(result, null, 2));
             
             // Server returns data directly (not wrapped in gameState)
@@ -508,17 +438,18 @@ export async function loadPresentationData() {
                 return gameState;
             } else {
                 console.log('ℹ️ No saved data found');
-                console.log('   result.status:', result?.status);
-                console.log('   result.data:', result?.data);
                 return null;
             }
+        } else if (response.status === 404) {
+            // 404 is expected when no data has been saved yet - not an error
+            console.log('ℹ️ No saved data found for this presentation (first time)');
+            return null;
         } else {
-            const errorText = await response.text();
-            console.log('❌ Server returned error:', response.status, errorText);
+            console.warn('⚠️ Server returned unexpected status:', response.status);
             return null;
         }
     } catch (error) {
-        console.log('⚠️ Loading error:', error.message);
+        console.log('ℹ️ Could not load data:', error.message);
         return null;
     }
 }
@@ -595,18 +526,6 @@ async function performAutoSave() {
     }
     
     console.log('💾 Performing auto-save...');
-    
-    const isSaved = await isPresentationSaved();
-    
-    if (!isSaved) {
-        console.log('⚠️ Presentation not saved, auto-save will wait');
-        updateAutoSaveStatus('waiting');
-        
-        autoSaveTimer = setTimeout(async () => {
-            await performAutoSave();
-        }, 5000);
-        return;
-    }
     
     try {
         updateAutoSaveStatus('saving');

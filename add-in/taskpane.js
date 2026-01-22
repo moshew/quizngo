@@ -58,7 +58,6 @@ import {
     setSlideType, 
     getSlideData,
     getGameHashId,
-    isPresentationSaved,
     triggerAutoSave
 } from './modules/presentation-state.js';
 import { 
@@ -104,7 +103,8 @@ import {
     saveSlideType, 
     loadSlideType, 
     openSettings, 
-    closeSettings 
+    closeSettings,
+    setupHideSlideListener 
 } from './modules/slide-manager.js';
 import { 
     setupSlideChangeListener, 
@@ -144,9 +144,7 @@ window.getParticipantsCount = getParticipantsCount;
 // Presentation settings (shared across all slides)
 window.presentationSettings = {
     questionWaitTime: 30,
-    clockActivationDelay: 5,
-    afterQuestionStatistics: true,
-    afterQuestionLeaderboard: false
+    clockActivationDelay: 5
 };
 
 // Auto-save mechanism variables
@@ -170,11 +168,33 @@ window.htmlCache = htmlCache;
 // Setup slide change listener
 // setupSlideChangeListener, onSlideChanged, processSlideChange moved to event-handlers.js
 
+// Test function to display the Kahoot ID (creates one if doesn't exist)
+async function testPresentationId() {
+    try {
+        // This will get existing ID or create a new one
+        const kahootId = await getGameHashId();
+        
+        if (kahootId) {
+            console.log('✅ Kahoot ID:', kahootId);
+            showStatus(`Kahoot ID: ${kahootId}`, 'info');
+        } else {
+            console.warn('⚠️ Could not get/create Kahoot ID');
+            showStatus('Could not get/create Kahoot ID', 'warning');
+        }
+    } catch (error) {
+        console.error("❌ Error getting Kahoot ID:", error);
+        showStatus(`Error: ${error.message}`, 'error');
+    }
+}
+
 // Initialize the add-in when Office is ready
 Office.onReady((info) => {
     console.log('🚀 Office.onReady called!', info);
     if (info.host === Office.HostType.PowerPoint) {
         console.log('✅ PowerPoint detected - initializing add-in...');
+        
+        // Test: Get and display the internal Presentation ID
+        testPresentationId();
         
         // Set up slide type selection event handler
         const slideTypeElement = document.getElementById('slideType');
@@ -184,6 +204,9 @@ Office.onReady((info) => {
         } else {
             console.warn('⚠️ slideType dropdown not found');
         }
+        
+        // Set up hide slide checkbox event handler
+        setupHideSlideListener();
         
         // Pre-load all HTML files for instant transitions
         preloadAllHtmlFiles(htmlCache).catch(err => {
