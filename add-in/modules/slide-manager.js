@@ -4,37 +4,18 @@
  */
 
 import { 
-    updateUIForSlideType, 
-    attachQuestionAnswerListener, 
-    initializeStartScreen,
-    loadSettingsIntoUI,
-    attachSettingsEventListeners
-} from './ui-manager.js';
-import { 
-    getSlideType, 
-    setSlideType, 
-    triggerAutoSave 
+    triggerAutoSave,
+    getSlideType,
+    setSlideType
 } from './presentation-state.js';
 
 /**
- * Handle slide type change from dropdown
+ * Handle slide type change from dropdown (now mostly handled by dialog in taskpane.js)
+ * Keeping this for backward compatibility if needed or called from elsewhere
  */
 export function handleSlideTypeChange(htmlCache) {
-    const slideType = document.getElementById('slideType').value;
-    console.log(`🔄 Slide type changed to: ${slideType} for slide ${window.currentSlideNumber} (ID: ${window.currentSlideId})`);
-    saveSlideType(slideType);
-    updateUIForSlideType(slideType, htmlCache).then(() => {
-        // For question slides, attach event listener to correctAnswer dropdown
-        if (slideType === 'question') {
-            attachQuestionAnswerListener();
-        }
-        // For start slides, initialize QR code
-        else if (slideType === 'start') {
-            initializeStartScreen();
-        }
-    }).catch(err => {
-        console.error('❌ Error in updateUIForSlideType:', err);
-    });
+    // This function is likely no longer used as we use confirmSlideTypeChange in taskpane.js
+    console.log('handleSlideTypeChange called - deprecated');
 }
 
 /**
@@ -48,7 +29,6 @@ export function saveSlideType(slideType) {
     
     const slideId = window.currentSlideId;
     const previousType = getSlideType(slideId);
-    const isUpdate = previousType !== undefined && previousType !== null;
     
     // Special handling for "question" type
     if (slideType === 'question') {
@@ -59,7 +39,6 @@ export function saveSlideType(slideType) {
                 type: slideType,
                 correctAnswer: '1'
             };
-            console.log('💾 Slide type SAVED with default answer: 1');
         } else {
             existingData.type = slideType;
         }
@@ -67,24 +46,23 @@ export function saveSlideType(slideType) {
         setSlideType(slideId, slideType);
     }
     
-    if (isUpdate) {
-        console.log('🔄 Slide type UPDATED:', previousType, '→', slideType);
-    } else {
-        console.log('💾 Slide type SAVED (new):', slideType);
-    }
-    
-    console.log('🗺️ Current slideTypeData:', window.slideTypeData);
+    console.log(`💾 Slide type SAVED: ${slideType} for slide ${slideId}`);
     
     // Trigger auto-save
     triggerAutoSave();
+    
+    // Refresh list if function exists
+    if (window.refreshSlideList) {
+        window.refreshSlideList();
+    }
 }
 
 /**
- * Load slide type for current slide and update UI
+ * Load slide type for current slide
+ * Now just logs and ensures state is consistent. No UI loading.
  */
 export function loadSlideType(htmlCache) {
     if (!window.currentSlideId) {
-        console.warn('⚠️ No current slide ID available');
         return;
     }
     
@@ -94,120 +72,42 @@ export function loadSlideType(htmlCache) {
     // Default to "transition" for new slides
     if (!slideType) {
         slideType = 'transition';
-        console.log(`📋 No slide type found, defaulting to: ${slideType}`);
     }
     
-    console.log(`🔍 Loading slide type for slide ${window.currentSlideNumber} (ID: ${slideId})`);
-    console.log(`📋 Slide type: ${slideType}`);
+    console.log(`🔍 Slide ${window.currentSlideNumber} (ID: ${slideId}) is type: ${slideType}`);
     
-    const slideTypeDropdown = document.getElementById('slideType');
-    if (slideTypeDropdown) {
-        slideTypeDropdown.value = slideType;
+    // We don't load HTML anymore. The List in Tab 1 updates via refreshSlideList.
+    // However, we might want to ensure the list highlights the correct item.
+    if (window.refreshSlideList) {
+        // We can just highlight the row without full refresh if optimized, 
+        // but for now refreshSlideList handles selection class.
+        // But refreshSlideList is async and reads from PPT.
+        // We can optimize by just updating the DOM class if we know the ID.
+        
+        const rows = document.querySelectorAll('.slide-item');
+        rows.forEach(row => row.classList.remove('selected'));
+        
+        // Find row by some attribute? We didn't add ID to LI.
+        // Let's rely on refreshSlideList called by onSlideChanged.
     }
     
     // Load hidden state
     loadHiddenSlideState();
-    
-    updateUIForSlideType(slideType, htmlCache).then(() => {
-        // For question slides, attach event listener to correctAnswer dropdown
-        if (slideType === 'question') {
-            attachQuestionAnswerListener();
-        }
-        // For start slides, initialize QR code
-        else if (slideType === 'start') {
-            initializeStartScreen();
-        }
-    }).catch(err => {
-        console.error('❌ Error in updateUIForSlideType:', err);
-    });
 }
 
 /**
  * Load hidden slide state from slideTypeData
  */
 export function loadHiddenSlideState() {
-    const slideId = window.currentSlideId;
-    if (!slideId) return;
-    
-    const hideSlideCheckbox = document.getElementById('hideSlide');
-    if (!hideSlideCheckbox) return;
-    
-    const slideData = window.slideTypeData[slideId];
-    const isHidden = slideData && slideData.isHidden === true;
-    
-    hideSlideCheckbox.checked = isHidden;
-    console.log(`👁️ Slide ${window.currentSlideNumber} hidden state: ${isHidden}`);
-}
-
-/**
- * Save hidden slide state to slideTypeData
- */
-export function saveHiddenSlideState(isHidden) {
-    const slideId = window.currentSlideId;
-    if (!slideId) {
-        console.warn('⚠️ No slide ID available, cannot save hidden state');
-        return;
-    }
-    
-    // Ensure slideTypeData entry exists
-    if (!window.slideTypeData[slideId]) {
-        window.slideTypeData[slideId] = {
-            type: 'transition'
-        };
-    } else if (typeof window.slideTypeData[slideId] === 'string') {
-        // Convert from string to object
-        window.slideTypeData[slideId] = {
-            type: window.slideTypeData[slideId]
-        };
-    }
-    
-    window.slideTypeData[slideId].isHidden = isHidden;
-    
-    console.log(`🙈 Slide ${window.currentSlideNumber} hidden state saved: ${isHidden}`);
-    console.log('🗺️ Current slideTypeData:', window.slideTypeData);
-    
-    // Trigger auto-save
-    triggerAutoSave();
+    // Hidden slide feature might need UI element in the new layout if desired.
+    // Currently no UI for it in the new tabs, so ignoring or logging.
+    // const slideId = window.currentSlideId;
+    // const isHidden = slideData && slideData.isHidden === true;
 }
 
 /**
  * Setup hide slide checkbox event listener
  */
 export function setupHideSlideListener() {
-    const hideSlideCheckbox = document.getElementById('hideSlide');
-    if (!hideSlideCheckbox) {
-        console.warn('⚠️ hideSlide checkbox not found');
-        return;
-    }
-    
-    hideSlideCheckbox.addEventListener('change', () => {
-        saveHiddenSlideState(hideSlideCheckbox.checked);
-    });
-    
-    console.log('✅ Hide slide listener attached');
+    // No longer relevant in new UI unless we add the checkbox back
 }
-
-/**
- * Open settings screen
- */
-export async function openSettings(htmlCache) {
-    console.log('⚙️ Opening settings...');
-    console.log('📊 Current presentationSettings:', window.presentationSettings);
-    
-    await updateUIForSlideType('settings', htmlCache);
-    
-    // After HTML is loaded, load settings into UI
-    setTimeout(() => {
-        loadSettingsIntoUI();
-        attachSettingsEventListeners();
-    }, 0);
-}
-
-/**
- * Close settings and return to current slide
- */
-export async function closeSettings(htmlCache) {
-    console.log('⚙️ Closing settings...');
-    loadSlideType(htmlCache);
-}
-

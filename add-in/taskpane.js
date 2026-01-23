@@ -1,191 +1,156 @@
 /* global Office, PowerPoint */
 
-/*
- * Kahoot Quiz Manager - Add-in Client (Refactored)
- * 
- * STATE MANAGEMENT:
- * ================
- * - The state (window.slideTypeData) is ONLY managed in PowerPoint (this client)
- * - The server ONLY saves/loads state to/from files - NO CACHE in server memory
- * - Slide types are stored by slide ID (UUID), NOT by slide number
- * - This ensures slide types persist correctly even if slides are reordered
- * 
- * SLIDE IDENTIFICATION:
- * ====================
- * - Each slide has a unique ID provided by PowerPoint (slide.id)
- * - window.slideTypeData uses these IDs as keys: { "256": "opening", "257": "transition", ... }
- * - When loading, we restore window.slideTypeData and look up types by current slide's ID
- * - PowerPoint's slide.id is stable and persists across saves/loads
- * 
- * FILE NAMING & PERSISTENCE:
- * =========================
- * - Data is saved per presentation file using the file name as ID
- * - IMPORTANT: Presentation MUST be saved (File > Save As) before data can be saved
- * - The file name (without .pptx) is used as the unique ID for saving/loading
- * - Example: "MyQuiz.pptx" → saved as "data/saved_presentations/MyQuiz.json"
- * - If presentation is not saved (has no file name), save/load operations are blocked
- * 
- * SERVER ROLE:
- * ============
- * - Server provides /save endpoint: saves state to file (data/saved_presentations/{filename}.json)
- * - Server provides /load endpoint: loads state from file
- * - Server does NOT cache or modify state - it's a pure storage service
- */
-
-console.log('📄 taskpane.js loaded (Refactored Version)!');
+console.log('📄 taskpane.js loaded (Tabbed Version)!');
 
 // Import modules
-import { API_BASE, makeApiCall, makeJsonApiCall, initializeQuiz, startAcceptingParticipants, stopAcceptingParticipants, registerRoom } from './modules/api.js';
-import { 
-    initializeWebSocket, 
-    getSocket, 
-    emitSocketEvent, 
-    getParticipantsList,
-    getParticipantsCount,
-    resetParticipantsList
-} from './modules/websocket.js';
-import { 
-    goToFirstSlideInPowerPoint, 
-    goToNextSlideInPowerPoint, 
-    simulateClickInPowerPoint, 
-    resetAnimationState,
-    getCurrentSlideNumber 
-} from './modules/navigation.js';
-import { 
-    savePresentationData, 
-    loadPresentationData, 
-    getSlideType, 
-    setSlideType, 
-    getSlideData,
-    getGameHashId,
-    triggerAutoSave
-} from './modules/presentation-state.js';
-import { 
-    updateGameIdInSlides, 
-    updateQrCodeInSlides, 
-    insertGameIdButton,
-    insertQrCodeButton
-} from './modules/elements/game_management.js';
-import {
-    resetParticipantsNumInSlides,
-    updateParticipantsNumInSlides,
-    insertParticipantsNumButton,
-    insertParticipantsListButton,
-    updateParticipantsListInSlides
-} from './modules/elements/participants_management.js';
-import {
-    addQuestionTime,
-    addRespondentsCount,
-    updateAllQuestionTimeElements,
-    updateAllRespondentsCountElements
-} from './modules/elements/question_timer.js';
-import {
-    addAnswersDistribution,
-    updateAnswersDistribution,
-    addLeaderboardElements,
-    updateLeaderboard
-} from './modules/elements/answers_analysis.js';
-import { 
-    showStatus, 
-    showError, 
-    updateDisplayedValues, 
-    updateAutoSaveStatus,
-    preloadAllHtmlFiles,
-    updateUIForSlideType,
-    initializeStartScreen,
-    loadSettingsIntoUI,
-    attachSettingsEventListeners,
-    attachQuestionAnswerListener,
-    loadSharedActions
-} from './modules/ui-manager.js';
+import { API_BASE, registerRoom } from './modules/api.js';
+import { initializeWebSocket } from './modules/websocket.js';
 import { 
     handleSlideTypeChange, 
     saveSlideType, 
-    loadSlideType, 
-    openSettings, 
-    closeSettings,
+    loadHiddenSlideState,
     setupHideSlideListener 
 } from './modules/slide-manager.js';
 import { 
     setupSlideChangeListener, 
-    onSlideChanged, 
-    processSlideChange,
-    resetParticipantAcceptanceState
+    onSlideChanged 
 } from './modules/event-handlers.js';
 import { 
-    startPresentationMode, 
-    startTimer, 
-    stopTimer, 
-    showLeaderboard, 
-    insertLeaderboardTable, 
-    showFinalResults, 
-    insertFinalLeaderboard, 
-    endGame, 
-    showStatistics, 
-    insertAnswerStats 
+    startPresentationMode
 } from './modules/game-actions.js';
+import {
+    goToFirstSlideInPowerPoint,
+    goToNextSlideInPowerPoint,
+    simulateClickInPowerPoint,
+    resetAnimationState
+} from './modules/navigation.js';
+import {
+    resetParticipantAcceptanceState
+} from './modules/event-handlers.js';
+import {
+    resetParticipantsList
+} from './modules/websocket.js';
+import {
+    updateAllQuestionTimeElements,
+    updateAllRespondentsCountElements
+} from './modules/elements/question_timer.js';
+import {
+    resetParticipantsNumInSlides,
+    updateParticipantsListInSlides,
+    updateParticipantsNumInSlides
+} from './modules/elements/participants_management.js';
+import {
+    resetAnswersDistribution,
+    resetLeaderboard
+} from './modules/elements/answers_analysis.js';
+import {
+    updateGameIdInSlides,
+    updateQrCodeInSlides
+} from './modules/elements/game_management.js';
+import {
+    addQuestionTime,
+    addRespondentsCount
+} from './modules/elements/question_timer.js';
+import {
+    showStatus,
+    showError
+} from './modules/ui-manager.js';
+import { 
+    getSlideType, 
+    loadPresentationData,
+    triggerAutoSave 
+} from './modules/presentation-state.js';
+import {
+    insertGameIdButton,
+    insertQrCodeButton
+} from './modules/elements/game_management.js';
+import {
+    insertParticipantsListButton,
+    insertParticipantsNumButton
+} from './modules/elements/participants_management.js';
+import { 
+    addAnswersDistribution, 
+    addLeaderboardElements 
+} from './modules/elements/answers_analysis.js';
+
+// --- Global Functions (Attached to window for HTML access) ---
+
+window.switchTab = function(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    
+    // Show selected
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+    
+    // Highlight tab button
+    const tabs = document.querySelectorAll('.tab');
+    if (tabName === 'slides') tabs[0].classList.add('active');
+    if (tabName === 'actions') tabs[1].classList.add('active');
+    if (tabName === 'settings') {
+        tabs[2].classList.add('active');
+        // Load current settings into the tab
+        loadSettingsToTab();
+    }
+};
+
+window.closeDialogs = function() {
+    document.querySelectorAll('.overlay').forEach(el => el.style.display = 'none');
+};
+
+// Load settings into the settings tab
+function loadSettingsToTab() {
+    const settings = window.presentationSettings || {
+        questionWaitTime: 30,
+        clockActivationDelay: 5,
+        afterQuestionStatistics: true,
+        afterQuestionLeaderboard: false
+    };
+    
+    document.getElementById('settingTimeTab').value = settings.questionWaitTime;
+    document.getElementById('settingDelayTab').value = settings.clockActivationDelay;
+    document.getElementById('settingAfterStatsTab').checked = settings.afterQuestionStatistics !== false;
+    document.getElementById('settingAfterLeaderboardTab').checked = settings.afterQuestionLeaderboard === true;
+}
+
+// Auto-save settings when any setting changes
+function autoSaveSettings() {
+    const time = parseInt(document.getElementById('settingTimeTab').value) || 30;
+    const delay = parseInt(document.getElementById('settingDelayTab').value) || 5;
+    const stats = document.getElementById('settingAfterStatsTab').checked;
+    const board = document.getElementById('settingAfterLeaderboardTab').checked;
+    
+    window.presentationSettings = {
+        questionWaitTime: time,
+        clockActivationDelay: delay,
+        afterQuestionStatistics: stats,
+        afterQuestionLeaderboard: board
+    };
+    
+    // Trigger auto-save if available
+    if (window.triggerAutoSave) window.triggerAutoSave();
+    
+    console.log('Settings auto-saved:', window.presentationSettings);
+}
+
+// Setup settings auto-save listeners
+function setupSettingsListeners() {
+    document.getElementById('settingTimeTab').addEventListener('change', autoSaveSettings);
+    document.getElementById('settingDelayTab').addEventListener('change', autoSaveSettings);
+    document.getElementById('settingAfterStatsTab').addEventListener('change', autoSaveSettings);
+    document.getElementById('settingAfterLeaderboardTab').addEventListener('change', autoSaveSettings);
+}
+
 
 // State variables
-let isInitialized = false;
-let autoUpdateInterval = null;
-let slideCheckInterval = null;
-
-// IMPORTANT: All state is stored on window object for consistency and global access
-// NOTE: currentUsers is now calculated from participantsList.length
-window.currentTime = '';
 window.currentSlideNumber = 1;
 window.currentSlideId = null;
 window.slideTypeData = {};
-window.lastQuestionSlideIndex = null;
-
-// Expose participants count getter
-window.getParticipantsCount = getParticipantsCount;
-
-// Presentation settings (shared across all slides)
 window.presentationSettings = {
     questionWaitTime: 30,
     clockActivationDelay: 5
 };
-
-// Auto-save mechanism variables
-let autoSaveTimer = null;
-let hasUnsavedChanges = false;
-const AUTO_SAVE_DELAY = 0; // Immediate save for debugging
-window.markUnsavedChanges = null;
-
-let timerActive = false;
-let localTimerInterval = null;
-let localTimerRemaining = 0;
-
-// Clear any cached data
-localStorage.clear();
-sessionStorage.clear();
-
-// HTML files cache (global for access from other modules)
-const htmlCache = new Map();
-window.htmlCache = htmlCache;
-
-// Setup slide change listener
-// setupSlideChangeListener, onSlideChanged, processSlideChange moved to event-handlers.js
-
-// Test function to display the Kahoot ID (creates one if doesn't exist)
-async function testPresentationId() {
-    try {
-        // This will get existing ID or create a new one
-        const kahootId = await getGameHashId();
-        
-        if (kahootId) {
-            console.log('✅ Kahoot ID:', kahootId);
-            showStatus(`Kahoot ID: ${kahootId}`, 'info');
-        } else {
-            console.warn('⚠️ Could not get/create Kahoot ID');
-            showStatus('Could not get/create Kahoot ID', 'warning');
-        }
-    } catch (error) {
-        console.error("❌ Error getting Kahoot ID:", error);
-        showStatus(`Error: ${error.message}`, 'error');
-    }
-}
+window.contextMenuTargetSlideId = null;
 
 // Initialize the add-in when Office is ready
 Office.onReady((info) => {
@@ -193,295 +158,555 @@ Office.onReady((info) => {
     if (info.host === Office.HostType.PowerPoint) {
         console.log('✅ PowerPoint detected - initializing add-in...');
         
-        // Test: Get and display the internal Presentation ID
-        testPresentationId();
+        // Check for URL parameters (e.g. from deep link or manual launch)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlHashId = urlParams.get('hash_id');
         
-        // Set up slide type selection event handler
-        const slideTypeElement = document.getElementById('slideType');
-        if (slideTypeElement) {
-            slideTypeElement.onchange = () => handleSlideTypeChange(htmlCache);
-            console.log('✅ slideType dropdown event handler attached');
-        } else {
-            console.warn('⚠️ slideType dropdown not found');
+        if (urlHashId) {
+            console.log('🔗 Found hash_id in URL:', urlHashId);
+            window.currentHashId = urlHashId;
         }
         
-        // Set up hide slide checkbox event handler
-        setupHideSlideListener();
+        // Create shared HTML cache
+        const htmlCache = new Map();
+
+        // Initialize Tabs and Lists
+        renderActionsTab();
+        setupSettingsListeners();
+        loadSettingsToTab();
         
-        // Pre-load all HTML files for instant transitions
-        preloadAllHtmlFiles(htmlCache).catch(err => {
-            console.warn('⚠️ Some HTML files failed to preload:', err);
+        // Attach persistent button listeners
+        document.getElementById('btnStartGame').onclick = () => startPresentationMode(htmlCache);
+        
+        const slideContentArea = document.getElementById('slideContentArea');
+    const mainContent = document.getElementById('mainContent');
+    const tabs = document.querySelector('.tabs');
+    
+    // Toggle visibility: If slideContentArea has content and is active, hide tabs and main content
+    // Check if we are in "Game Mode" (Start Presentation Mode)
+    // Actually, game-actions.js startPresentationMode calls updateUIForSlideType('start')
+    // ui-manager.js updateUIForSlideType sets slideContentArea.innerHTML
+    
+    // We need to listen or expose a way to switch modes.
+    // Ideally, updateUIForSlideType should handle the switching if it detects 'start' type or if we explicitly ask for it.
+    
+    // For now, let's modify startPresentationMode in game-actions.js to handle the UI switching
+    // OR expose a function here.
+    
+    // Load data then refresh list
+    loadPresentationData().then(async () => {
+            refreshSlideList(); // Initial load after data is ready
+            
+            // Ensure we are registered to the room if hashId is available
+            // This covers the case where hashId wasn't in URL but was loaded from presentation tags
+            if (window.socket && window.socket.connected && window.currentHashId) {
+                console.log('🔗 Late registration for hash:', window.currentHashId);
+                await registerRoom(window.socket.id, window.currentHashId);
+            }
         });
-        
-        // Load shared actions into footer
-        loadSharedActions();
-        
+
         // Set up slide change event listener
+        // We pass the htmlCache for potential future use or if we re-enable slide content swapping
         setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs, htmlCache));
         
-        // Initialize WebSocket connection with event handlers
+        // Initialize WebSocket
         const socket = initializeWebSocket({
             onConnect: async (socket) => {
-                const hashId = await getGameHashId();
+                console.log('✅ Connected to WebSocket');
+                
+                // Register room if we have a hash ID
+                const hashId = window.currentHashId;
                 if (hashId) {
-                    console.log('🔑 Registering with hash ID via REST:', hashId);
-                    // Use REST API to register socket to room
-                    const result = await registerRoom(socket.id, hashId);
-                    if (result.status === 'success') {
-                        console.log('✅ Successfully registered to room:', result.hashId);
-                        window.currentHashId = hashId;
-                        
-                        // Check if there's an active game
-                        if (result.hasActiveGame) {
-                            console.log('🎮 Active game found with PIN:', result.gamePin);
-                            window.gamePIN = result.gamePin;
-                        } else {
-                            console.log('⏳ No active game - waiting for admin to start a game');
-                        }
-                        
-                        // Re-initialize presentation state after reconnection
-                        console.log('🔄 Re-initializing presentation state after reconnection...');
-                        try {
-                            // Reload presentation data from server
-                            await loadPresentationData();
-                            console.log('✅ Presentation data reloaded');
-                            
-                            // Get current slide and load its type
-                            await getCurrentSlideNumber();
-                            loadSlideType(htmlCache);
-                            console.log('✅ Current slide type loaded:', window.currentSlideNumber);
-                            
-                            // Process current slide to update UI and trigger any needed actions
-                            await processSlideChange(htmlCache, false);
-                            console.log('✅ Current slide processed');
-                        } catch (error) {
-                            console.error('⚠️ Error during reconnection re-initialization:', error);
-                        }
-                    } else {
-                        console.error('❌ Failed to register to room:', result.message);
-                    }
-                } else {
-                    console.log('⚠️ No hash ID available - running without room registration');
+                    console.log('🔗 Registering room for hash:', hashId);
+                    await registerRoom(socket.id, hashId);
                 }
+                
+                // Status bar removed
             },
             onDisconnect: () => {
-                timerActive = false;
+                console.log('❌ Disconnected');
+                // Status bar removed
             },
-            onUserUpdate: (data) => {
-                // Legacy event - update UI if needed
-                const userCountElement = document.getElementById('userCount');
-                if (userCountElement) {
-                    userCountElement.textContent = getParticipantsCount();
-                }
-            },
-            onParticipantUpdate: (data, participantsList) => {
-                // Update kahoot-participants-num with current count
-                const participantCount = participantsList.length;
-                console.log(`👥 Updating participant count to: ${participantCount}`);
-                
-                // Update numeric count first, then update list
-                updateParticipantsNumInSlides(participantCount)
-                    .then(() => {
-                        // Update participants list visual (icons + names)
-                        return updateParticipantsListInSlides();
-                    })
-                    .catch(err => {
-                        console.error('❌ Failed to update participants visual/number:', err);
-                    });
-            },
-            onPlayerAnswer: (data, answersMap) => {
-                console.log(`📝 Player answer processed:`, data);
-                console.log(`📊 Total answers: ${answersMap.size}`);
-                // Answer processing is handled in websocket.js
-                // This callback is just for logging/debugging
-            },
-            onGamePinRegistered: (data) => {
+            onError: (msg) => showError(msg),
+            
+            // Handle game PIN registration from Admin
+            onGamePinRegistered: async (data) => {
                 const gamePin = data.gamePin;
                 
-                console.log('📌 Updating Game PIN to:', gamePin);
+                // Store the hash ID and game PIN globally
+                if (data.hashId) {
+                    window.currentHashId = data.hashId;
+                }
+                if (gamePin) {
+                    window.gamePIN = gamePin;
+                }
                 
-                // Store game PIN globally
-                window.gamePIN = gamePin;
+                // === UPDATE GAME ID & QR CODE IN SLIDES ===
+                try {
+                    // Update kahoot-game-id tags in PowerPoint slides
+                    if (gamePin) {
+                        await updateGameIdInSlides(gamePin);
+                    }
+                    
+                    // Update QR Code in slides with game PIN (for players)
+                    if (window.currentHashId && gamePin) {
+                        await updateQrCodeInSlides(window.currentHashId, gamePin);
+                    } else {
+                        console.warn('⚠️ No hash ID or game PIN available for QR code update');
+                    }
+                } catch (updateError) {
+                    console.error('❌ Error updating Game ID/QR Code:', updateError);
+                }
                 
-                // Format PIN as XXX-XXX for display
-                const formattedPin = gamePin.slice(0, 3) + '-' + gamePin.slice(3);
+                // === RESET ALL GAME STATE ===
                 
-                // Update game ID display in UI
-                const gameIdElements = document.querySelectorAll('[id^="gameId"]');
-                gameIdElements.forEach(el => {
-                    el.textContent = formattedPin;
-                });
-                
-                // Reset timer to initial value from settings
-                console.log('🔄 Resetting timer to initial value from settings...');
-                const initialTime = window.presentationSettings?.questionWaitTime || 30;
-                updateAllQuestionTimeElements(initialTime).catch(err => {
-                    console.error('❌ Failed to reset timer elements:', err);
-                });
-                
-                // Reset respondents count to 0 across all slides
-                console.log('🔄 Resetting respondents count to 0 across all slides...');
-                updateAllRespondentsCountElements(0).catch(err => {
-                    console.error('❌ Failed to reset respondents count elements:', err);
-                });
-                
-                // Reset participants list and number to 0
-                console.log('🔄 Resetting participants list and number to 0...');
-                resetParticipantsList();
-                resetParticipantsNumInSlides().catch(err => {
-                    console.error('❌ Failed to reset participants number:', err);
-                });
-                updateParticipantsListInSlides().catch(err => {
-                    console.error('❌ Failed to reset participants list visual:', err);
-                });
-                
-                // Reset participant acceptance state
+                // 1. Reset participant acceptance state
                 resetParticipantAcceptanceState();
                 
-                // Update kahoot-game-id tags in PowerPoint slides
-                updateGameIdInSlides(gamePin).catch(err => {
-                    console.error('❌ updateGameIdInSlides error:', err);
-                });
+                // 2. Reset participants list (clears all participant data)
+                resetParticipantsList();
                 
-                // Update QR Code in slides
-                if (window.currentHashId && gamePin) {
-                    updateQrCodeInSlides(window.currentHashId, gamePin).catch(err => {
-                        console.error('❌ updateQrCodeInSlides error:', err);
-                    });
+                // 3. Reset animation state
+                resetAnimationState();
+                
+                try {
+                    // 4. Reset question time elements to initial value
+                    const initialTime = window.presentationSettings?.questionWaitTime || 30;
+                    await updateAllQuestionTimeElements(initialTime);
+                    
+                    // 5. Reset respondents count to 0
+                    await updateAllRespondentsCountElements(0);
+                    
+                    // 6. Reset participants number in slides to 0
+                    await resetParticipantsNumInSlides();
+                    
+                    // 7. Reset participants list display in slides
+                    await updateParticipantsListInSlides();
+                    
+                    // 8. Reset answers distribution chart
+                    await resetAnswersDistribution();
+                    
+                    // 9. Reset leaderboard
+                    await resetLeaderboard();
+                    
+                } catch (resetError) {
+                    console.error('❌ Error during resets:', resetError);
                 }
                 
-                // Note: startAcceptingParticipants will be called automatically by processSlideChange
-                // after the slide_navigation event moves us to the first slide (which is "opening")
+                // Navigate to first slide when game starts
+                try {
+                    await goToFirstSlideInPowerPoint();
+                } catch (error) {
+                    console.error('❌ Error navigating to first slide:', error);
+                }
                 
+                // Format PIN as XXX-XXX for display
+                const formattedPin = gamePin ? gamePin.slice(0, 3) + '-' + gamePin.slice(3) : 'N/A';
                 showStatus(`🎮 משחק פעיל - Game PIN: ${formattedPin}`, 'success');
             },
-            onStatusUpdate: (data) => {
-                window.currentUsers = data.users || 0;
+            
+            // Handle slide navigation commands
+            onSlideNavigation: async (data) => {
+                console.log('🎯 Handling slide navigation:', data.action);
                 
-                const userCountElement = document.getElementById('userCount');
-                if (userCountElement) {
-                    userCountElement.textContent = window.currentUsers;
-                }
-                
-                if (data.status === 'running') {
-                    timerActive = true;
-                } else {
-                    timerActive = false;
+                try {
+                    switch (data.action) {
+                        case 'go_to_first_slide':
+                            console.log('📍 Resetting to first slide...');
+                            await goToFirstSlideInPowerPoint();
+                            showStatus('חזרה לשקף הראשון...', 'info');
+                            break;
+                        case 'go_to_next_slide':
+                        case 'next_slide': // Support both formats
+                            console.log('📄 Executing next slide navigation...');
+                            await goToNextSlideInPowerPoint();
+                            showStatus('מעבר לשקף הבא...', 'info');
+                            break;
+                        default:
+                            console.warn('⚠️ Unknown slide navigation action:', data.action);
+                    }
+                } catch (error) {
+                    console.error('❌ Error handling slide navigation:', error);
                 }
             },
-            onSlideNavigation: (data) => {
-                if (data.action === 'go_to_next_slide') {
-                    console.log('📄 Executing next slide navigation...');
-                    goToNextSlideInPowerPoint();
-                    showStatus('מעבר לשקף הבא...', 'info');
-                } else if (data.action === 'go_to_first_slide') {
-                    console.log('📍 Resetting to first slide...');
-                    goToFirstSlideInPowerPoint();
-                    showStatus('חזרה לשקף הראשון...', 'info');
-                }
-            },
-            onClickNavigation: (data) => {
+            
+            // Handle click navigation (spacebar simulation)
+            onClickNavigation: async (data) => {
+                console.log('⌨️ Handling click navigation (spacebar)...', data);
+                
                 if (data.action === 'simulate_click') {
                     console.log('⌨️ Executing spacebar simulation...');
-                    simulateClickInPowerPoint();
-                    showStatus('מדמה לחיצה על רווח...', 'info');
+                    try {
+                        await simulateClickInPowerPoint();
+                        showStatus('מדמה לחיצה על רווח...', 'info');
+                    } catch (error) {
+                        console.error('❌ Error handling click navigation:', error);
+                    }
                 }
             },
-            onAnimationReset: (data) => {
+            
+            // Handle animation reset
+            onAnimationReset: async (data) => {
+                console.log('🔄 Handling animation reset...', data);
+                
                 if (data.action === 'reset_animations') {
                     console.log('🔄 Executing animation reset...');
                     resetAnimationState();
                 }
             },
-            onSlideChange: (data) => {
-                if (data.slide) {
-                    window.currentSlideNumber = data.slide;
-                    
-                    const slideElement = document.getElementById('currentSlide');
-                    if (slideElement) {
-                        slideElement.textContent = window.currentSlideNumber;
-                    }
-                    
-                    console.log(`📄 Slide updated to: ${window.currentSlideNumber}`);
+            
+            // Handle participant updates
+            onParticipantUpdate: async (data, participantIds) => {
+                console.log('👥 Participant update received:', data);
+                console.log('👥 Total participants:', participantIds.length);
+                
+                // The websocket module already handles the data storage
+                
+                // Update participant count globally
+                window.currentUsers = participantIds.length;
+                
+                // Update participants number in all slides (kahoot-participants-num tags)
+                try {
+                    await updateParticipantsNumInSlides(participantIds.length);
+                    console.log('✅ Updated participant count in slides to:', participantIds.length);
+                } catch (error) {
+                    console.error('❌ Error updating participant count in slides:', error);
                 }
                 
-                if (data.users !== undefined) {
-                    window.currentUsers = data.users;
-                    
-                    const userCountElement = document.getElementById('userCount');
-                    if (userCountElement) {
-                        userCountElement.textContent = window.currentUsers;
-                    }
+                // Update participants list in all slides (kahoot-participants-list tags)
+                try {
+                    await updateParticipantsListInSlides();
+                    console.log('✅ Updated participant list in slides');
+                } catch (error) {
+                    console.error('❌ Error updating participant list in slides:', error);
                 }
                 
-                loadSlideType(htmlCache);
-                showStatus(`עבר לשקף ${data.slide || 'הבא'}`, 'info');
+                // Trigger UI refresh if needed
+                if (window.refreshSlideList) {
+                    window.refreshSlideList();
+                }
             },
-            onError: (message) => {
-                showError(message);
+            
+            // Handle player answers
+            onPlayerAnswer: (data, answersMap) => {
+                console.log('📝 Player answer handled, total answers:', answersMap.size);
+                // The websocket module already handles the answer storage
             }
         });
-        
-        // Store socket globally for use in other modules
         window.socket = socket;
-        console.log('✅ Socket stored in window.socket');
         
-        // Note: Initial slide detection and presentation data loading is handled
-        // in onConnect callback after WebSocket connects and registers to room.
-        // This ensures proper sequencing: connect → register room → load data → process slide
-        
-        console.log('🎯 Kahoot Quiz Manager Add-in initialized - VERSION 5.0.0 (Refactored)');
-        console.log('📦 Using modular architecture');
+        // Global refresh function for other modules
+        window.refreshSlideList = refreshSlideList;
+
     } else {
-        console.log('❌ Not in PowerPoint - host:', info.host);
+        console.log('❌ Not in PowerPoint');
     }
 });
 
-// Slide type management functions
-// handleSlideTypeChange, saveSlideType, loadSlideType moved to slide-manager.js
+// --- Tab 1: Slides List ---
 
-// Auto-save mechanism moved to presentation-state.js
+async function refreshSlideList() {
+    try {
+        const slideListEl = document.getElementById('slideList');
+        
+        // Don't show loading spinner on every refresh to avoid flicker
+        if (slideListEl.children.length === 0) {
+             document.getElementById('slides-loading').style.display = 'block';
+             slideListEl.style.display = 'none';
+        }
 
-// Initialize markUnsavedChanges
-window.markUnsavedChanges = triggerAutoSave;
+        await PowerPoint.run(async (context) => {
+            const slides = context.presentation.slides;
+            slides.load("items/id, items/tags");
+            await context.sync();
+            
+            // Status bar removed, no need to update slideCount
+            // document.getElementById('slideCount').textContent = `${slides.items.length} שקפים`;
 
-// Load shared actions into footer
-// All helper functions moved to respective modules:
-// - loadSharedActions → ui-manager.js
-// - initializeStartScreen → ui-manager.js
-// - Game actions → game-actions.js
+            // Build HTML string for better performance and less flicker
+            let listHtml = '';
 
-// Make functions globally available for HTML onclick handlers and modules
-window.initializeQuiz = initializeQuiz;
-window.startPresentationMode = () => startPresentationMode(htmlCache);
-window.openSettings = () => openSettings(htmlCache);
-window.closeSettings = () => closeSettings(htmlCache);
-window.startTimer = startTimer;
-window.stopTimer = stopTimer;
-window.goToFirstSlideInPowerPoint = goToFirstSlideInPowerPoint;
-window.goToNextSlideInPowerPoint = goToNextSlideInPowerPoint;
-window.simulateClickInPowerPoint = simulateClickInPowerPoint;
-window.resetAnimationState = resetAnimationState;
-window.savePresentationData = () => savePresentationData(false);
-window.loadPresentationData = loadPresentationData;
-window.triggerAutoSave = triggerAutoSave; // Exposed for ui-manager.js
+            // Sort slides by index (they come in order usually)
+            slides.items.forEach((slide, index) => {
+                const slideNumber = index + 1;
+                const slideId = slide.id;
+                
+                // Get type from our local state (loaded from file or memory)
+                // If not in memory, we might need to rely on what we have or default to 'transition'
+                let type = getSlideType(slideId) || 'transition';
+                let typeLabel = getTypeLabel(type);
+                
+                // Check if it's a question and has an answer
+                let extraInfo = '';
+                if (type === 'question') {
+                    const slideData = window.slideTypeData[slideId];
+                    const answer = slideData?.correctAnswer || '1';
+                    extraInfo = ` [${answer}]`;
+                }
 
-// PowerPoint insertion functions
-window.insertGameIdButton = insertGameIdButton;
-window.insertParticipantsNumButton = insertParticipantsNumButton;
-window.insertParticipantsListButton = insertParticipantsListButton;
-window.insertQrCodeButton = insertQrCodeButton;
-window.addQuestionTime = addQuestionTime;
-window.addRespondentsCount = addRespondentsCount;
-window.addAnswersDistribution = addAnswersDistribution;
-window.updateAnswersDistribution = updateAnswersDistribution;
-window.addLeaderboardElements = addLeaderboardElements;
-window.updateLeaderboard = updateLeaderboard;
-window.showLeaderboard = showLeaderboard;
-window.insertLeaderboardTable = insertLeaderboardTable;
-window.showFinalResults = showFinalResults;
-window.insertFinalLeaderboard = insertFinalLeaderboard;
-window.endGame = endGame;
-window.showStatistics = showStatistics;
-window.insertAnswerStats = insertAnswerStats;
+                const isSelected = window.currentSlideId === slideId ? ' selected' : '';
+                
+                // Use data attributes for click handling instead of inline onclick
+                listHtml += `
+                    <li id="slide-item-${slideId}" class="slide-item${isSelected}" data-index="${slideNumber}" data-id="${slideId}">
+                        <div class="slide-info">
+                            <span class="slide-title">שקף ${slideNumber} - ${typeLabel}${extraInfo}</span>
+                        </div>
+                        <button class="more-btn" title="אפשרויות" data-id="${slideId}" data-type="${type}">
+                            <i class="ms-Icon ms-Icon--MoreVertical"></i>
+                        </button>
+                    </li>
+                `;
+            });
 
+            slideListEl.innerHTML = listHtml;
+
+            // Re-attach event listeners
+            slideListEl.querySelectorAll('.slide-item').forEach(li => {
+                li.addEventListener('click', (e) => {
+                    // Ignore if clicked on the more button
+                    if (e.target.closest('.more-btn')) return;
+                    // Ignore if clicked on inline edit controls
+                    if (e.target.closest('.inline-edit-container')) return;
+                    
+                    // Visual update first
+                    slideListEl.querySelectorAll('.slide-item').forEach(item => item.classList.remove('selected'));
+                    li.classList.add('selected');
+
+                    const index = parseInt(li.getAttribute('data-index'));
+                    const slideId = li.getAttribute('data-id');
+                    
+                    // Update global state immediately
+                    window.currentSlideId = slideId;
+                    window.currentSlideNumber = index;
+
+                    navigateToSlide(index);
+                });
+            });
+
+            slideListEl.querySelectorAll('.more-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = btn.getAttribute('data-id');
+                    const type = btn.getAttribute('data-type');
+                    showContextMenu(e, id, type);
+                });
+            });
+
+            document.getElementById('slides-loading').style.display = 'none';
+            slideListEl.style.display = 'block';
+        });
+    } catch (error) {
+        console.error('Error refreshing slide list:', error);
+        showError('שגיאה בטעינת רשימת השקפים');
+    }
+}
+
+function getTypeLabel(type) {
+    const map = {
+        'opening': 'פתיחה',
+        'transition': 'מעבר',
+        'question': 'שאלה',
+        'statistics': 'סטטיסטיקת מענה',
+        'leaderboard': 'מובילים',
+        'summary': 'סיכום',
+        'start': 'מסך פתיחה'
+    };
+    return map[type] || type;
+}
+
+async function navigateToSlide(index) {
+    return new Promise((resolve, reject) => {
+        Office.context.document.goToByIdAsync(
+            index,
+            Office.GoToType.Index,
+            (asyncResult) => {
+                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                    console.error('Navigation failed:', asyncResult.error.message);
+                    reject(asyncResult.error);
+                } else {
+                    resolve();
+                }
+            }
+        );
+    });
+}
+
+// Context Menu Logic
+window.showContextMenu = function(event, slideId, currentType) {
+    event.stopPropagation();
+    window.contextMenuTargetSlideId = slideId;
+    window.contextMenuTargetType = currentType;
+    
+    const menu = document.getElementById('slideContextMenu');
+    menu.style.display = 'block';
+    
+    // Position menu near the button
+    const rect = event.target.closest('button').getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 5}px`;
+    // Fix positioning: Align left edge to button left edge (or adjust as needed for RTL)
+    menu.style.left = `${rect.left}px`; 
+    menu.style.right = 'auto';
+    
+    // Close menu when clicking outside
+    const closeMenu = () => {
+        menu.style.display = 'none';
+        document.removeEventListener('click', closeMenu);
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    
+    // Show/Hide "Set Answer" based on type
+    const setAnswerItem = document.getElementById('menuSetAnswer');
+    setAnswerItem.style.display = (currentType === 'question') ? 'block' : 'none';
+};
+
+window.openSlideTypeDialog = function() {
+    document.getElementById('slideContextMenu').style.display = 'none';
+    const slideId = window.contextMenuTargetSlideId;
+    const currentType = window.contextMenuTargetType;
+    
+    const li = document.getElementById(`slide-item-${slideId}`);
+    if (!li) return;
+
+    // Prevent clicking the li from navigating while editing
+    li.onclick = null;
+
+    li.innerHTML = `
+        <div class="inline-edit-container" onclick="event.stopPropagation()">
+            <select id="inlineSlideTypeSelect" class="inline-select">
+                <option value="opening" ${currentType === 'opening' ? 'selected' : ''}>פתיחה</option>
+                <option value="transition" ${currentType === 'transition' ? 'selected' : ''}>מעבר</option>
+                <option value="question" ${currentType === 'question' ? 'selected' : ''}>שאלה</option>
+                <option value="statistics" ${currentType === 'statistics' ? 'selected' : ''}>סטטיסטיקת מענה</option>
+                <option value="leaderboard" ${currentType === 'leaderboard' ? 'selected' : ''}>מובילים</option>
+                <option value="summary" ${currentType === 'summary' ? 'selected' : ''}>סיכום</option>
+            </select>
+            <div class="inline-actions">
+                <button class="inline-btn confirm" onclick="confirmInlineSlideTypeChange(event, '${slideId}')" title="שמור">
+                    <i class="ms-Icon ms-Icon--CheckMark"></i>
+                </button>
+                <button class="inline-btn cancel" onclick="cancelInlineEdit(event)" title="ביטול">
+                    <i class="ms-Icon ms-Icon--Cancel"></i>
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+window.cancelInlineEdit = function(event) {
+    if (event) event.stopPropagation();
+    refreshSlideList();
+};
+
+window.confirmInlineSlideTypeChange = function(event, slideId) {
+    if (event) event.stopPropagation();
+    const newType = document.getElementById('inlineSlideTypeSelect').value;
+    
+    if (slideId) {
+        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
+        
+        // Handle legacy string format if exists
+        if (typeof window.slideTypeData[slideId] === 'string') {
+            window.slideTypeData[slideId] = { type: newType };
+        } else {
+            window.slideTypeData[slideId].type = newType;
+        }
+        
+        // If changing to question, set default answer if missing
+        if (newType === 'question' && !window.slideTypeData[slideId].correctAnswer) {
+            window.slideTypeData[slideId].correctAnswer = '1';
+        }
+        
+        if (window.triggerAutoSave) window.triggerAutoSave();
+        refreshSlideList();
+    }
+};
+
+window.openSetAnswerDialog = function() {
+    document.getElementById('slideContextMenu').style.display = 'none';
+    const dialog = document.getElementById('dialogSetAnswer');
+    
+    // Get current answer from state
+    const slideId = window.contextMenuTargetSlideId;
+    const slideData = window.slideTypeData[slideId];
+    const currentAnswer = slideData?.correctAnswer || '1';
+    
+    document.getElementById('correctAnswerSelect').value = currentAnswer;
+    
+    dialog.style.display = 'flex';
+};
+
+window.confirmSlideTypeChange = function() {
+    const newType = document.getElementById('slideTypeSelect').value;
+    const slideId = window.contextMenuTargetSlideId;
+    
+    if (slideId) {
+        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
+        if (typeof window.slideTypeData[slideId] === 'string') {
+            window.slideTypeData[slideId] = { type: newType };
+        } else {
+            window.slideTypeData[slideId].type = newType;
+        }
+        
+        if (newType === 'question' && !window.slideTypeData[slideId].correctAnswer) {
+            window.slideTypeData[slideId].correctAnswer = '1';
+        }
+        
+        if (window.triggerAutoSave) window.triggerAutoSave();
+        
+        console.log(`Updated slide ${slideId} to ${newType}`);
+        
+        refreshSlideList();
+    }
+    window.closeDialogs();
+};
+
+window.confirmSetAnswer = function() {
+    const answer = document.getElementById('correctAnswerSelect').value;
+    const slideId = window.contextMenuTargetSlideId;
+    
+    if (slideId) {
+        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = { type: 'question' };
+        if (typeof window.slideTypeData[slideId] === 'string') {
+             window.slideTypeData[slideId] = { type: window.slideTypeData[slideId] };
+        }
+        
+        window.slideTypeData[slideId].correctAnswer = answer;
+        
+        if (window.triggerAutoSave) window.triggerAutoSave();
+        refreshSlideList();
+    }
+    window.closeDialogs();
+};
+
+
+// --- Tab 2: Actions ---
+
+function renderActionsTab() {
+    const grid = document.getElementById('actionsGrid');
+    
+    // Global Actions
+    const actions = [
+        // Slide Elements
+        { label: 'מזהה משחק', icon: 'Game', onclick: insertGameIdButton },
+        { label: 'מספר משתתפים', icon: 'PeopleAdd', onclick: insertParticipantsNumButton },
+        { label: 'רשימת משתתפים', icon: 'ContactList', onclick: insertParticipantsListButton },
+        { label: 'QR Code', icon: 'QRCode', onclick: insertQrCodeButton },
+
+        // Game Control
+        { label: 'זמן שאלה', icon: 'Clock', onclick: addQuestionTime },
+        { label: 'מספר עונים', icon: 'People', onclick: addRespondentsCount },
+        
+        // Analysis Elements (Restored)
+        { label: 'פילוג תשובות', icon: 'BarChart4', onclick: addAnswersDistribution },
+        { label: 'טבלת מובילים', icon: 'Trophy', onclick: addLeaderboardElements }
+    ];
+    
+    grid.innerHTML = '';
+    actions.forEach(action => {
+        const btn = document.createElement('div');
+        btn.className = 'action-card';
+        btn.innerHTML = `<i class="ms-Icon ms-Icon--${action.icon}"></i><span>${action.label}</span>`;
+        btn.onclick = action.onclick;
+        grid.appendChild(btn);
+    });
+}

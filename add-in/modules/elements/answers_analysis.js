@@ -77,23 +77,23 @@ export async function addAnswersDistribution() {
                 // Minimum bar height of 5 to avoid PowerPoint errors
                 const barHeight = answer.value === 0 ? 5 : Math.max(calculatedHeight, 5);
                 
+                // Round values to avoid potential precision issues (Safe values)
+                const safeHeight = Math.round(barHeight * 10) / 10;
+                const safeTop = Math.round((chartTop + (maxBarHeight - safeHeight)) * 10) / 10;
+                
                 // 1. Create bar (rectangle) - always create with minimum height
                 const bar = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
                 bar.left = barLeft;
-                bar.top = chartTop + (maxBarHeight - barHeight); 
+                bar.top = safeTop;
                 bar.width = barWidth;
-                bar.height = barHeight;
+                bar.height = safeHeight;
                 
                 // Load fill and tags first
                 bar.load(['fill', 'tags', 'line']); // Load line as well
                 await context.sync();
                 
-                // Set visibility based on value - COMPLETELY HIDE if 0
-                if (answer.value === 0) {
-                    bar.visible = false;
-                    // Also make line invisible just in case
-                    try { if (bar.line) bar.line.visible = false; } catch(e) {}
-                }
+                // Note: We avoid setting bar.visible = false for 0 values as it can cause GeneralException
+                // Instead we rely on the minimal height (5) and potentially hide the border
                 
                 // Style the bar fill
                 bar.fill.setSolidColor(answer.color);
@@ -242,12 +242,19 @@ export async function addAnswersDistribution() {
 }
 
 /**
+ * Reset Answers Distribution Bar Chart to zeros
+ * Resets all bar charts across all slides
+ */
+export async function resetAnswersDistribution() {
+    return await updateAnswersDistribution({ 1: 0, 2: 0, 3: 0, 4: 0 });
+}
+
+/**
  * Update Answers Distribution Bar Chart
  * Updates all bar charts across all slides based on answer data
  * @param {Object} answersData - Object with answer counts: { 1: 25, 2: 18, 3: 20, 4: 16 }
  */
 export async function updateAnswersDistribution(answersData) {
-    console.log('🔄 Updating answers distribution chart:', answersData);
     
     try {
         await PowerPoint.run(async (context) => {
@@ -357,12 +364,10 @@ export async function updateAnswersDistribution(answersData) {
                         // Always update geometry only - avoid visible property which causes GeneralException
                         shape.height = safeHeight;
                         shape.top = safeTop;
-                        console.log(`✅ Updating bar ${answerNumber} to height ${safeHeight}, top ${safeTop} (value: ${value})`);
                      }
                     
                     // Sync bars first - this is the critical part
                     await context.sync();
-                    console.log(`✅ Bars synced for slide ${i + 1}`);
 
                     // Third pass: Update labels (position AND text)
                     for (const item of labelItems) {
@@ -382,7 +387,6 @@ export async function updateAnswersDistribution(answersData) {
                              if(shape.textFrame) {
                                  shape.textFrame.textRange.text = value.toString();
                              }
-                             console.log(`✅ Updated label ${answerNumber} to "${value}" position, top ${shape.top}`);
                         } catch(labelError) {
                              console.error(`⚠️ Failed to update label ${answerNumber}:`, labelError);
                         }
@@ -396,8 +400,6 @@ export async function updateAnswersDistribution(answersData) {
                     }
                 }
             }
-            
-            console.log('✅ Answers distribution chart updated across all slides');
         });
     } catch (error) {
         console.error('❌ Error updating answers distribution:', error);
@@ -559,13 +561,26 @@ export async function addLeaderboardElements() {
 }
 
 /**
+ * Reset Leaderboard to empty state
+ * Resets all leaderboard elements across all slides
+ */
+export async function resetLeaderboard() {
+    // Reset with placeholder names and zero scores
+    const emptyData = [
+        { name: "---", score: 0 },
+        { name: "---", score: 0 },
+        { name: "---", score: 0 }
+    ];
+    return await updateLeaderboard(emptyData);
+}
+
+/**
  * Update Leaderboard
  * Updates leaderboard elements across all slides
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
  * @param {Array} leaderboardData - Array of objects { name: "Player1", score: 1200 }
  */
 export async function updateLeaderboard(leaderboardData) {
-    console.log('🏆 Updating leaderboard with data:', leaderboardData);
-    
     try {
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
@@ -576,64 +591,67 @@ export async function updateLeaderboard(leaderboardData) {
             // We only care about top 3
             const top3 = leaderboardData.slice(0, 3);
             
-            // Search ALL slides
-            for (let i = 0; i < slides.items.length; i++) {
-                const slide = slides.items[i];
-                const shapes = slide.shapes;
-                shapes.load(['items']);
-                await context.sync();
-                
-                for (let j = 0; j < shapes.items.length; j++) {
-                    const shape = shapes.items[j];
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
-                    let isLeaderboardName = false;
-                    let isLeaderboardScore = false;
-                    let rank = null;
-                    
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
+            
+            // Batch 2: Load all tags for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                }
+            }
+            await context.sync();
+            
+            // Process: Find shapes and collect info for updates
+            const shapesToUpdate = [];
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    if (shape.tags && shape.tags.items) {
+                        let isLeaderboardName = false;
+                        let isLeaderboardScore = false;
+                        let rank = null;
                         
-                        const key = tag.key.toLowerCase();
-                        
-                        if (key === 'kahoot-leaderboard-name') {
-                            isLeaderboardName = true;
-                        } else if (key === 'kahoot-leaderboard-score') {
-                            isLeaderboardScore = true;
-                        } else if (key === 'leaderboard-rank') {
-                            rank = parseInt(tag.value);
-                        }
-                    }
-                    
-                    if (rank && (isLeaderboardName || isLeaderboardScore)) {
-                        const player = top3[rank - 1]; // rank 1 is index 0
-                        
-                        shape.load(['textFrame']);
-                        await context.sync();
-                        
-                        const textRange = shape.textFrame.textRange;
-                        
-                        if (player) {
-                            if (isLeaderboardName) {
-                                textRange.text = player.name || player.nickname || "Unknown";
-                            } else if (isLeaderboardScore) {
-                                textRange.text = (player.score || 0).toString();
+                        for (const tag of shape.tags.items) {
+                            const key = tag.key.toLowerCase();
+                            
+                            if (key === 'kahoot-leaderboard-name') {
+                                isLeaderboardName = true;
+                            } else if (key === 'kahoot-leaderboard-score') {
+                                isLeaderboardScore = true;
+                            } else if (key === 'leaderboard-rank') {
+                                rank = parseInt(tag.value);
                             }
-                        } else {
-                            // Less than 3 players, clear text
-                            textRange.text = ""; 
                         }
                         
-                        await context.sync();
+                        if (rank && (isLeaderboardName || isLeaderboardScore)) {
+                            shapesToUpdate.push({ shape, isLeaderboardName, isLeaderboardScore, rank });
+                        }
                     }
                 }
             }
             
-            console.log('✅ Leaderboard updated across all slides');
+            // Update all shapes at once
+            for (const item of shapesToUpdate) {
+                const player = top3[item.rank - 1]; // rank 1 is index 0
+                try {
+                    if (player) {
+                        if (item.isLeaderboardName) {
+                            item.shape.textFrame.textRange.text = player.name || player.nickname || "Unknown";
+                        } else if (item.isLeaderboardScore) {
+                            item.shape.textFrame.textRange.text = (player.score || 0).toString();
+                        }
+                    } else {
+                        // Less than 3 players, clear text
+                        item.shape.textFrame.textRange.text = ""; 
+                    }
+                } catch (e) { /* ignore shapes without textFrame */ }
+            }
+            
+            // Single sync for all updates
+            await context.sync();
         });
     } catch (error) {
         console.error('❌ Error updating leaderboard:', error);

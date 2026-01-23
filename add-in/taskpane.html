@@ -1,252 +1,502 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="he">
+<html>
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Kahoot Quiz Manager</title>
-
-    <!-- Office JavaScript API -->
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    
-    <!-- Socket.IO for WebSocket support -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    
-    <!-- For Fabric UI -->
-    <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/9.6.1/css/fabric.min.css"/>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kahoot Add-in</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css"/>
     <style>
         body {
-            font-family: "Segoe UI", "Segoe UI Web (West European)", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            height: 100vh;
-            overflow: hidden;
+            background-color: #f3f2f1;
             direction: rtl;
         }
-        
+
         .container {
-            max-width: 400px;
-            margin: 0 auto;
-            height: 100vh;
             display: flex;
             flex-direction: column;
-            background: white;
+            height: 100vh;
         }
-        
-        /* Header קבוע - סוג השקף */
-        .header-section {
-            flex-shrink: 0;
-            padding: 20px 20px 0px 20px;
+
+        /* Tabs */
+        .tabs {
+            display: flex;
             background: white;
-            border-bottom: 1px solid #edebe9;
-            z-index: 20;
+            border-bottom: 1px solid #e1dfdd;
         }
-        
-        /* Content גולל - החלק האמצעי בלבד */
-        .scrollable-content {
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+        }
+
+        .tab.active {
+            border-bottom-color: #0078d4;
+            color: #0078d4;
+            background-color: #eff6fc;
+        }
+
+        .tab:hover:not(.active) {
+            background-color: #f3f2f1;
+        }
+
+        /* Content Area */
+        .content {
             flex: 1;
             overflow-y: auto;
-            overflow-x: hidden;
-            padding: 15px 20px;
+            padding: 0;
+            position: relative;
         }
-        
-        /* Footer קבוע - פעולות משותפות */
-        .footer-section {
-            flex-shrink: 0;
-            background: white;
-            border-top: 2px solid #dee2e6;
-            padding: 10px 20px;
-            z-index: 20;
-        }
-        
+
+        /* Slide Content Area (Game Mode) */
         #slideContentArea {
+            flex: 1;
+            overflow-y: auto;
+            background: white;
+            display: none; /* Hidden by default */
+        }
+
+        .tab-content {
+            display: none;
+            height: 100%;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Slides List */
+        .slide-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .slide-item {
+            background: white;
+            border-bottom: 1px dashed #e1dfdd;
+            padding: 12px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .slide-item:last-child {
+            border-bottom: none;
+        }
+
+        .slide-item:hover {
+            background-color: #f3f2f1;
+        }
+
+        .slide-item.selected {
+            background-color: #eff6fc;
+            box-shadow: inset -3px 0 0 #0078d4;
+        }
+        
+        .slide-info {
             display: flex;
             flex-direction: column;
         }
-        
-        .status-section {
-            background-color: #f3f2f1;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
+
+        .slide-title {
+            font-weight: 600;
+            font-size: 14px;
         }
-        
-        .control-section {
-            margin-bottom: 20px;
+
+        .slide-subtitle {
+            font-size: 12px;
+            color: #605e5c;
+            display: none; /* Hide ID by default in CSS to avoid flicker */
         }
-        
-        .button {
-            background-color: #0078d4;
-            color: white;
+
+        /* Three Dots Button */
+        .more-btn {
+            background: transparent;
             border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
-            margin: 5px;
-            min-width: 120px;
-        }
-        
-        .button:hover {
-            background-color: #106ebe;
-        }
-        
-        .button:disabled {
-            background-color: #a19f9d;
-            cursor: not-allowed;
-        }
-        
-        
-        .info-box {
-            background-color: #deecf9;
-            border: 1px solid #0078d4;
-            padding: 10px;
+            padding: 4px 8px;
             border-radius: 4px;
-            margin: 10px 0;
-            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: #605e5c;
+        }
+
+        .slide-item:hover .more-btn {
+            opacity: 1;
         }
         
-        .warning-box {
-            background-color: #fff4ce;
-            border: 1px solid #ffb900;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            font-size: 14px;
+        .more-btn:hover {
+            background-color: #e1dfdd;
+            color: #201f1e;
         }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .stat-item {
-            text-align: center;
-            padding: 10px;
-            background-color: white;
+
+        /* Context Menu */
+        .context-menu {
+            position: fixed;
+            background: white;
             border: 1px solid #edebe9;
-            border-radius: 4px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.14);
+            border-radius: 8px;
+            padding: 8px 0;
+            z-index: 1000;
+            display: none;
+            min-width: 180px;
         }
-        
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
+
+        .context-menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #323130;
+            transition: background-color 0.1s;
+        }
+
+        .context-menu-item:hover {
+            background-color: #f3f2f1;
             color: #0078d4;
         }
         
-        .stat-label {
-            font-size: 12px;
-            color: #605e5c;
+        .context-menu-item i {
+            font-size: 16px;
+            width: 20px;
+            text-align: center;
+            color: #0078d4;
+        }
+
+        /* Inline Edit Styles */
+        .inline-edit-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 2px 0;
+        }
+
+        .inline-select {
+            flex-grow: 1;
+            padding: 6px 8px;
+            border: 1px solid #0078d4;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .inline-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .inline-btn {
+            background: white;
+            border: 1px solid #e1dfdd;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .inline-btn.confirm { 
+            color: #107c10; 
+            border-color: #107c10;
         }
         
-        .participant-item {
-            background: linear-gradient(135deg, #0078d4, #106ebe);
+        .inline-btn.cancel { 
+            color: #d13438; 
+            border-color: #d13438;
+        }
+
+        .inline-btn:hover { 
+            background-color: #f3f2f1;
+            transform: scale(1.05);
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: #0078d4;
             color: white;
             padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 2px 8px rgba(0,120,212,0.3);
-            transition: all 0.3s ease;
-            animation: slideIn 0.3s ease-out;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        
-        .participant-item:hover {
+
+        /* Grid for Actions */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .action-card {
+            background: white;
+            border: 1px solid #e1dfdd;
+            border-radius: 4px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .action-card:hover {
+            border-color: #0078d4;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,120,212,0.4);
         }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: scale(0.8) translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
+
+        .action-card i {
+            font-size: 24px;
+            color: #0078d4;
         }
-        
-        @keyframes slideOut {
-            from {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-            to {
-                opacity: 0;
-                transform: scale(0.8) translateY(-10px);
-            }
+
+        .action-card span {
+            font-size: 13px;
+            font-weight: 500;
         }
-        
-        .participant-item.removing {
-            animation: slideOut 0.3s ease-in forwards;
+
+        /* Overlays / Dialogs */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .overlay-content {
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
+            width: 80%;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .overlay-content h3 {
+            margin-top: 0;
+            color: #0078d4;
+        }
+
+        .overlay-content select, .overlay-content input {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0 20px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .overlay-content button.primary {
+            width: 100%;
+            padding: 10px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+
+        .overlay-content button.primary:hover {
+            background: #106ebe;
+        }
+
+        /* Persistent Bottom Actions */
+        .bottom-actions {
+            background: #f3f2f1;
+            padding: 10px;
+            border-top: 1px solid #e1dfdd;
+            display: flex;
+            gap: 10px;
+        }
+
+        .bottom-actions button {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #0078d4;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-start-game {
+            background-color: #0078d4;
+            color: white;
+        }
+
+        .btn-start-game:hover {
+            background-color: #106ebe;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0078d4;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-
 <body>
     <div class="container">
-        <!-- Header קבוע - סוג השקף -->
-        <div class="header-section">
-            <!-- Slide Type Selection Section -->
-            <div class="control-section" id="slideTypeControl">
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0;">
-                    <span style="font-weight: bold; min-width: 80px;">סוג שקף:</span>
-                    <select id="slideType" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; direction: rtl;">
-                        <option value="opening">פתיחה</option>
-                        <option value="transition">מעבר</option>
-                        <option value="question">שאלה</option>
-                        <option value="statistics">סטטיסטיקת מענה</option>
-                        <option value="leaderboard">מובילים</option>
-                        <option value="summary">סיכום</option>
-                    </select>
-                </div>
-                
-                <!-- Status Info Section -->
-                <div>
-                    <div id="detectedInfo" style="font-size: 12px; color: #0078d4; padding: 8px; background: #f0f8ff; border-radius: 3px; display: none; margin-top: 8px;"></div>
-                </div>
-            </div>
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('slides')">רשימת שקפים</div>
+            <div class="tab" onclick="switchTab('actions')">רכיבי תצוגה</div>
+            <div class="tab" onclick="switchTab('settings')">הגדרות משחק</div>
         </div>
-        
-        <!-- Content גולל - רק החלק האמצעי -->
-        <div class="scrollable-content">
-            <!-- Dynamic content area - loads different HTML based on slide type -->
-            <div id="slideContentArea">
-                <!-- Content will be loaded dynamically based on slide type -->
-                <div style="text-align: center; padding: 40px 20px; color: #6c757d;">
-                    <div style="font-size: 48px; margin-bottom: 15px;">⏳</div>
-                    <p>טוען ממשק...</p>
+
+        <!-- Content -->
+        <div class="content" id="mainContent">
+            <!-- Tab 1: Slides List -->
+            <div id="tab-slides" class="tab-content active">
+                <div id="slides-loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <div style="text-align: center; color: #666;">טוען שקפים...</div>
+                </div>
+                <ul id="slideList" class="slide-list">
+                    <!-- Slides will be inserted here -->
+                </ul>
+            </div>
+
+            <!-- Tab 2: Actions -->
+            <div id="tab-actions" class="tab-content">
+                <div id="actionsGrid" class="actions-grid">
+                    <!-- Actions generated by JS -->
                 </div>
             </div>
-            
-            <div id="errorMessage" class="warning-box" style="display: none;"></div>
-            
-            <!-- Dynamic Participants Display Area (only visible for פתיחה slides) -->
-            <div id="dynamicParticipantsArea" style="display: none; margin-top: 20px;">
-                <div style="background-color: #f3f2f1; padding: 15px; border-radius: 4px; border: 2px solid #0078d4;">
-                    <h4 style="margin: 0 0 15px 0; text-align: center; color: #0078d4;">משתתפים פעילים</h4>
-                    <div id="participantsContainer" data-kahoot-participants-area="true" style="min-height: 100px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: flex-start;">
-                        <div id="noParticipants" style="color: #666; font-style: italic; width: 100%; text-align: center; padding: 20px;">
-                            מחכים למשתתפים...
+
+            <!-- Tab 3: Settings -->
+            <div id="tab-settings" class="tab-content">
+                <div style="padding: 15px;">
+                    <h3 style="margin-top: 0; margin-bottom: 15px; color: #0078d4;">הגדרות משחק</h3>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label for="settingTimeTab" style="display:block; margin-bottom:5px; font-weight:500;">זמן למענה (שניות):</label>
+                        <input type="number" id="settingTimeTab" value="30" min="5" max="300" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;">
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label for="settingDelayTab" style="display:block; margin-bottom:5px; font-weight:500;">השהיית שעון (שניות):</label>
+                        <input type="number" id="settingDelayTab" value="5" min="0" max="60" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;">
+                    </div>
+
+                    <div style="background:#f8f9fa; padding:10px; border-radius:4px;">
+                        <div style="font-weight:500; margin-bottom:5px;">מעברים אוטומטיים:</div>
+                        <div style="margin-bottom:5px;">
+                            <input type="checkbox" id="settingAfterStatsTab" checked>
+                            <label for="settingAfterStatsTab">עבור לסטטיסטיקה</label>
+                        </div>
+                        <div>
+                            <input type="checkbox" id="settingAfterLeaderboardTab">
+                            <label for="settingAfterLeaderboardTab">עבור למובילים</label>
                         </div>
                     </div>
-                    <div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">
-                        סה"כ משתתפים: <span id="totalParticipantsCount">0</span>
-                    </div>
                 </div>
             </div>
         </div>
-        
-        <!-- Footer קבוע - פעולות משותפות (ייטען דינמית מ-shared-actions.html) -->
-        <div class="footer-section" id="sharedActionsContainer">
-            <!-- Will be populated by shared-actions.html -->
+
+        <!-- Game Mode Content Area -->
+        <div id="slideContentArea"></div>
+
+        <!-- Persistent Bottom Buttons -->
+        <div class="bottom-actions">
+            <button id="btnStartGame" class="btn-start-game">
+                <i class="ms-Icon ms-Icon--Play"></i> הפעל משחק
+            </button>
         </div>
     </div>
 
-    <script type="module" src="taskpane.js"></script>
+    <!-- Context Menu for Slides -->
+    <div id="slideContextMenu" class="context-menu">
+        <div class="context-menu-item" onclick="openSlideTypeDialog()">
+            <i class="ms-Icon ms-Icon--Edit"></i> שנה סוג שקף
+        </div>
+        <div class="context-menu-item" id="menuSetAnswer" onclick="openSetAnswerDialog()">
+            <i class="ms-Icon ms-Icon--CheckMark"></i> הגדר תשובה נכונה
+        </div>
+    </div>
+
+    <!-- Dialog: Change Slide Type (Legacy - kept for reference but unused by new inline flow) -->
+    <div id="dialogSlideType" class="overlay">
+        <div class="overlay-content">
+            <h3>בחר סוג שקף</h3>
+            <select id="slideTypeSelect">
+                <option value="opening">פתיחה</option>
+                <option value="transition">מעבר</option>
+                <option value="question">שאלה</option>
+                <option value="statistics">סטטיסטיקת מענה</option>
+                <option value="leaderboard">מובילים</option>
+                <option value="summary">סיכום</option>
+            </select>
+            <button class="primary" onclick="confirmSlideTypeChange()">אישור</button>
+            <button onclick="closeDialogs()" style="width: 100%; padding: 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">ביטול</button>
+        </div>
+    </div>
+
+    <!-- Dialog: Set Answer -->
+    <div id="dialogSetAnswer" class="overlay">
+        <div class="overlay-content">
+            <h3>הגדר תשובה נכונה</h3>
+            <select id="correctAnswerSelect">
+                <option value="1">תשובה 1 (אדום)</option>
+                <option value="2">תשובה 2 (כחול)</option>
+                <option value="3">תשובה 3 (צהוב)</option>
+                <option value="4">תשובה 4 (ירוק)</option>
+            </select>
+            <button class="primary" onclick="confirmSetAnswer()">שמור</button>
+            <button onclick="closeDialogs()" style="width: 100%; padding: 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">ביטול</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="modules/api.js" type="module"></script>
+    <script src="modules/websocket.js" type="module"></script>
+    <script src="modules/presentation-state.js" type="module"></script>
+    <script src="modules/slide-manager.js" type="module"></script>
+    <script src="modules/ui-manager.js" type="module"></script>
+    <script src="modules/event-handlers.js" type="module"></script>
+    <script src="taskpane.js" type="module"></script>
 </body>
 </html>

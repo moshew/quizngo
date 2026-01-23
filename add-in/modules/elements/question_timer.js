@@ -118,11 +118,10 @@ export async function addRespondentsCount() {
 /**
  * Update all kahoot-question-time elements to initial value (ALL slides)
  * Used for initialization/reset
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
  * @param {number} timeValue - Initial time value to set
  */
 export async function updateAllQuestionTimeElements(timeValue) {
-    console.log(`🔄 Resetting ALL question time elements to: ${timeValue}`);
-    
     try {
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
@@ -130,49 +129,44 @@ export async function updateAllQuestionTimeElements(timeValue) {
             slides.load('items');
             await context.sync();
             
-            let updatedCount = 0;
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
             
-            // Search ALL slides for kahoot-question-time tags
-            for (let i = 0; i < slides.items.length; i++) {
-                const slide = slides.items[i];
-                const shapes = slide.shapes;
-                shapes.load(['items']);
-                await context.sync();
-                
-                for (let j = 0; j < shapes.items.length; j++) {
-                    const shape = shapes.items[j];
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
-                    // Check if this shape has kahoot-question-time tag
-                    let hasQuestionTimeTag = false;
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
-                        
-                        if (tag.key.toLowerCase() === 'kahoot-question-time' && tag.value === 'true') {
-                            hasQuestionTimeTag = true;
-                            break;
+            // Batch 2: Load all tags for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                }
+            }
+            await context.sync();
+            
+            // Process: Find shapes with the tag and update them (no sync needed)
+            const shapesToUpdate = [];
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    if (shape.tags && shape.tags.items) {
+                        for (const tag of shape.tags.items) {
+                            if (tag.key.toLowerCase() === 'kahoot-question-time' && tag.value === 'true') {
+                                shapesToUpdate.push(shape);
+                                break;
+                            }
                         }
-                    }
-                    
-                    if (hasQuestionTimeTag) {
-                        // Update the text
-                        shape.load(['textFrame']);
-                        await context.sync();
-                        
-                        const textRange = shape.textFrame.textRange;
-                        textRange.text = timeValue.toString();
-                        await context.sync();
-                        
-                        updatedCount++;
                     }
                 }
             }
             
-            console.log(`✅ Reset ${updatedCount} question time element(s) across all slides to: ${timeValue}`);
+            // Update all shapes at once
+            for (const shape of shapesToUpdate) {
+                try {
+                    shape.textFrame.textRange.text = timeValue.toString();
+                } catch (e) { /* ignore shapes without textFrame */ }
+            }
+            
+            // Single sync for all updates
+            await context.sync();
         });
     } catch (error) {
         console.error('❌ Error resetting question time elements:', error);
@@ -183,11 +177,10 @@ export async function updateAllQuestionTimeElements(timeValue) {
 /**
  * Update ALL kahoot-respondents-count elements across all slides
  * Similar to updateAllQuestionTimeElements but for respondents count
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
  * @param {number} count - Number of respondents who answered
  */
 export async function updateAllRespondentsCountElements(count) {
-    console.log(`🔄 Resetting ALL respondents count elements to: ${count}`);
-    
     try {
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
@@ -195,49 +188,44 @@ export async function updateAllRespondentsCountElements(count) {
             slides.load('items');
             await context.sync();
             
-            let updatedCount = 0;
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
             
-            // Search ALL slides for kahoot-respondents-count tags
-            for (let i = 0; i < slides.items.length; i++) {
-                const slide = slides.items[i];
-                const shapes = slide.shapes;
-                shapes.load(['items']);
-                await context.sync();
-                
-                for (let j = 0; j < shapes.items.length; j++) {
-                    const shape = shapes.items[j];
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
-                    // Check if this shape has kahoot-respondents-count tag
-                    let hasRespondentsTag = false;
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
-                        
-                        if (tag.key.toLowerCase() === 'kahoot-respondents-count' && tag.value === 'true') {
-                            hasRespondentsTag = true;
-                            break;
+            // Batch 2: Load all tags for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                }
+            }
+            await context.sync();
+            
+            // Process: Find shapes with the tag and update them (no sync needed)
+            const shapesToUpdate = [];
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    if (shape.tags && shape.tags.items) {
+                        for (const tag of shape.tags.items) {
+                            if (tag.key.toLowerCase() === 'kahoot-respondents-count' && tag.value === 'true') {
+                                shapesToUpdate.push(shape);
+                                break;
+                            }
                         }
-                    }
-                    
-                    if (hasRespondentsTag) {
-                        // Update the text
-                        shape.load(['textFrame']);
-                        await context.sync();
-                        
-                        const textRange = shape.textFrame.textRange;
-                        textRange.text = count.toString();
-                        await context.sync();
-                        
-                        updatedCount++;
                     }
                 }
             }
             
-            console.log(`✅ Reset ${updatedCount} respondents count element(s) across all slides to: ${count}`);
+            // Update all shapes at once
+            for (const shape of shapesToUpdate) {
+                try {
+                    shape.textFrame.textRange.text = count.toString();
+                } catch (e) { /* ignore shapes without textFrame */ }
+            }
+            
+            // Single sync for all updates
+            await context.sync();
         });
     } catch (error) {
         console.error('❌ Error resetting respondents count elements:', error);

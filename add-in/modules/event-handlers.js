@@ -104,8 +104,15 @@ export async function processSlideChange(htmlCache, fromWebSocket = false) {
         
         console.log(`📄 Slide type: ${slideType}`);
         
-        // Load slide type UI
+        // Load slide type UI (Now just updates state)
         loadSlideType(htmlCache);
+        
+        // Update Slide List in Tab 1
+        if (window.refreshSlideList) {
+            console.log('🔄 Refreshing slide list...');
+            // Don't await this to avoid blocking other logic, or do await if critical
+            window.refreshSlideList().catch(e => console.error('Error refreshing list:', e));
+        }
         
         // Control participant acceptance based on slide type
         if (slideType === 'opening') {

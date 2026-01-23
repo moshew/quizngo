@@ -31,6 +31,15 @@ export async function startPresentationMode(htmlCache) {
         // Load the start screen UI
         await updateUIForSlideType('start', htmlCache);
         
+        // Switch view to Game Mode
+        const mainContent = document.getElementById('mainContent');
+        const tabs = document.querySelector('.tabs');
+        const slideContentArea = document.getElementById('slideContentArea');
+        
+        if (mainContent) mainContent.style.display = 'none';
+        if (tabs) tabs.style.display = 'none';
+        if (slideContentArea) slideContentArea.style.display = 'block';
+        
         // Initialize the start screen with QR code
         await initializeStartScreen();
         
@@ -289,86 +298,6 @@ async function updateQuestionTimeDisplay(timeValue) {
     }
 }
 
-/**
- * Show leaderboard (stub implementation)
- */
-export async function showLeaderboard() {
-    console.log('🏆 Show leaderboard - to be implemented');
-    showError('פונקציה זו תבוצע בהמשך');
-}
+// End of file
 
-/**
- * Insert leaderboard table (stub implementation)
- */
-export async function insertLeaderboardTable() {
-    console.log('📋 Insert leaderboard table - to be implemented');
-    showError('פונקציה זו תבוצע בהמשך');
-}
-
-/**
- * Show final results (stub implementation)
- */
-export async function showFinalResults() {
-    console.log('🎯 Show final results - to be implemented');
-    showError('פונקציה זו תבוצע בהמשך');
-}
-
-/**
- * Insert final leaderboard (stub implementation)
- */
-export async function insertFinalLeaderboard() {
-    console.log('🏅 Insert final leaderboard - to be implemented');
-    showError('פונקציה זו תבוצע בהמשך');
-}
-
-/**
- * End game
- */
-export async function endGame() {
-    console.log('🔚 End game');
-    const confirmed = confirm('האם אתה בטוח שברצונך לסיים את המשחק?');
-    if (confirmed) {
-        try {
-            // Stop any active timer
-            await stopTimer();
-            
-            // Send end game signal to server
-            const response = await fetch(`${API_BASE}end-game`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    gameId: window.gameId
-                })
-            });
-            
-            if (response.ok) {
-                console.log('✅ Game ended successfully');
-                showError('✅ המשחק הסתיים בהצלחה!');
-            } else {
-                throw new Error('Failed to end game');
-            }
-        } catch (error) {
-            console.error('❌ Error ending game:', error);
-            showError('שגיאה בסיום המשחק: ' + error.message);
-        }
-    }
-}
-
-/**
- * Show statistics (stub implementation)
- */
-export async function showStatistics() {
-    console.log('📈 Show statistics - to be implemented');
-    showError('פונקציה זו תבוצע בהמשך');
-}
-
-/**
- * Insert answer statistics (stub implementation)
- */
-export async function insertAnswerStats() {
-    console.log('📊 Insert answer stats - to be implemented');
-    showError('פונקציה זו תבוצע בהמשך');
-}
 

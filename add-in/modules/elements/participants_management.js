@@ -11,10 +11,9 @@ import { hideParticipants, getHiddenParticipantIds } from '../presentation-state
 
 /**
  * Reset participants number in all slides with the tag
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
  */
 export async function resetParticipantsNumInSlides() {
-    console.log(`👥 Starting resetParticipantsNumInSlides - resetting to 0`);
-    
     try {
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
@@ -22,66 +21,47 @@ export async function resetParticipantsNumInSlides() {
             slides.load('items');
             await context.sync();
             
-            console.log(`🔍 Searching for kahoot-participants-num tags in ${slides.items.length} slides...`);
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
             
-            let foundElements = 0;
+            // Batch 2: Load all tags for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                }
+            }
+            await context.sync();
             
-            for (let i = 0; i < slides.items.length; i++) {
-                const slide = slides.items[i];
-                const shapes = slide.shapes;
-                shapes.load(['items']);
-                await context.sync();
-                
-                console.log(`📄 Checking slide ${i + 1} with ${shapes.items.length} shapes`);
-                
-                for (let j = 0; j < shapes.items.length; j++) {
-                    const shape = shapes.items[j];
-                    const tags = shape.tags;
-                    tags.load(['items']);
-                    await context.sync();
-                    
-                    let hasParticipantsNumTag = false;
-                    for (let k = 0; k < tags.items.length; k++) {
-                        const tag = tags.items[k];
-                        tag.load(['key', 'value']);
-                        await context.sync();
-                        
-                        console.log(`  🏷️ Tag: ${tag.key} = ${tag.value}`);
-                        
-                        // Case-insensitive comparison
-                        if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
-                            hasParticipantsNumTag = true;
-                            console.log('  ✅ Found kahoot-participants-num tag!');
-                            break;
-                        }
-                    }
-                    
-                    if (hasParticipantsNumTag) {
-                        console.log(`📝 Resetting participants number in slide ${i + 1}`);
-                        shape.load(['textFrame', 'name', 'type']);
-                        await context.sync();
-                        
-                        console.log(`  Shape type: ${shape.type}, name: ${shape.name}`);
-                        
-                        try {
-                            const textRange = shape.textFrame.textRange;
-                            textRange.text = '0';
-                            await context.sync();
-                            
-                            foundElements++;
-                            console.log(`✅ Reset participants number to 0 in slide ${i + 1}`);
-                        } catch (textError) {
-                            console.error(`❌ Error updating text in slide ${i + 1}:`, textError);
+            // Process: Find shapes with the tag and update them (no sync needed)
+            const shapesToUpdate = [];
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    if (shape.tags && shape.tags.items) {
+                        for (const tag of shape.tags.items) {
+                            if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
+                                shapesToUpdate.push(shape);
+                                break;
+                            }
                         }
                     }
                 }
             }
             
-            console.log(`✅ Total participants number elements reset: ${foundElements}`);
+            // Update all shapes at once
+            for (const shape of shapesToUpdate) {
+                try {
+                    shape.textFrame.textRange.text = '0';
+                } catch (e) { /* ignore shapes without textFrame */ }
+            }
+            
+            // Single sync for all updates
+            await context.sync();
         });
     } catch (error) {
         console.error('❌ Error resetting participants number in slides:', error);
-        console.error('Error details:', error.message, error.stack);
     }
 }
 
@@ -585,13 +565,12 @@ export async function insertParticipantsListButton() {
 /**
  * Update the participants list in all slides
  * Creates icon + name display for each participant
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
  */
 export async function updateParticipantsListInSlides() {
-    console.log('📋 Starting updateParticipantsListInSlides...');
     try {
         // Get VISIBLE participants only (excludes hidden ones)
         const visibleParticipantsData = getVisibleParticipantsData();
-        console.log(`📋 Visible participants: ${visibleParticipantsData.size}`);
         
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
@@ -599,13 +578,24 @@ export async function updateParticipantsListInSlides() {
             slides.load('items');
             await context.sync();
             
-            console.log(`📋 Searching for participants-list tags in ${slides.items.length} slides...`);
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
+            
+            // Batch 2: Load all tags and properties for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                    shape.load(['id', 'left', 'top', 'width', 'height']);
+                }
+            }
+            await context.sync();
+            
             let foundCount = 0;
             
             for (const slide of slides.items) {
-                 slide.shapes.load('items');
-                 await context.sync();
-                 
                  // First pass: find container and existing participant shapes
                  let containerShape = null;
                  let containerLeft = 0;
@@ -617,25 +607,23 @@ export async function updateParticipantsListInSlides() {
                  const allParticipantItems = []; // Track ALL participant items regardless of ID
                  
                  for (const shape of slide.shapes.items) {
-                     shape.tags.load('items');
-                     shape.load(['id', 'left', 'top', 'width', 'height']);
-                     await context.sync();
-                     
                      let isParticipantsList = false;
                      let isParticipantItem = false;
                      let participantId = null;
                      
-                     for(let t=0; t<shape.tags.items.length; t++) {
-                         const tagKey = shape.tags.items[t].key.toLowerCase();
-                         const tagValue = shape.tags.items[t].value;
-                         if(tagKey === 'kahoot-content-type' && tagValue.toLowerCase() === 'participants-list') {
-                             isParticipantsList = true;
-                         }
-                         if(tagKey === 'kahoot-participant-item' && tagValue === 'true') {
-                             isParticipantItem = true;
-                         }
-                         if(tagKey === 'participant-id' && tagValue) {
-                             participantId = tagValue;
+                     if (shape.tags && shape.tags.items) {
+                         for(let t=0; t<shape.tags.items.length; t++) {
+                             const tagKey = shape.tags.items[t].key.toLowerCase();
+                             const tagValue = shape.tags.items[t].value;
+                             if(tagKey === 'kahoot-content-type' && tagValue.toLowerCase() === 'participants-list') {
+                                 isParticipantsList = true;
+                             }
+                             if(tagKey === 'kahoot-participant-item' && tagValue === 'true') {
+                                 isParticipantItem = true;
+                             }
+                             if(tagKey === 'participant-id' && tagValue) {
+                                 participantId = tagValue;
+                             }
                          }
                      }
                      
@@ -667,12 +655,11 @@ export async function updateParticipantsListInSlides() {
 
                  // 2. Universal cleanup if no participants (Works even if container is missing)
                  if (participants.length === 0) {
-                     console.log('🗑️ No participants - clearing all user items on slide');
                      try {
                          for (const s of allParticipantItems) s.delete();
                          if (containerShape) containerShape.textFrame.textRange.text = 'מחכים למשתתפים...';
                          await context.sync();
-                     } catch(e) { console.warn('Cleanup error:', e); }
+                     } catch(e) { /* ignore cleanup errors */ }
                  }
 
                  // 3. Render logic (Requires container)
@@ -696,8 +683,6 @@ export async function updateParticipantsListInSlides() {
                      const maxRows = Math.floor(availableHeight / (itemHeight + gapY));
                      const maxVisibleParticipants = maxRows * itemsPerRow;
                      
-                     console.log(`📋 Container: height=${containerHeight}, maxRows=${maxRows}, maxVisible=${maxVisibleParticipants}, itemsPerRow=${itemsPerRow}`);
-                     
                      // === OVERFLOW HANDLING ===
                      // Check if adding new participants would exceed container bounds
                      // If so, hide the first row permanently
@@ -705,19 +690,15 @@ export async function updateParticipantsListInSlides() {
                      
                      const totalRequiredRows = Math.ceil(participants.length / itemsPerRow);
                      if (totalRequiredRows > maxRows && participants.length > 0) {
-                         console.log(`⚠️ OVERFLOW DETECTED: Need ${totalRequiredRows} rows but only ${maxRows} fit`);
-                         
                          // Get the first row's participants (they will be hidden permanently)
                          const firstRowParticipants = participants.slice(0, itemsPerRow);
                          const firstRowIds = firstRowParticipants.map(p => p.userId || p.id);
                          
                          // Hide these participants permanently
                          hideParticipants(firstRowIds);
-                         console.log(`👻 Hiding first row: ${firstRowIds.join(', ')}`);
                          
                          // Remove them from display list (they're now hidden)
                          participantsToDisplay = participants.slice(itemsPerRow);
-                         console.log(`📋 After hiding: ${participantsToDisplay.length} participants to display`);
                          
                          // Delete shapes for hidden participants
                          for (const hiddenId of firstRowIds) {
@@ -741,7 +722,6 @@ export async function updateParticipantsListInSlides() {
                      
                      // Helper to check if row needs rebuild
                      const actualVisualCount = Math.floor(allParticipantItems.length / 2);
-                     console.log(`📋 Update: Visual(${actualVisualCount}), New(${newParticipants.length}), ToDisplay(${participantsToDisplay.length})`);
                      
                      if (newParticipants.length > 0 || actualVisualCount > 0) {
                          // Smart Update Strategy
@@ -762,18 +742,11 @@ export async function updateParticipantsListInSlides() {
                              const isLastRowFull = existingCount > 0 && (existingCount % itemsPerRow === 0);
                              
                              firstItemInLastRow = isLastRowFull ? existingCount : (lastRowBeforeNew >= 0 ? lastRowBeforeNew * itemsPerRow : 0);
-                             console.log(`📋 Optimization: Purely adding ${newParticipants.length} items. Starting at index ${firstItemInLastRow}`);
-                         } else {
-                             console.log(`📋 Full Refresh: Visual(${actualVisualCount}) vs Target(${totalCount}). Doing full layout update to handle removal/centering.`);
                          }
-                         
-                         console.log(`📋 Smart Update: StartIndex=${firstItemInLastRow}`);
                          
                          // Determine visual cleanup zone (Y threshold)
                          const rowOfStartIndex = Math.floor(firstItemInLastRow / itemsPerRow);
                          const yThreshold = startY + rowOfStartIndex * (itemHeight + gapY) - 5; 
-                         
-                         console.log(`📋 Updating/Creating items at Y >= ${yThreshold} (Row ${rowOfStartIndex})`);
                          
                          // Track which shape IDs we are keeping/updating so we don't delete them
                          const keptShapeIds = new Set();
@@ -866,14 +839,11 @@ export async function updateParticipantsListInSlides() {
                              }
                         }
                         
-                        // Execute updates, creations, and deletions in ONE atomic batch
-                        await context.sync();
+                       // Execute updates, creations, and deletions in ONE atomic batch
+                       await context.sync();
                      }
                  }
             }
-             
-            console.log(`📋 Found ${foundCount} participants-list shapes`);
-            await context.sync();
         });
         
     } catch (error) {

@@ -743,7 +743,22 @@ async function advanceToNextSlide(context) {
         console.log(`➡️ Moving to slide ${nextIndex + 1}`);
         
         const nextSlide = slides.items[nextIndex];
-        nextSlide.setSelectedSlides();
+        // nextSlide.setSelectedSlides(); // REPLACED due to error: setSelected/setSelectedSlides not on Slide object
+        
+        // Use goToByIdAsync for navigation
+        await new Promise((resolve) => {
+             Office.context.document.goToByIdAsync(
+                nextIndex + 1, // 1-based index
+                Office.GoToType.Index,
+                (asyncResult) => {
+                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                        console.error('Navigation failed in advanceToNextSlide:', asyncResult.error.message);
+                    }
+                    resolve();
+                }
+            );
+        });
+
         await context.sync();
         
         // Reset animation state for new slide
