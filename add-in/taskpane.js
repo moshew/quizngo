@@ -152,6 +152,51 @@ window.presentationSettings = {
 };
 window.contextMenuTargetSlideId = null;
 
+// Select current slide on load or navigate to first slide
+async function selectCurrentSlideOnLoad() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const selection = context.presentation.getSelectedSlides();
+            selection.load("items/id");
+            
+            const slides = context.presentation.slides;
+            slides.load("items/id");
+            
+            await context.sync();
+            
+            if (selection.items.length > 0) {
+                // A slide is selected, use it
+                const selectedSlide = selection.items[0];
+                window.currentSlideId = selectedSlide.id;
+                
+                // Find the slide index
+                const slideIndex = slides.items.findIndex(s => s.id === selectedSlide.id);
+                window.currentSlideNumber = slideIndex + 1;
+                
+                console.log('📍 Current slide on load:', window.currentSlideNumber, window.currentSlideId);
+            } else if (slides.items.length > 0) {
+                // No slide selected, go to first slide
+                const firstSlide = slides.items[0];
+                window.currentSlideId = firstSlide.id;
+                window.currentSlideNumber = 1;
+                
+                // Navigate to first slide
+                await navigateToSlide(1);
+                console.log('📍 Navigated to first slide:', window.currentSlideId);
+            }
+        });
+    } catch (error) {
+        console.error('Error selecting current slide on load:', error);
+        // Fallback: try to go to first slide
+        window.currentSlideNumber = 1;
+        try {
+            await navigateToSlide(1);
+        } catch (e) {
+            console.error('Error navigating to first slide:', e);
+        }
+    }
+}
+
 // Initialize the add-in when Office is ready
 Office.onReady((info) => {
     console.log('🚀 Office.onReady called!', info);
@@ -195,6 +240,9 @@ Office.onReady((info) => {
     
     // Load data then refresh list
     loadPresentationData().then(async () => {
+            // Get current slide and select it
+            await selectCurrentSlideOnLoad();
+            
             refreshSlideList(); // Initial load after data is ready
             
             // Ensure we are registered to the room if hashId is available
@@ -452,9 +500,7 @@ async function refreshSlideList() {
                         <div class="slide-info">
                             <span class="slide-title">שקף ${slideNumber} - ${typeLabel}${extraInfo}</span>
                         </div>
-                        <button class="more-btn" title="אפשרויות" data-id="${slideId}" data-type="${type}">
-                            <i class="ms-Icon ms-Icon--MoreVertical"></i>
-                        </button>
+                        <button class="edit-btn" title="עריכה" data-id="${slideId}" data-type="${type}">✎</button>
                     </li>
                 `;
             });
@@ -464,8 +510,8 @@ async function refreshSlideList() {
             // Re-attach event listeners
             slideListEl.querySelectorAll('.slide-item').forEach(li => {
                 li.addEventListener('click', (e) => {
-                    // Ignore if clicked on the more button
-                    if (e.target.closest('.more-btn')) return;
+                    // Ignore if clicked on the edit button
+                    if (e.target.closest('.edit-btn')) return;
                     // Ignore if clicked on inline edit controls
                     if (e.target.closest('.inline-edit-container')) return;
                     
@@ -484,11 +530,12 @@ async function refreshSlideList() {
                 });
             });
 
-            slideListEl.querySelectorAll('.more-btn').forEach(btn => {
+            slideListEl.querySelectorAll('.edit-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     const id = btn.getAttribute('data-id');
                     const type = btn.getAttribute('data-type');
-                    showContextMenu(e, id, type);
+                    openInlineEdit(id, type);
                 });
             });
 
@@ -559,27 +606,80 @@ window.showContextMenu = function(event, slideId, currentType) {
     setAnswerItem.style.display = (currentType === 'question') ? 'block' : 'none';
 };
 
-window.openSlideTypeDialog = function() {
-    document.getElementById('slideContextMenu').style.display = 'none';
-    const slideId = window.contextMenuTargetSlideId;
-    const currentType = window.contextMenuTargetType;
+window.openInlineEdit = function(slideId, currentType) {
+    // Close any existing edit first (without full refresh)
+    if (window.currentEditingSlideId && window.currentEditingSlideId !== slideId) {
+        // Clear state and refresh to close previous edit
+        window.selectedType = null;
+        window.selectedAnswer = null;
+        window.currentEditingSlideId = null;
+        
+        // Do a synchronous refresh then continue
+        refreshSlideList().then(() => {
+            // Re-call this function after refresh
+            actualOpenInlineEdit(slideId, currentType);
+        });
+        return;
+    }
     
+    actualOpenInlineEdit(slideId, currentType);
+};
+
+function actualOpenInlineEdit(slideId, currentType) {
     const li = document.getElementById(`slide-item-${slideId}`);
     if (!li) return;
+
+    // Mark this slide as being edited
+    window.currentEditingSlideId = slideId;
+
+    // Store for later use
+    window.contextMenuTargetSlideId = slideId;
+    window.contextMenuTargetType = currentType;
+
+    // Get current answer for question type
+    const slideData = window.slideTypeData[slideId];
+    const currentAnswer = slideData?.correctAnswer || '1';
+    
+    // Store the initial selection
+    window.selectedType = currentType;
+    window.selectedAnswer = currentAnswer;
 
     // Prevent clicking the li from navigating while editing
     li.onclick = null;
 
+    // Build answer numbers HTML for question type (inside trigger)
+    const buildAnswerNumsHtml = (selectedAnswer) => {
+        return `
+            <span class="answer-nums-trigger" id="answerNumsInTrigger">
+                [<span class="answer-num-link ${selectedAnswer === '1' ? 'selected' : ''}" onclick="selectAnswer(event, '1')">1</span>
+                <span class="answer-num-link ${selectedAnswer === '2' ? 'selected' : ''}" onclick="selectAnswer(event, '2')">2</span>
+                <span class="answer-num-link ${selectedAnswer === '3' ? 'selected' : ''}" onclick="selectAnswer(event, '3')">3</span>
+                <span class="answer-num-link ${selectedAnswer === '4' ? 'selected' : ''}" onclick="selectAnswer(event, '4')">4</span>]
+            </span>
+        `;
+    };
+
     li.innerHTML = `
         <div class="inline-edit-container" onclick="event.stopPropagation()">
-            <select id="inlineSlideTypeSelect" class="inline-select">
-                <option value="opening" ${currentType === 'opening' ? 'selected' : ''}>פתיחה</option>
-                <option value="transition" ${currentType === 'transition' ? 'selected' : ''}>מעבר</option>
-                <option value="question" ${currentType === 'question' ? 'selected' : ''}>שאלה</option>
-                <option value="statistics" ${currentType === 'statistics' ? 'selected' : ''}>סטטיסטיקת מענה</option>
-                <option value="leaderboard" ${currentType === 'leaderboard' ? 'selected' : ''}>מובילים</option>
-                <option value="summary" ${currentType === 'summary' ? 'selected' : ''}>סיכום</option>
-            </select>
+            <div class="custom-dropdown" id="customDropdown">
+                <div class="custom-dropdown-trigger" onclick="toggleCustomDropdown(event)">
+                    <span class="trigger-content">
+                        <span id="dropdownLabel">${getTypeLabel(currentType)}</span>
+                        <span id="answerNumsContainer" style="display: ${currentType === 'question' ? 'inline' : 'none'};">
+                            ${buildAnswerNumsHtml(currentAnswer)}
+                        </span>
+                    </span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="custom-dropdown-menu" id="dropdownMenu">
+                    <div class="custom-dropdown-item ${currentType === 'opening' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'opening')">פתיחה</div>
+                    <div class="custom-dropdown-item ${currentType === 'transition' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'transition')">מעבר</div>
+                    <div class="custom-dropdown-item ${currentType === 'question' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'question')">שאלה</div>
+                    <div class="custom-dropdown-item ${currentType === 'statistics' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'statistics')">סטטיסטיקת מענה</div>
+                    <div class="custom-dropdown-item ${currentType === 'leaderboard' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'leaderboard')">מובילים</div>
+                    <div class="custom-dropdown-item ${currentType === 'summary' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'summary')">סיכום</div>
+                </div>
+            </div>
             <div class="inline-actions">
                 <button class="inline-btn confirm" onclick="confirmInlineSlideTypeChange(event, '${slideId}')" title="שמור">
                     <i class="ms-Icon ms-Icon--CheckMark"></i>
@@ -592,14 +692,85 @@ window.openSlideTypeDialog = function() {
     `;
 };
 
+// Toggle custom dropdown
+window.toggleCustomDropdown = function(event) {
+    event.stopPropagation();
+    
+    // Don't toggle if clicking on answer numbers
+    if (event.target.closest('.answer-num-link')) {
+        return;
+    }
+    
+    const menu = document.getElementById('dropdownMenu');
+    menu.classList.toggle('open');
+    
+    // Close when clicking outside
+    if (menu.classList.contains('open')) {
+        const closeDropdown = (e) => {
+            if (!e.target.closest('.custom-dropdown')) {
+                menu.classList.remove('open');
+                document.removeEventListener('click', closeDropdown);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+    }
+};
+
+// Select dropdown item
+window.selectDropdownItem = function(event, type) {
+    event.stopPropagation();
+    
+    window.selectedType = type;
+    
+    // Update label
+    document.getElementById('dropdownLabel').textContent = getTypeLabel(type);
+    
+    // Update selected state
+    document.querySelectorAll('.custom-dropdown-item').forEach(item => item.classList.remove('selected'));
+    event.target.classList.add('selected');
+    
+    // Show/hide answer numbers based on type
+    const answerNumsContainer = document.getElementById('answerNumsContainer');
+    if (answerNumsContainer) {
+        answerNumsContainer.style.display = type === 'question' ? 'inline' : 'none';
+    }
+    
+    // Close dropdown
+    document.getElementById('dropdownMenu').classList.remove('open');
+};
+
+// Select answer number
+window.selectAnswer = function(event, answer) {
+    event.stopPropagation();
+    
+    window.selectedAnswer = answer;
+    
+    // Update visual selection
+    document.querySelectorAll('.answer-num-link').forEach(link => {
+        link.classList.remove('selected');
+    });
+    event.target.classList.add('selected');
+};
+
+window.openSlideTypeDialog = function() {
+    document.getElementById('slideContextMenu').style.display = 'none';
+    const slideId = window.contextMenuTargetSlideId;
+    const currentType = window.contextMenuTargetType;
+    openInlineEdit(slideId, currentType);
+};
+
 window.cancelInlineEdit = function(event) {
     if (event) event.stopPropagation();
+    // Clear temporary selections
+    window.selectedType = null;
+    window.selectedAnswer = null;
+    window.currentEditingSlideId = null;
     refreshSlideList();
 };
 
 window.confirmInlineSlideTypeChange = function(event, slideId) {
     if (event) event.stopPropagation();
-    const newType = document.getElementById('inlineSlideTypeSelect').value;
+    const newType = window.selectedType || 'transition';
     
     if (slideId) {
         if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
@@ -611,10 +782,16 @@ window.confirmInlineSlideTypeChange = function(event, slideId) {
             window.slideTypeData[slideId].type = newType;
         }
         
-        // If changing to question, set default answer if missing
-        if (newType === 'question' && !window.slideTypeData[slideId].correctAnswer) {
-            window.slideTypeData[slideId].correctAnswer = '1';
+        // Save the selected answer if type is question
+        if (newType === 'question') {
+            const answer = window.selectedAnswer || '1';
+            window.slideTypeData[slideId].correctAnswer = answer;
         }
+        
+        // Clear temporary selections
+        window.selectedType = null;
+        window.selectedAnswer = null;
+        window.currentEditingSlideId = null;
         
         if (window.triggerAutoSave) window.triggerAutoSave();
         refreshSlideList();

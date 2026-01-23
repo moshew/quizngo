@@ -120,25 +120,37 @@
             display: none; /* Hide ID by default in CSS to avoid flicker */
         }
 
-        /* Three Dots Button */
-        .more-btn {
+        /* Edit Button */
+        .edit-btn {
             background: transparent;
             border: none;
             cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 4px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
             opacity: 0;
-            transition: opacity 0.2s;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: #605e5c;
+            font-size: 14px;
+            transform: scaleX(-1);
         }
 
-        .slide-item:hover .more-btn {
+        
+
+        .slide-item:hover .edit-btn {
             opacity: 1;
         }
         
-        .more-btn:hover {
-            background-color: #e1dfdd;
-            color: #201f1e;
+        .slide-item:hover .edit-btn:hover {
+            background-color: #c8c6c4;
+        }
+        
+        .slide-item.selected .edit-btn:hover {
+            background-color: #2b88d8;
+            color: white;
         }
 
         /* Context Menu */
@@ -181,19 +193,133 @@
         .inline-edit-container {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             width: 100%;
-            padding: 2px 0;
+            padding: 0;
+            margin: -2px 0;
         }
 
         .inline-select {
             flex-grow: 1;
-            padding: 6px 8px;
-            border: 1px solid #0078d4;
-            border-radius: 4px;
+            padding: 6px 4px;
+            border: none;
+            border-bottom: 2px solid #0078d4;
+            border-radius: 0;
             font-family: inherit;
             font-size: 14px;
             outline: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        
+        .inline-select:focus {
+            border-bottom-color: #005a9e;
+        }
+
+        /* Custom Dropdown */
+        .custom-dropdown {
+            position: relative;
+            display: flex;
+            flex: 1;
+        }
+
+        .custom-dropdown-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 6px;
+            border: none;
+            border-bottom: 2px solid #0078d4;
+            background: transparent;
+            font-family: inherit;
+            font-size: 14px;
+            width: 100%;
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .custom-dropdown-trigger .arrow {
+            font-size: 10px;
+            color: #605e5c;
+            margin-right: auto;
+        }
+        
+        .custom-dropdown-trigger .trigger-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .custom-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            left: 0;
+            background: white;
+            border: 1px solid #e1dfdd;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: none;
+            min-width: 160px;
+        }
+
+        .custom-dropdown-menu.open {
+            display: block;
+        }
+
+        .custom-dropdown-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.1s;
+        }
+
+        .custom-dropdown-item:hover {
+            background-color: #f3f2f1;
+        }
+
+        .custom-dropdown-item.selected {
+            background-color: #eff6fc;
+            color: #0078d4;
+        }
+
+        .custom-dropdown-item:first-child {
+            border-radius: 4px 4px 0 0;
+        }
+
+        .custom-dropdown-item:last-child {
+            border-radius: 0 0 4px 4px;
+        }
+
+        /* Answer Numbers in trigger */
+        .answer-nums-trigger {
+            display: inline-flex;
+            gap: 1px;
+            margin-right: 4px;
+        }
+
+        .answer-num-link {
+            color: #0078d4;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 13px;
+            padding: 0 3px;
+            text-decoration: none;
+            transition: all 0.1s;
+        }
+
+        .answer-num-link:hover {
+            text-decoration: underline;
+        }
+
+        .answer-num-link.selected {
+            color: #107c10;
+            font-weight: 700;
+            text-decoration: underline;
         }
 
         .inline-actions {
@@ -202,30 +328,33 @@
         }
 
         .inline-btn {
-            background: white;
-            border: 1px solid #e1dfdd;
             cursor: pointer;
-            padding: 6px;
+            padding: 4px 6px;
             border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            font-size: 11px;
+            border: none;
         }
 
         .inline-btn.confirm { 
-            color: #107c10; 
-            border-color: #107c10;
+            background-color: #107c10;
+            color: white;
+        }
+        
+        .inline-btn.confirm:hover {
+            background-color: #0b5c0b;
         }
         
         .inline-btn.cancel { 
-            color: #d13438; 
-            border-color: #d13438;
+            background-color: #d13438;
+            color: white;
         }
-
-        .inline-btn:hover { 
-            background-color: #f3f2f1;
-            transform: scale(1.05);
+        
+        .inline-btn.cancel:hover {
+            background-color: #a52729;
         }
 
         /* Status Bar */
