@@ -3,7 +3,7 @@
  * Handles all WebSocket connections and real-time updates
  */
 
-import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './presentation-state.js';
+import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './state.js';
 
 // WebSocket URL
 export const WEBSOCKET_URL = 'http://localhost:5000';
@@ -283,7 +283,7 @@ export function resetParticipantsList() {
     // Clear the map
     participantsData.clear();
     
-    // Also reset hidden participants (from presentation-state.js)
+    // Also reset hidden participants (from state.js)
     resetHiddenParticipants();
     
     console.log('✅ Participants list cleared (including hidden state)');
@@ -352,7 +352,7 @@ export function getCurrentQuestionAnswers() {
 async function updateRespondentsCount(count) {
     try {
         // Import question timer module dynamically to avoid circular dependency
-        const { updateCurrentSlideRespondentsCount } = await import('./elements/question_timer.js');
+        const { updateCurrentSlideRespondentsCount } = await import('../elements/question_timer.js');
         await updateCurrentSlideRespondentsCount(count);
     } catch (error) {
         console.error('❌ Error updating respondents count:', error);
@@ -365,7 +365,7 @@ async function updateRespondentsCount(count) {
 async function stopTimerAndEndAnswerTime() {
     try {
         // Import game actions module dynamically to avoid circular dependency
-        const { stopTimer } = await import('./game-actions.js');
+        const { stopTimer } = await import('../game/actions.js');
         await stopTimer();
         console.log('⏹️ Timer stopped - all participants answered');
     } catch (error) {
@@ -384,4 +384,3 @@ export function emitSocketEvent(event, data) {
         console.error('❌ Socket not connected');
     }
 }
-

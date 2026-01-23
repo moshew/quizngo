@@ -3,9 +3,9 @@
  * Handles answer validation and score calculation for Kahoot game
  */
 
-import { getParticipantsData, getCurrentQuestionAnswers } from './websocket.js';
-import { getSlideData } from './presentation-state.js';
-import { API_BASE } from './api.js';
+import { getParticipantsData, getCurrentQuestionAnswers } from '../core/websocket.js';
+import { getSlideData } from '../core/state.js';
+import { API_BASE } from '../core/api.js';
 
 /**
  * Calculate score based on answer time

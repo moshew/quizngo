@@ -5,7 +5,7 @@
 
 /* global PowerPoint */
 
-import { showError, showStatus } from '../ui-manager.js';
+import { showError, showStatus } from '../ui/manager.js';
 
 /**
  * Add Answers Distribution Bar Chart

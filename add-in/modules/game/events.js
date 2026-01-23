@@ -6,9 +6,9 @@
 /* global Office */
 
 import { getCurrentSlideNumber } from './navigation.js';
-import { loadSlideType } from './slide-manager.js';
-import { startTimer, stopTimer } from './game-actions.js';
-import { startAcceptingParticipants, stopAcceptingParticipants } from './api.js';
+import { loadSlideType } from './slides.js';
+import { startTimer, stopTimer } from './actions.js';
+import { startAcceptingParticipants, stopAcceptingParticipants } from '../core/api.js';
 
 // Debounce timer for slide changes
 let slideChangeDebounceTimer = null;
@@ -45,7 +45,7 @@ export function setupSlideChangeListener(onSlideChangedCallback) {
 /**
  * Slide change event handler (debounced)
  */
-export async function onSlideChanged(eventArgs, htmlCache) {
+export async function onSlideChanged(eventArgs) {
     // Ignore manual slide changes if we're currently navigating via WebSocket
     if (isNavigatingViaWebSocket) {
         console.log('📄 Slide selection changed event fired - IGNORED (WebSocket navigation in progress)');
@@ -60,16 +60,15 @@ export async function onSlideChanged(eventArgs, htmlCache) {
     }
     
     slideChangeDebounceTimer = setTimeout(async () => {
-        await processSlideChange(htmlCache, false); // fromWebSocket = false (manual change)
+        await processSlideChange(false); // fromWebSocket = false (manual change)
     }, 300);
 }
 
 /**
  * Process slide change
- * @param {Map} htmlCache - Cache for HTML files
  * @param {boolean} fromWebSocket - Whether this was triggered by WebSocket navigation
  */
-export async function processSlideChange(htmlCache, fromWebSocket = false) {
+export async function processSlideChange(fromWebSocket = false) {
     try {
         console.log('🔄 Processing slide change...');
         console.log(`   Source: ${fromWebSocket ? 'WebSocket' : 'Manual/Event'}`);
@@ -104,8 +103,8 @@ export async function processSlideChange(htmlCache, fromWebSocket = false) {
         
         console.log(`📄 Slide type: ${slideType}`);
         
-        // Load slide type UI (Now just updates state)
-        loadSlideType(htmlCache);
+        // Load slide type state (no UI loading in tab-based architecture)
+        loadSlideType();
         
         // Update Slide List in Tab 1
         if (window.refreshSlideList) {
@@ -148,7 +147,7 @@ export async function processSlideChange(htmlCache, fromWebSocket = false) {
             console.log('🎯 Question slide detected via WebSocket - auto-starting timer...');
             
             // Reset answers for new question
-            const { resetCurrentQuestionAnswers } = await import('./websocket.js');
+            const { resetCurrentQuestionAnswers } = await import('../core/websocket.js');
             resetCurrentQuestionAnswers();
             
             // Stop any existing timer first
@@ -189,4 +188,3 @@ export function resetParticipantAcceptanceState() {
     isAcceptingParticipants = false;
     console.log('🔄 Reset participant acceptance state to: false');
 }
-

@@ -5,8 +5,8 @@
 
 /* global PowerPoint, Office */
 
-import { API_BASE } from '../api.js';
-import { showError } from '../ui-manager.js';
+import { API_BASE } from '../core/api.js';
+import { showError } from '../ui/manager.js';
 
 /**
  * Update Game ID in all slides with the tag

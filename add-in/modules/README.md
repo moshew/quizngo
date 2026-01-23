@@ -1,153 +1,164 @@
 # Modules Directory
 
-This directory contains refactored modules from the original `taskpane.js` file.
+This directory contains refactored modules from the original `taskpane.js` file, organized into logical subdirectories.
 
-## Architecture Overview
+## Directory Structure
 
-The original `taskpane.js` file was **4,173 lines** and contained all functionality in a single file. It has been refactored into a modular architecture:
+```
+modules/
+├── core/                     # Core infrastructure
+│   ├── api.js               # API communication
+│   ├── websocket.js         # WebSocket & real-time updates
+│   └── state.js             # Presentation state management
+│
+├── ui/                       # User interface
+│   ├── manager.js           # UI updates & status messages
+│   ├── slides-list.js       # Slides list navigation
+│   └── slide-type-editor.js # Inline slide type editing
+│
+├── game/                     # Game logic
+│   ├── actions.js           # Game actions (start, timer)
+│   ├── events.js            # Office event handlers
+│   ├── navigation.js        # PowerPoint navigation
+│   ├── scoring.js           # Answer scoring
+│   └── slides.js            # Slide type management
+│
+└── elements/                 # PowerPoint shape elements
+    ├── answers_analysis.js  # Answer distribution & leaderboard
+    ├── game_management.js   # Game ID & QR code
+    ├── participants_management.js  # Participant list & count
+    └── question_timer.js    # Timer & respondents count
+```
 
-### Main File
-- **taskpane.js** (~600 lines) - Main entry point, coordinates modules and handles Office.js initialization
+## Module Details
 
-### Modules
+### Core (`core/`)
 
-#### 1. **api.js** - API Communication
-- `makeApiCall()` - Generic API calls returning text
+#### `api.js` - API Communication
+- `API_BASE` - Base URL for API calls
+- `makeApiCall()` - Generic API calls
 - `makeJsonApiCall()` - API calls returning JSON
-- `initializeQuiz()` - Initialize quiz session
-- **Exports**: `API_BASE`, `makeApiCall`, `makeJsonApiCall`, `initializeQuiz`
+- `registerRoom()` - Register WebSocket to room
+- `startAcceptingParticipants()` / `stopAcceptingParticipants()` - Control participant flow
 
-#### 2. **websocket.js** - WebSocket & Real-time Communication
-- `initializeWebSocket()` - Setup WebSocket connection with event handlers
+#### `websocket.js` - WebSocket & Real-time
+- `initializeWebSocket()` - Setup WebSocket with event handlers
 - `getSocket()` - Get current socket instance
-- `emitSocketEvent()` - Send events through socket
-- `getParticipantsList()` - Get current participants
-- Participant management (add/remove/position)
-- **Exports**: `WEBSOCKET_URL`, `initializeWebSocket`, `getSocket`, `emitSocketEvent`, `getParticipantsList`
+- `getParticipantsData()` / `getVisibleParticipantsData()` - Get participant info
+- `getCurrentQuestionAnswers()` - Get answers for current question
+- `resetParticipantsList()` - Clear participants
 
-#### 3. **navigation.js** - PowerPoint Navigation
-- `goToFirstSlideInPowerPoint()` - Navigate to first slide
-- `goToNextSlideInPowerPoint()` - Navigate to next slide (with game logic)
-- `navigateToSlideByIndex()` - Navigate to specific slide
-- `simulateClickInPowerPoint()` - Simulate spacebar/click
-- `getCurrentSlideNumber()` - Get current slide position
-- `getAllSlideIds()` - Get all slide IDs in order
-- `calculateNextSlideLocally()` - Calculate next slide based on game logic
-- `resetAnimationState()` - Reset animation tracking
-- **Exports**: All navigation functions
+#### `state.js` - Presentation State
+- `getGameHashId()` - Get/create game ID from presentation tags
+- `savePresentationData()` / `loadPresentationData()` - Server persistence
+- `getSlideType()` / `setSlideType()` / `getSlideData()` - Slide type helpers
+- `triggerAutoSave()` - Debounced auto-save
+- `hideParticipants()` / `isParticipantHidden()` - Hidden participant management
 
-#### 4. **storage.js** - Data Persistence
-- `savePresentationData()` - Save presentation data to server
-- `loadPresentationData()` - Load presentation data from server
-- `getPresentationFileInfo()` - Get presentation file path and name
-- `isPresentationSaved()` - Check if presentation is saved
-- `getGameHashId()` - Generate/get game hash ID
-- `createHashFromPath()` - Create hash from file path
-- `getSlideType()`, `setSlideType()`, `getSlideData()` - Slide type helpers
-- **Exports**: All storage and file management functions
+### UI (`ui/`)
 
-#### 5. **powerpoint-shapes.js** - PowerPoint Shape Manipulation
-- `updateGameIdInSlides()` - Update game PIN in tagged shapes
-- `updateQrCodeInSlides()` - Update QR code images in slides
-- `insertLiveParticipantsArea()` - Insert participants display area
-- `updateLiveParticipantsInSlide()` - Update participants in existing areas
-- `createParticipantPillShapes()` - Create participant UI elements
-- `generateUUID()` - Generate unique IDs
-- **Exports**: All shape manipulation functions
-
-#### 6. **ui-manager.js** - UI Management
+#### `manager.js` - UI Management
 - `showStatus()` - Display status messages
 - `showError()` - Display error messages
-- `updateDisplayedValues()` - Update UI values
 - `updateAutoSaveStatus()` - Update auto-save indicator
-- `preloadAllHtmlFiles()` - Pre-cache HTML files
-- `updateUIForSlideType()` - Load UI for specific slide type
-- **Exports**: All UI management functions
+- `loadStartScreen()` / `initializeStartScreen()` - Game start screen
 
-## Benefits of Refactoring
+#### `slides-list.js` - Slides List
+- `initializeSlidesList()` - Setup slides list UI
+- `refreshSlideList()` - Refresh the slides list
+- `navigateToSlideByIndex()` - Navigate to slide
+- `updateListSelection()` - Update visual selection
 
-### 1. **Maintainability**
-- **Before**: 4,173 lines in one file - difficult to navigate and maintain
-- **After**: Organized into 6 focused modules + main file (~600 lines each)
+#### `slide-type-editor.js` - Inline Editing
+- `getTypeLabel()` - Get Hebrew label for slide type
+- `openInlineEdit()` - Open inline editor for slide
+- `confirmInlineSlideTypeChange()` - Save inline changes
 
-### 2. **Code Organization**
-- Clear separation of concerns
-- Each module has a single responsibility
-- Easy to locate specific functionality
+### Game (`game/`)
 
-### 3. **Reusability**
-- Modules can be used independently
-- Functions can be imported only when needed
-- Reduces coupling between components
+#### `actions.js` - Game Actions
+- `startPresentationMode()` - Start the game (show QR screen)
+- `startTimer()` / `stopTimer()` - Question timer control
 
-### 4. **Testing**
-- Each module can be tested in isolation
-- Easier to write unit tests
-- Clearer dependencies
+#### `events.js` - Event Handlers
+- `setupSlideChangeListener()` - Listen for slide changes
+- `onSlideChanged()` - Handle slide change event
+- `processSlideChange()` - Process slide change logic
+- `resetParticipantAcceptanceState()` - Reset acceptance state
 
-### 5. **Performance**
-- ES6 modules support tree-shaking
-- Browser can cache modules separately
-- Faster reload during development
+#### `navigation.js` - PowerPoint Navigation
+- `goToFirstSlideInPowerPoint()` - Navigate to first slide
+- `goToNextSlideInPowerPoint()` - Navigate to next (with game logic)
+- `navigateToSlideByIndex()` - Navigate to specific slide
+- `simulateClickInPowerPoint()` - Simulate spacebar/click
+- `getCurrentSlideNumber()` - Get current position
+- `calculateNextSlideLocally()` - Calculate next slide based on game rules
 
-### 6. **Collaboration**
-- Multiple developers can work on different modules
-- Reduced merge conflicts
-- Clear module boundaries
+#### `scoring.js` - Answer Scoring
+- `calculateScore()` - Calculate score based on answer time
+- `processAnswersAndScores()` - Process all answers for a question
+- `sendResultsToServer()` - Send results to server
 
-## Usage Example
+#### `slides.js` - Slide Management
+- `saveSlideType()` - Save slide type to state
+- `loadSlideType()` - Load slide type for current slide
+
+### Elements (`elements/`)
+
+#### `answers_analysis.js` - Answers & Leaderboard
+- `addAnswersDistribution()` - Add answer chart to slide
+- `updateAnswersDistribution()` - Update chart values
+- `resetAnswersDistribution()` - Reset chart to zeros
+- `addLeaderboardElements()` - Add leaderboard to slide
+- `updateLeaderboard()` / `resetLeaderboard()` - Update/reset leaderboard
+
+#### `game_management.js` - Game ID & QR
+- `updateGameIdInSlides()` - Update game PIN in slides
+- `insertGameIdButton()` - Insert game ID placeholder
+- `updateQrCodeInSlides()` - Update QR code image
+- `insertQrCodeButton()` - Insert QR placeholder
+
+#### `participants_management.js` - Participants
+- `updateParticipantsNumInSlides()` - Update participant count
+- `insertParticipantsNumButton()` - Insert count placeholder
+- `updateParticipantsListInSlides()` - Update participant list
+- `insertParticipantsListButton()` - Insert list placeholder
+- `resetParticipantsNumInSlides()` - Reset counts to 0
+
+#### `question_timer.js` - Timer & Respondents
+- `addQuestionTime()` - Add timer to slide
+- `updateCurrentSlideQuestionTime()` - Update timer value
+- `updateAllQuestionTimeElements()` - Update all timers
+- `addRespondentsCount()` - Add respondents counter
+- `updateCurrentSlideRespondentsCount()` - Update respondents count
+- `updateAllRespondentsCountElements()` - Update all respondent counts
+
+## Import Examples
 
 ```javascript
-// Import only what you need
-import { makeApiCall } from './modules/api.js';
-import { goToNextSlideInPowerPoint } from './modules/navigation.js';
-import { savePresentationData } from './modules/storage.js';
+// Core modules
+import { API_BASE, registerRoom } from './modules/core/api.js';
+import { initializeWebSocket } from './modules/core/websocket.js';
+import { getGameHashId, triggerAutoSave } from './modules/core/state.js';
 
-// Use the functions
-await makeApiCall('game-info/12345');
-await goToNextSlideInPowerPoint();
-await savePresentationData();
+// UI modules
+import { showStatus, showError } from './modules/ui/manager.js';
+import { initializeSlidesList, refreshSlideList } from './modules/ui/slides-list.js';
+
+// Game modules
+import { startPresentationMode, startTimer } from './modules/game/actions.js';
+import { goToNextSlideInPowerPoint } from './modules/game/navigation.js';
+import { processAnswersAndScores } from './modules/game/scoring.js';
+
+// Elements modules
+import { updateAnswersDistribution } from './modules/elements/answers_analysis.js';
+import { updateGameIdInSlides } from './modules/elements/game_management.js';
 ```
 
-## Migration Notes
+## Benefits of This Structure
 
-The original `taskpane.js` has been backed up as `taskpane-old.js`.
-
-### Breaking Changes
-- None! The external API remains the same
-- All functions are still globally accessible via `window` object
-- HTML files can still call functions via `onclick="functionName()"`
-
-### Global Functions
-Functions are exposed globally for HTML onclick handlers:
-```javascript
-window.initializeQuiz = initializeQuiz;
-window.startPresentationMode = startPresentationMode;
-window.goToNextSlideInPowerPoint = goToNextSlideInPowerPoint;
-// ... etc
-```
-
-## File Size Comparison
-
-| File | Before | After | Reduction |
-|------|--------|-------|-----------|
-| taskpane.js | 181 KB (4,173 lines) | 21 KB (~600 lines) | **88% reduction** |
-
-**Total modular code**: ~2,500 lines across 6 modules + 600 lines main = ~3,100 lines
-- Better organization
-- Improved readability  
-- **25% reduction in total code** (removed duplication and refactored)
-
-## Version History
-
-- **v4.5.2** - Original monolithic file
-- **v5.0.0** - Refactored to modular architecture
-
-## Future Improvements
-
-1. **TypeScript Migration** - Add type safety
-2. **Unit Tests** - Test each module independently
-3. **Documentation** - JSDoc comments for all functions
-4. **Error Handling** - Centralized error handling module
-5. **State Management** - Dedicated state management module
-
+1. **Clear Organization** - Each subdirectory has a single responsibility
+2. **Easy Navigation** - Find code quickly by category
+3. **Reduced Coupling** - Dependencies flow in one direction (core → ui/game → elements)
+4. **Scalability** - Easy to add new modules in the appropriate category
+5. **Maintainability** - Small, focused files are easier to understand and modify

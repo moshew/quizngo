@@ -5,16 +5,16 @@
 
 /* global PowerPoint */
 
-import { API_BASE } from './api.js';
-import { getGameHashId, getSlideData } from './presentation-state.js';
-import { showStatus, showError, updateUIForSlideType, initializeStartScreen } from './ui-manager.js';
-import { updateCurrentSlideQuestionTime } from './elements/question_timer.js';
+import { API_BASE } from '../core/api.js';
+import { getGameHashId, getSlideData } from '../core/state.js';
+import { showStatus, showError, loadStartScreen, initializeStartScreen } from '../ui/manager.js';
+import { updateCurrentSlideQuestionTime } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
 
 /**
  * Start presentation mode (game start screen)
  */
-export async function startPresentationMode(htmlCache) {
+export async function startPresentationMode() {
     console.log('🎮 Start game button clicked - loading start screen');
     
     try {
@@ -29,7 +29,7 @@ export async function startPresentationMode(htmlCache) {
         console.log('✅ Hash ID:', hashId);
         
         // Load the start screen UI
-        await updateUIForSlideType('start', htmlCache);
+        loadStartScreen();
         
         // Switch view to Game Mode
         const mainContent = document.getElementById('mainContent');
@@ -185,7 +185,7 @@ async function handleQuestionEnd() {
         // --- UPDATE GRAPHS BEFORE SENDING RESULTS ---
         try {
             console.log('📊 Updating graphs with final answers...');
-            const { getCurrentQuestionAnswers } = await import('./websocket.js');
+            const { getCurrentQuestionAnswers } = await import('../core/websocket.js');
             const answersMap = getCurrentQuestionAnswers();
             
             // Aggregate answers
@@ -202,8 +202,8 @@ async function handleQuestionEnd() {
             
             console.log('📊 Aggregated answers for graph update:', answersCount);
             
-            const { updateAnswersDistribution, updateLeaderboard } = await import('./elements/answers_analysis.js');
-            const { updateAllRespondentsCountElements } = await import('./elements/question_timer.js');
+            const { updateAnswersDistribution, updateLeaderboard } = await import('../elements/answers_analysis.js');
+            const { updateAllRespondentsCountElements } = await import('../elements/question_timer.js');
             
             // Update all answer distribution graphs (heights and value labels)
             await updateAnswersDistribution(answersCount);
@@ -299,5 +299,3 @@ async function updateQuestionTimeDisplay(timeValue) {
 }
 
 // End of file
-
-

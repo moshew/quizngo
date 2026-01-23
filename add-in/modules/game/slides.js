@@ -7,15 +7,14 @@ import {
     triggerAutoSave,
     getSlideType,
     setSlideType
-} from './presentation-state.js';
+} from '../core/state.js';
 
 /**
- * Handle slide type change from dropdown (now mostly handled by dialog in taskpane.js)
- * Keeping this for backward compatibility if needed or called from elsewhere
+ * Handle slide type change from dropdown (deprecated)
+ * Note: This is now handled by confirmSlideTypeChange in slide-type-editor.js
  */
-export function handleSlideTypeChange(htmlCache) {
-    // This function is likely no longer used as we use confirmSlideTypeChange in taskpane.js
-    console.log('handleSlideTypeChange called - deprecated');
+export function handleSlideTypeChange() {
+    console.log('handleSlideTypeChange called - deprecated, use slide-type-editor.js');
 }
 
 /**
@@ -59,9 +58,9 @@ export function saveSlideType(slideType) {
 
 /**
  * Load slide type for current slide
- * Now just logs and ensures state is consistent. No UI loading.
+ * Now just logs and ensures state is consistent. No UI loading in tab-based architecture.
  */
-export function loadSlideType(htmlCache) {
+export function loadSlideType() {
     if (!window.currentSlideId) {
         return;
     }

@@ -103,4 +103,3 @@ export async function registerRoom(socketId, hashId) {
         return { status: 'error', message: error.message };
     }
 }
-

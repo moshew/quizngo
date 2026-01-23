@@ -5,7 +5,7 @@
 
 /* global PowerPoint */
 
-import { showError } from '../ui-manager.js';
+import { showError } from '../ui/manager.js';
 
 /**
  * Add Question Time textbox

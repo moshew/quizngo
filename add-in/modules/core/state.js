@@ -6,7 +6,7 @@
 /* global Office, PowerPoint */
 
 import { API_BASE } from './api.js';
-import { updateAutoSaveStatus } from './ui-manager.js';
+import { updateAutoSaveStatus } from '../ui/manager.js';
 
 /**
  * Generate UUID v4
@@ -551,4 +551,3 @@ async function performAutoSave() {
         }, 5000);
     }
 }
-

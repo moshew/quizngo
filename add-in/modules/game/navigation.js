@@ -5,7 +5,7 @@
 
 /* global PowerPoint, Office */
 
-import { processSlideChange, setWebSocketNavigationFlag } from './event-handlers.js';
+import { processSlideChange, setWebSocketNavigationFlag } from './events.js';
 
 /**
  * Navigate to first slide in PowerPoint
@@ -323,7 +323,7 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
         // with the DocumentSelectionChanged event (50ms is sufficient after testing)
         setTimeout(async () => {
             try {
-                await processSlideChange(window.htmlCache, true); // fromWebSocket = true
+                await processSlideChange(true); // fromWebSocket = true
                 console.log('✅ processSlideChange completed');
             } catch (error) {
                 console.error('❌ Error in processSlideChange:', error);
@@ -871,4 +871,3 @@ export async function getCurrentSlideNumber() {
         return 1;
     }
 }
-

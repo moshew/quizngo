@@ -2,76 +2,73 @@
 
 console.log('📄 taskpane.js loaded (Tabbed Version)!');
 
-// Import modules
-import { API_BASE, registerRoom } from './modules/api.js';
-import { initializeWebSocket } from './modules/websocket.js';
+// Import modules - Core
+import { API_BASE, registerRoom } from './modules/core/api.js';
+import { initializeWebSocket, resetParticipantsList } from './modules/core/websocket.js';
+import { 
+    getSlideType, 
+    loadPresentationData,
+    triggerAutoSave 
+} from './modules/core/state.js';
+
+// Import modules - UI
+import { showStatus, showError } from './modules/ui/manager.js';
+import { 
+    initializeSlidesList,
+    refreshSlideList,
+    navigateToSlideByIndex,
+    updateListSelection
+} from './modules/ui/slides-list.js';
+
+// Import modules - Game
 import { 
     handleSlideTypeChange, 
     saveSlideType, 
     loadHiddenSlideState,
     setupHideSlideListener 
-} from './modules/slide-manager.js';
+} from './modules/game/slides.js';
 import { 
     setupSlideChangeListener, 
-    onSlideChanged 
-} from './modules/event-handlers.js';
-import { 
-    startPresentationMode
-} from './modules/game-actions.js';
+    onSlideChanged,
+    resetParticipantAcceptanceState 
+} from './modules/game/events.js';
+import { startPresentationMode } from './modules/game/actions.js';
 import {
     goToFirstSlideInPowerPoint,
     goToNextSlideInPowerPoint,
     simulateClickInPowerPoint,
     resetAnimationState
-} from './modules/navigation.js';
-import {
-    resetParticipantAcceptanceState
-} from './modules/event-handlers.js';
-import {
-    resetParticipantsList
-} from './modules/websocket.js';
+} from './modules/game/navigation.js';
+
+// Import modules - Elements
 import {
     updateAllQuestionTimeElements,
-    updateAllRespondentsCountElements
-} from './modules/elements/question_timer.js';
-import {
-    resetParticipantsNumInSlides,
-    updateParticipantsListInSlides,
-    updateParticipantsNumInSlides
-} from './modules/elements/participants_management.js';
-import {
-    resetAnswersDistribution,
-    resetLeaderboard
-} from './modules/elements/answers_analysis.js';
-import {
-    updateGameIdInSlides,
-    updateQrCodeInSlides
-} from './modules/elements/game_management.js';
-import {
+    updateAllRespondentsCountElements,
     addQuestionTime,
     addRespondentsCount
 } from './modules/elements/question_timer.js';
 import {
-    showStatus,
-    showError
-} from './modules/ui-manager.js';
-import { 
-    getSlideType, 
-    loadPresentationData,
-    triggerAutoSave 
-} from './modules/presentation-state.js';
-import {
-    insertGameIdButton,
-    insertQrCodeButton
-} from './modules/elements/game_management.js';
-import {
+    resetParticipantsNumInSlides,
+    updateParticipantsListInSlides,
+    updateParticipantsNumInSlides,
     insertParticipantsListButton,
     insertParticipantsNumButton
 } from './modules/elements/participants_management.js';
-import { 
+import {
+    resetAnswersDistribution,
+    resetLeaderboard,
     addAnswersDistribution, 
-    addLeaderboardElements 
+    addLeaderboardElements
 } from './modules/elements/answers_analysis.js';
+import {
+    updateGameIdInSlides,
+    updateQrCodeInSlides,
+    insertGameIdButton,
+    insertQrCodeButton
+} from './modules/elements/game_management.js';
+
+// Expose triggerAutoSave globally for modules that need it
+window.triggerAutoSave = triggerAutoSave;
 
 // --- Global Functions (Attached to window for HTML access) ---
 
@@ -181,7 +178,7 @@ async function selectCurrentSlideOnLoad() {
                 window.currentSlideNumber = 1;
                 
                 // Navigate to first slide
-                await navigateToSlide(1);
+                await navigateToSlideByIndex(1);
                 console.log('📍 Navigated to first slide:', window.currentSlideId);
             }
         });
@@ -190,7 +187,7 @@ async function selectCurrentSlideOnLoad() {
         // Fallback: try to go to first slide
         window.currentSlideNumber = 1;
         try {
-            await navigateToSlide(1);
+            await navigateToSlideByIndex(1);
         } catch (e) {
             console.error('Error navigating to first slide:', e);
         }
@@ -212,41 +209,27 @@ Office.onReady((info) => {
             window.currentHashId = urlHashId;
         }
         
-        // Create shared HTML cache
-        const htmlCache = new Map();
-
         // Initialize Tabs and Lists
         renderActionsTab();
         setupSettingsListeners();
         loadSettingsToTab();
         
         // Attach persistent button listeners
-        document.getElementById('btnStartGame').onclick = () => startPresentationMode(htmlCache);
+        document.getElementById('btnStartGame').onclick = () => startPresentationMode();
         
         const slideContentArea = document.getElementById('slideContentArea');
-    const mainContent = document.getElementById('mainContent');
-    const tabs = document.querySelector('.tabs');
+        const mainContent = document.getElementById('mainContent');
+        const tabs = document.querySelector('.tabs');
     
-    // Toggle visibility: If slideContentArea has content and is active, hide tabs and main content
-    // Check if we are in "Game Mode" (Start Presentation Mode)
-    // Actually, game-actions.js startPresentationMode calls updateUIForSlideType('start')
-    // ui-manager.js updateUIForSlideType sets slideContentArea.innerHTML
-    
-    // We need to listen or expose a way to switch modes.
-    // Ideally, updateUIForSlideType should handle the switching if it detects 'start' type or if we explicitly ask for it.
-    
-    // For now, let's modify startPresentationMode in game-actions.js to handle the UI switching
-    // OR expose a function here.
-    
-    // Load data then refresh list
-    loadPresentationData().then(async () => {
+        // Load data then initialize slides list
+        loadPresentationData().then(async () => {
             // Get current slide and select it
             await selectCurrentSlideOnLoad();
             
-            refreshSlideList(); // Initial load after data is ready
+            // Initialize the slides list module (handles refresh, navigation, inline editing)
+            await initializeSlidesList();
             
             // Ensure we are registered to the room if hashId is available
-            // This covers the case where hashId wasn't in URL but was loaded from presentation tags
             if (window.socket && window.socket.connected && window.currentHashId) {
                 console.log('🔗 Late registration for hash:', window.currentHashId);
                 await registerRoom(window.socket.id, window.currentHashId);
@@ -254,8 +237,7 @@ Office.onReady((info) => {
         });
 
         // Set up slide change event listener
-        // We pass the htmlCache for potential future use or if we re-enable slide content swapping
-        setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs, htmlCache));
+        setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs));
         
         // Initialize WebSocket
         const socket = initializeWebSocket({
@@ -268,12 +250,9 @@ Office.onReady((info) => {
                     console.log('🔗 Registering room for hash:', hashId);
                     await registerRoom(socket.id, hashId);
                 }
-                
-                // Status bar removed
             },
             onDisconnect: () => {
                 console.log('❌ Disconnected');
-                // Status bar removed
             },
             onError: (msg) => showError(msg),
             
@@ -291,12 +270,10 @@ Office.onReady((info) => {
                 
                 // === UPDATE GAME ID & QR CODE IN SLIDES ===
                 try {
-                    // Update kahoot-game-id tags in PowerPoint slides
                     if (gamePin) {
                         await updateGameIdInSlides(gamePin);
                     }
                     
-                    // Update QR Code in slides with game PIN (for players)
                     if (window.currentHashId && gamePin) {
                         await updateQrCodeInSlides(window.currentHashId, gamePin);
                     } else {
@@ -307,36 +284,18 @@ Office.onReady((info) => {
                 }
                 
                 // === RESET ALL GAME STATE ===
-                
-                // 1. Reset participant acceptance state
                 resetParticipantAcceptanceState();
-                
-                // 2. Reset participants list (clears all participant data)
                 resetParticipantsList();
-                
-                // 3. Reset animation state
                 resetAnimationState();
                 
                 try {
-                    // 4. Reset question time elements to initial value
                     const initialTime = window.presentationSettings?.questionWaitTime || 30;
                     await updateAllQuestionTimeElements(initialTime);
-                    
-                    // 5. Reset respondents count to 0
                     await updateAllRespondentsCountElements(0);
-                    
-                    // 6. Reset participants number in slides to 0
                     await resetParticipantsNumInSlides();
-                    
-                    // 7. Reset participants list display in slides
                     await updateParticipantsListInSlides();
-                    
-                    // 8. Reset answers distribution chart
                     await resetAnswersDistribution();
-                    
-                    // 9. Reset leaderboard
                     await resetLeaderboard();
-                    
                 } catch (resetError) {
                     console.error('❌ Error during resets:', resetError);
                 }
@@ -365,7 +324,7 @@ Office.onReady((info) => {
                             showStatus('חזרה לשקף הראשון...', 'info');
                             break;
                         case 'go_to_next_slide':
-                        case 'next_slide': // Support both formats
+                        case 'next_slide':
                             console.log('📄 Executing next slide navigation...');
                             await goToNextSlideInPowerPoint();
                             showStatus('מעבר לשקף הבא...', 'info');
@@ -408,12 +367,8 @@ Office.onReady((info) => {
                 console.log('👥 Participant update received:', data);
                 console.log('👥 Total participants:', participantIds.length);
                 
-                // The websocket module already handles the data storage
-                
-                // Update participant count globally
                 window.currentUsers = participantIds.length;
                 
-                // Update participants number in all slides (kahoot-participants-num tags)
                 try {
                     await updateParticipantsNumInSlides(participantIds.length);
                     console.log('✅ Updated participant count in slides to:', participantIds.length);
@@ -421,7 +376,6 @@ Office.onReady((info) => {
                     console.error('❌ Error updating participant count in slides:', error);
                 }
                 
-                // Update participants list in all slides (kahoot-participants-list tags)
                 try {
                     await updateParticipantsListInSlides();
                     console.log('✅ Updated participant list in slides');
@@ -438,422 +392,14 @@ Office.onReady((info) => {
             // Handle player answers
             onPlayerAnswer: (data, answersMap) => {
                 console.log('📝 Player answer handled, total answers:', answersMap.size);
-                // The websocket module already handles the answer storage
             }
         });
         window.socket = socket;
-        
-        // Global refresh function for other modules
-        window.refreshSlideList = refreshSlideList;
 
     } else {
         console.log('❌ Not in PowerPoint');
     }
 });
-
-// --- Tab 1: Slides List ---
-
-async function refreshSlideList() {
-    try {
-        const slideListEl = document.getElementById('slideList');
-        
-        // Don't show loading spinner on every refresh to avoid flicker
-        if (slideListEl.children.length === 0) {
-             document.getElementById('slides-loading').style.display = 'block';
-             slideListEl.style.display = 'none';
-        }
-
-        await PowerPoint.run(async (context) => {
-            const slides = context.presentation.slides;
-            slides.load("items/id, items/tags");
-            await context.sync();
-            
-            // Status bar removed, no need to update slideCount
-            // document.getElementById('slideCount').textContent = `${slides.items.length} שקפים`;
-
-            // Build HTML string for better performance and less flicker
-            let listHtml = '';
-
-            // Sort slides by index (they come in order usually)
-            slides.items.forEach((slide, index) => {
-                const slideNumber = index + 1;
-                const slideId = slide.id;
-                
-                // Get type from our local state (loaded from file or memory)
-                // If not in memory, we might need to rely on what we have or default to 'transition'
-                let type = getSlideType(slideId) || 'transition';
-                let typeLabel = getTypeLabel(type);
-                
-                // Check if it's a question and has an answer
-                let extraInfo = '';
-                if (type === 'question') {
-                    const slideData = window.slideTypeData[slideId];
-                    const answer = slideData?.correctAnswer || '1';
-                    extraInfo = ` [${answer}]`;
-                }
-
-                const isSelected = window.currentSlideId === slideId ? ' selected' : '';
-                
-                // Use data attributes for click handling instead of inline onclick
-                listHtml += `
-                    <li id="slide-item-${slideId}" class="slide-item${isSelected}" data-index="${slideNumber}" data-id="${slideId}">
-                        <div class="slide-info">
-                            <span class="slide-title">שקף ${slideNumber} - ${typeLabel}${extraInfo}</span>
-                        </div>
-                        <button class="edit-btn" title="עריכה" data-id="${slideId}" data-type="${type}">✎</button>
-                    </li>
-                `;
-            });
-
-            slideListEl.innerHTML = listHtml;
-
-            // Re-attach event listeners
-            slideListEl.querySelectorAll('.slide-item').forEach(li => {
-                li.addEventListener('click', (e) => {
-                    // Ignore if clicked on the edit button
-                    if (e.target.closest('.edit-btn')) return;
-                    // Ignore if clicked on inline edit controls
-                    if (e.target.closest('.inline-edit-container')) return;
-                    
-                    // Visual update first
-                    slideListEl.querySelectorAll('.slide-item').forEach(item => item.classList.remove('selected'));
-                    li.classList.add('selected');
-
-                    const index = parseInt(li.getAttribute('data-index'));
-                    const slideId = li.getAttribute('data-id');
-                    
-                    // Update global state immediately
-                    window.currentSlideId = slideId;
-                    window.currentSlideNumber = index;
-
-                    navigateToSlide(index);
-                });
-            });
-
-            slideListEl.querySelectorAll('.edit-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const id = btn.getAttribute('data-id');
-                    const type = btn.getAttribute('data-type');
-                    openInlineEdit(id, type);
-                });
-            });
-
-            document.getElementById('slides-loading').style.display = 'none';
-            slideListEl.style.display = 'block';
-        });
-    } catch (error) {
-        console.error('Error refreshing slide list:', error);
-        showError('שגיאה בטעינת רשימת השקפים');
-    }
-}
-
-function getTypeLabel(type) {
-    const map = {
-        'opening': 'פתיחה',
-        'transition': 'מעבר',
-        'question': 'שאלה',
-        'statistics': 'סטטיסטיקת מענה',
-        'leaderboard': 'מובילים',
-        'summary': 'סיכום',
-        'start': 'מסך פתיחה'
-    };
-    return map[type] || type;
-}
-
-async function navigateToSlide(index) {
-    return new Promise((resolve, reject) => {
-        Office.context.document.goToByIdAsync(
-            index,
-            Office.GoToType.Index,
-            (asyncResult) => {
-                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                    console.error('Navigation failed:', asyncResult.error.message);
-                    reject(asyncResult.error);
-                } else {
-                    resolve();
-                }
-            }
-        );
-    });
-}
-
-// Context Menu Logic
-window.showContextMenu = function(event, slideId, currentType) {
-    event.stopPropagation();
-    window.contextMenuTargetSlideId = slideId;
-    window.contextMenuTargetType = currentType;
-    
-    const menu = document.getElementById('slideContextMenu');
-    menu.style.display = 'block';
-    
-    // Position menu near the button
-    const rect = event.target.closest('button').getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 5}px`;
-    // Fix positioning: Align left edge to button left edge (or adjust as needed for RTL)
-    menu.style.left = `${rect.left}px`; 
-    menu.style.right = 'auto';
-    
-    // Close menu when clicking outside
-    const closeMenu = () => {
-        menu.style.display = 'none';
-        document.removeEventListener('click', closeMenu);
-    };
-    setTimeout(() => document.addEventListener('click', closeMenu), 0);
-    
-    // Show/Hide "Set Answer" based on type
-    const setAnswerItem = document.getElementById('menuSetAnswer');
-    setAnswerItem.style.display = (currentType === 'question') ? 'block' : 'none';
-};
-
-window.openInlineEdit = function(slideId, currentType) {
-    // Close any existing edit first (without full refresh)
-    if (window.currentEditingSlideId && window.currentEditingSlideId !== slideId) {
-        // Clear state and refresh to close previous edit
-        window.selectedType = null;
-        window.selectedAnswer = null;
-        window.currentEditingSlideId = null;
-        
-        // Do a synchronous refresh then continue
-        refreshSlideList().then(() => {
-            // Re-call this function after refresh
-            actualOpenInlineEdit(slideId, currentType);
-        });
-        return;
-    }
-    
-    actualOpenInlineEdit(slideId, currentType);
-};
-
-function actualOpenInlineEdit(slideId, currentType) {
-    const li = document.getElementById(`slide-item-${slideId}`);
-    if (!li) return;
-
-    // Mark this slide as being edited
-    window.currentEditingSlideId = slideId;
-
-    // Store for later use
-    window.contextMenuTargetSlideId = slideId;
-    window.contextMenuTargetType = currentType;
-
-    // Get current answer for question type
-    const slideData = window.slideTypeData[slideId];
-    const currentAnswer = slideData?.correctAnswer || '1';
-    
-    // Store the initial selection
-    window.selectedType = currentType;
-    window.selectedAnswer = currentAnswer;
-
-    // Prevent clicking the li from navigating while editing
-    li.onclick = null;
-
-    // Build answer numbers HTML for question type (inside trigger)
-    const buildAnswerNumsHtml = (selectedAnswer) => {
-        return `
-            <span class="answer-nums-trigger" id="answerNumsInTrigger">
-                [<span class="answer-num-link ${selectedAnswer === '1' ? 'selected' : ''}" onclick="selectAnswer(event, '1')">1</span>
-                <span class="answer-num-link ${selectedAnswer === '2' ? 'selected' : ''}" onclick="selectAnswer(event, '2')">2</span>
-                <span class="answer-num-link ${selectedAnswer === '3' ? 'selected' : ''}" onclick="selectAnswer(event, '3')">3</span>
-                <span class="answer-num-link ${selectedAnswer === '4' ? 'selected' : ''}" onclick="selectAnswer(event, '4')">4</span>]
-            </span>
-        `;
-    };
-
-    li.innerHTML = `
-        <div class="inline-edit-container" onclick="event.stopPropagation()">
-            <div class="custom-dropdown" id="customDropdown">
-                <div class="custom-dropdown-trigger" onclick="toggleCustomDropdown(event)">
-                    <span class="trigger-content">
-                        <span id="dropdownLabel">${getTypeLabel(currentType)}</span>
-                        <span id="answerNumsContainer" style="display: ${currentType === 'question' ? 'inline' : 'none'};">
-                            ${buildAnswerNumsHtml(currentAnswer)}
-                        </span>
-                    </span>
-                    <span class="arrow">▼</span>
-                </div>
-                <div class="custom-dropdown-menu" id="dropdownMenu">
-                    <div class="custom-dropdown-item ${currentType === 'opening' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'opening')">פתיחה</div>
-                    <div class="custom-dropdown-item ${currentType === 'transition' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'transition')">מעבר</div>
-                    <div class="custom-dropdown-item ${currentType === 'question' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'question')">שאלה</div>
-                    <div class="custom-dropdown-item ${currentType === 'statistics' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'statistics')">סטטיסטיקת מענה</div>
-                    <div class="custom-dropdown-item ${currentType === 'leaderboard' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'leaderboard')">מובילים</div>
-                    <div class="custom-dropdown-item ${currentType === 'summary' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'summary')">סיכום</div>
-                </div>
-            </div>
-            <div class="inline-actions">
-                <button class="inline-btn confirm" onclick="confirmInlineSlideTypeChange(event, '${slideId}')" title="שמור">
-                    <i class="ms-Icon ms-Icon--CheckMark"></i>
-                </button>
-                <button class="inline-btn cancel" onclick="cancelInlineEdit(event)" title="ביטול">
-                    <i class="ms-Icon ms-Icon--Cancel"></i>
-                </button>
-            </div>
-        </div>
-    `;
-};
-
-// Toggle custom dropdown
-window.toggleCustomDropdown = function(event) {
-    event.stopPropagation();
-    
-    // Don't toggle if clicking on answer numbers
-    if (event.target.closest('.answer-num-link')) {
-        return;
-    }
-    
-    const menu = document.getElementById('dropdownMenu');
-    menu.classList.toggle('open');
-    
-    // Close when clicking outside
-    if (menu.classList.contains('open')) {
-        const closeDropdown = (e) => {
-            if (!e.target.closest('.custom-dropdown')) {
-                menu.classList.remove('open');
-                document.removeEventListener('click', closeDropdown);
-            }
-        };
-        setTimeout(() => document.addEventListener('click', closeDropdown), 0);
-    }
-};
-
-// Select dropdown item
-window.selectDropdownItem = function(event, type) {
-    event.stopPropagation();
-    
-    window.selectedType = type;
-    
-    // Update label
-    document.getElementById('dropdownLabel').textContent = getTypeLabel(type);
-    
-    // Update selected state
-    document.querySelectorAll('.custom-dropdown-item').forEach(item => item.classList.remove('selected'));
-    event.target.classList.add('selected');
-    
-    // Show/hide answer numbers based on type
-    const answerNumsContainer = document.getElementById('answerNumsContainer');
-    if (answerNumsContainer) {
-        answerNumsContainer.style.display = type === 'question' ? 'inline' : 'none';
-    }
-    
-    // Close dropdown
-    document.getElementById('dropdownMenu').classList.remove('open');
-};
-
-// Select answer number
-window.selectAnswer = function(event, answer) {
-    event.stopPropagation();
-    
-    window.selectedAnswer = answer;
-    
-    // Update visual selection
-    document.querySelectorAll('.answer-num-link').forEach(link => {
-        link.classList.remove('selected');
-    });
-    event.target.classList.add('selected');
-};
-
-window.openSlideTypeDialog = function() {
-    document.getElementById('slideContextMenu').style.display = 'none';
-    const slideId = window.contextMenuTargetSlideId;
-    const currentType = window.contextMenuTargetType;
-    openInlineEdit(slideId, currentType);
-};
-
-window.cancelInlineEdit = function(event) {
-    if (event) event.stopPropagation();
-    // Clear temporary selections
-    window.selectedType = null;
-    window.selectedAnswer = null;
-    window.currentEditingSlideId = null;
-    refreshSlideList();
-};
-
-window.confirmInlineSlideTypeChange = function(event, slideId) {
-    if (event) event.stopPropagation();
-    const newType = window.selectedType || 'transition';
-    
-    if (slideId) {
-        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
-        
-        // Handle legacy string format if exists
-        if (typeof window.slideTypeData[slideId] === 'string') {
-            window.slideTypeData[slideId] = { type: newType };
-        } else {
-            window.slideTypeData[slideId].type = newType;
-        }
-        
-        // Save the selected answer if type is question
-        if (newType === 'question') {
-            const answer = window.selectedAnswer || '1';
-            window.slideTypeData[slideId].correctAnswer = answer;
-        }
-        
-        // Clear temporary selections
-        window.selectedType = null;
-        window.selectedAnswer = null;
-        window.currentEditingSlideId = null;
-        
-        if (window.triggerAutoSave) window.triggerAutoSave();
-        refreshSlideList();
-    }
-};
-
-window.openSetAnswerDialog = function() {
-    document.getElementById('slideContextMenu').style.display = 'none';
-    const dialog = document.getElementById('dialogSetAnswer');
-    
-    // Get current answer from state
-    const slideId = window.contextMenuTargetSlideId;
-    const slideData = window.slideTypeData[slideId];
-    const currentAnswer = slideData?.correctAnswer || '1';
-    
-    document.getElementById('correctAnswerSelect').value = currentAnswer;
-    
-    dialog.style.display = 'flex';
-};
-
-window.confirmSlideTypeChange = function() {
-    const newType = document.getElementById('slideTypeSelect').value;
-    const slideId = window.contextMenuTargetSlideId;
-    
-    if (slideId) {
-        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
-        if (typeof window.slideTypeData[slideId] === 'string') {
-            window.slideTypeData[slideId] = { type: newType };
-        } else {
-            window.slideTypeData[slideId].type = newType;
-        }
-        
-        if (newType === 'question' && !window.slideTypeData[slideId].correctAnswer) {
-            window.slideTypeData[slideId].correctAnswer = '1';
-        }
-        
-        if (window.triggerAutoSave) window.triggerAutoSave();
-        
-        console.log(`Updated slide ${slideId} to ${newType}`);
-        
-        refreshSlideList();
-    }
-    window.closeDialogs();
-};
-
-window.confirmSetAnswer = function() {
-    const answer = document.getElementById('correctAnswerSelect').value;
-    const slideId = window.contextMenuTargetSlideId;
-    
-    if (slideId) {
-        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = { type: 'question' };
-        if (typeof window.slideTypeData[slideId] === 'string') {
-             window.slideTypeData[slideId] = { type: window.slideTypeData[slideId] };
-        }
-        
-        window.slideTypeData[slideId].correctAnswer = answer;
-        
-        if (window.triggerAutoSave) window.triggerAutoSave();
-        refreshSlideList();
-    }
-    window.closeDialogs();
-};
 
 
 // --- Tab 2: Actions ---
@@ -873,7 +419,7 @@ function renderActionsTab() {
         { label: 'זמן שאלה', icon: 'Clock', onclick: addQuestionTime },
         { label: 'מספר עונים', icon: 'People', onclick: addRespondentsCount },
         
-        // Analysis Elements (Restored)
+        // Analysis Elements
         { label: 'פילוג תשובות', icon: 'BarChart4', onclick: addAnswersDistribution },
         { label: 'טבלת מובילים', icon: 'Trophy', onclick: addLeaderboardElements }
     ];

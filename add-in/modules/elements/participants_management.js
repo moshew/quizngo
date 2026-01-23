@@ -5,9 +5,9 @@
 
 /* global PowerPoint */
 
-import { showError, showStatus } from '../ui-manager.js';
-import { getVisibleParticipantsData } from '../websocket.js';
-import { hideParticipants, getHiddenParticipantIds } from '../presentation-state.js';
+import { showError, showStatus } from '../ui/manager.js';
+import { getVisibleParticipantsData } from '../core/websocket.js';
+import { hideParticipants, getHiddenParticipantIds } from '../core/state.js';
 
 /**
  * Reset participants number in all slides with the tag
