@@ -8,12 +8,27 @@
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css"/>
     <style>
+        :root {
+            --direction: rtl;
+            --text-align: right;
+            --text-align-opposite: left;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #f3f2f1;
+            direction: var(--direction);
+        }
+
+        /* RTL/LTR specific styles */
+        body.rtl {
             direction: rtl;
+        }
+
+        body.ltr {
+            direction: ltr;
         }
 
         .container {
@@ -101,7 +116,16 @@
 
         .slide-item.selected {
             background-color: #eff6fc;
+        }
+
+        /* RTL: Box shadow on right side */
+        body.rtl .slide-item.selected {
             box-shadow: inset -3px 0 0 #0078d4;
+        }
+
+        /* LTR: Box shadow on left side */
+        body.ltr .slide-item.selected {
+            box-shadow: inset 3px 0 0 #0078d4;
         }
         
         .slide-info {
@@ -135,10 +159,12 @@
             justify-content: center;
             color: #605e5c;
             font-size: 14px;
-            transform: scaleX(-1);
         }
 
-        
+        /* RTL: Mirror edit button */
+        body.rtl .edit-btn {
+            transform: scaleX(-1);
+        }
 
         .slide-item:hover .edit-btn {
             opacity: 1;
@@ -241,7 +267,18 @@
         .custom-dropdown-trigger .arrow {
             font-size: 10px;
             color: #605e5c;
+        }
+
+        /* RTL: Arrow on left */
+        body.rtl .custom-dropdown-trigger .arrow {
             margin-right: auto;
+            margin-left: 0;
+        }
+
+        /* LTR: Arrow on right */
+        body.ltr .custom-dropdown-trigger .arrow {
+            margin-left: auto;
+            margin-right: 0;
         }
         
         .custom-dropdown-trigger .trigger-content {
@@ -253,8 +290,6 @@
         .custom-dropdown-menu {
             position: absolute;
             top: 100%;
-            right: 0;
-            left: 0;
             background: white;
             border: 1px solid #e1dfdd;
             border-radius: 4px;
@@ -262,6 +297,18 @@
             z-index: 1000;
             display: none;
             min-width: 160px;
+        }
+
+        /* RTL: Menu aligned right */
+        body.rtl .custom-dropdown-menu {
+            right: 0;
+            left: 0;
+        }
+
+        /* LTR: Menu aligned left */
+        body.ltr .custom-dropdown-menu {
+            left: 0;
+            right: 0;
         }
 
         .custom-dropdown-menu.open {
@@ -299,7 +346,14 @@
         .answer-nums-trigger {
             display: inline-flex;
             gap: 1px;
+        }
+
+        body.rtl .answer-nums-trigger {
             margin-right: 4px;
+        }
+
+        body.ltr .answer-nums-trigger {
+            margin-left: 4px;
         }
 
         .answer-num-link {
@@ -505,15 +559,87 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Settings Styles */
+        .settings-container {
+            padding: 15px;
+        }
+
+        .settings-title {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #0078d4;
+        }
+
+        .setting-group {
+            margin-bottom: 15px;
+        }
+
+        .setting-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .setting-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .setting-checkbox-group {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .setting-checkbox-group label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .setting-checkbox-item {
+            margin-bottom: 5px;
+        }
+
+        .setting-checkbox-item:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Language Selector */
+        .language-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+            cursor: pointer;
+            background: white;
+        }
+
+        .language-select:focus {
+            border-color: #0078d4;
+            outline: none;
+        }
+
+        .language-divider {
+            border: none;
+            border-top: 1px solid #e1dfdd;
+            margin: 20px 0;
+        }
     </style>
 </head>
-<body>
+<body class="rtl">
     <div class="container">
         <!-- Tabs -->
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('slides')">רשימת שקפים</div>
-            <div class="tab" onclick="switchTab('actions')">רכיבי תצוגה</div>
-            <div class="tab" onclick="switchTab('settings')">הגדרות משחק</div>
+            <div class="tab active" id="tabSlides" data-tab="slides"></div>
+            <div class="tab" id="tabActions" data-tab="actions"></div>
+            <div class="tab" id="tabSettings" data-tab="settings"></div>
         </div>
 
         <!-- Content -->
@@ -522,7 +648,7 @@
             <div id="tab-slides" class="tab-content active">
                 <div id="slides-loading" style="display: none;">
                     <div class="spinner"></div>
-                    <div style="text-align: center; color: #666;">טוען שקפים...</div>
+                    <div id="loadingText" style="text-align: center; color: #666;"></div>
                 </div>
                 <ul id="slideList" class="slide-list">
                     <!-- Slides will be inserted here -->
@@ -538,28 +664,38 @@
 
             <!-- Tab 3: Settings -->
             <div id="tab-settings" class="tab-content">
-                <div style="padding: 15px;">
-                    <h3 style="margin-top: 0; margin-bottom: 15px; color: #0078d4;">הגדרות משחק</h3>
+                <div class="settings-container">
+                    <h3 class="settings-title" data-i18n="settings.title"></h3>
                     
-                    <div style="margin-bottom: 15px;">
-                        <label for="settingTimeTab" style="display:block; margin-bottom:5px; font-weight:500;">זמן למענה (שניות):</label>
-                        <input type="number" id="settingTimeTab" value="30" min="5" max="300" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;">
+                    <!-- Language Setting -->
+                    <div class="setting-group">
+                        <label class="setting-label" for="settingLanguage" data-i18n="settings.language"></label>
+                        <select id="settingLanguage" class="language-select">
+                            <!-- Options generated by JS -->
+                        </select>
                     </div>
 
-                    <div style="margin-bottom: 15px;">
-                        <label for="settingDelayTab" style="display:block; margin-bottom:5px; font-weight:500;">השהיית שעון (שניות):</label>
-                        <input type="number" id="settingDelayTab" value="5" min="0" max="60" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;">
+                    <hr class="language-divider">
+                    
+                    <div class="setting-group">
+                        <label class="setting-label" for="settingTimeTab" data-i18n="settings.responseTime"></label>
+                        <input type="number" id="settingTimeTab" class="setting-input" value="30" min="5" max="300">
                     </div>
 
-                    <div style="background:#f8f9fa; padding:10px; border-radius:4px;">
-                        <div style="font-weight:500; margin-bottom:5px;">מעברים אוטומטיים:</div>
-                        <div style="margin-bottom:5px;">
+                    <div class="setting-group">
+                        <label class="setting-label" for="settingDelayTab" data-i18n="settings.clockDelay"></label>
+                        <input type="number" id="settingDelayTab" class="setting-input" value="5" min="0" max="60">
+                    </div>
+
+                    <div class="setting-checkbox-group">
+                        <label data-i18n="settings.autoTransitions"></label>
+                        <div class="setting-checkbox-item">
                             <input type="checkbox" id="settingAfterStatsTab" checked>
-                            <label for="settingAfterStatsTab">עבור לסטטיסטיקה</label>
+                            <label for="settingAfterStatsTab" data-i18n="settings.goToStatistics"></label>
                         </div>
-                        <div>
+                        <div class="setting-checkbox-item">
                             <input type="checkbox" id="settingAfterLeaderboardTab">
-                            <label for="settingAfterLeaderboardTab">עבור למובילים</label>
+                            <label for="settingAfterLeaderboardTab" data-i18n="settings.goToLeaderboard"></label>
                         </div>
                     </div>
                 </div>
@@ -572,7 +708,7 @@
         <!-- Persistent Bottom Buttons -->
         <div class="bottom-actions">
             <button id="btnStartGame" class="btn-start-game">
-                <i class="ms-Icon ms-Icon--Play"></i> הפעל משחק
+                <i class="ms-Icon ms-Icon--Play"></i> <span data-i18n="buttons.startGame"></span>
             </button>
         </div>
     </div>
@@ -580,52 +716,38 @@
     <!-- Context Menu for Slides -->
     <div id="slideContextMenu" class="context-menu">
         <div class="context-menu-item" onclick="openSlideTypeDialog()">
-            <i class="ms-Icon ms-Icon--Edit"></i> שנה סוג שקף
+            <i class="ms-Icon ms-Icon--Edit"></i> <span data-i18n="contextMenu.changeType"></span>
         </div>
         <div class="context-menu-item" id="menuSetAnswer" onclick="openSetAnswerDialog()">
-            <i class="ms-Icon ms-Icon--CheckMark"></i> הגדר תשובה נכונה
+            <i class="ms-Icon ms-Icon--CheckMark"></i> <span data-i18n="contextMenu.setAnswer"></span>
         </div>
     </div>
 
     <!-- Dialog: Change Slide Type (Legacy - kept for reference but unused by new inline flow) -->
     <div id="dialogSlideType" class="overlay">
         <div class="overlay-content">
-            <h3>בחר סוג שקף</h3>
+            <h3 data-i18n="dialogs.selectSlideType"></h3>
             <select id="slideTypeSelect">
-                <option value="opening">פתיחה</option>
-                <option value="transition">מעבר</option>
-                <option value="question">שאלה</option>
-                <option value="statistics">סטטיסטיקת מענה</option>
-                <option value="leaderboard">מובילים</option>
-                <option value="summary">סיכום</option>
+                <!-- Options generated by JS -->
             </select>
-            <button class="primary" onclick="confirmSlideTypeChange()">אישור</button>
-            <button onclick="closeDialogs()" style="width: 100%; padding: 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">ביטול</button>
+            <button class="primary" onclick="confirmSlideTypeChange()" data-i18n="dialogs.confirm"></button>
+            <button onclick="closeDialogs()" style="width: 100%; padding: 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;" data-i18n="dialogs.cancel"></button>
         </div>
     </div>
 
     <!-- Dialog: Set Answer -->
     <div id="dialogSetAnswer" class="overlay">
         <div class="overlay-content">
-            <h3>הגדר תשובה נכונה</h3>
+            <h3 data-i18n="dialogs.setCorrectAnswer"></h3>
             <select id="correctAnswerSelect">
-                <option value="1">תשובה 1 (אדום)</option>
-                <option value="2">תשובה 2 (כחול)</option>
-                <option value="3">תשובה 3 (צהוב)</option>
-                <option value="4">תשובה 4 (ירוק)</option>
+                <!-- Options generated by JS -->
             </select>
-            <button class="primary" onclick="confirmSetAnswer()">שמור</button>
-            <button onclick="closeDialogs()" style="width: 100%; padding: 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">ביטול</button>
+            <button class="primary" onclick="confirmSetAnswer()" data-i18n="dialogs.save"></button>
+            <button onclick="closeDialogs()" style="width: 100%; padding: 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;" data-i18n="dialogs.cancel"></button>
         </div>
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="modules/api.js" type="module"></script>
-    <script src="modules/websocket.js" type="module"></script>
-    <script src="modules/presentation-state.js" type="module"></script>
-    <script src="modules/slide-manager.js" type="module"></script>
-    <script src="modules/ui-manager.js" type="module"></script>
-    <script src="modules/event-handlers.js" type="module"></script>
     <script src="taskpane.js" type="module"></script>
 </body>
 </html>

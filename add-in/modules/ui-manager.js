@@ -3,17 +3,8 @@
  * Handles all UI updates and interactions for slide types
  */
 
-import { API_BASE } from '../core/api.js';
-import { getGameHashId } from '../core/state.js';
-
-// Helper function to get translations with fallback
-function t(key, fallback = '') {
-    if (window.t) {
-        const translated = window.t(key);
-        return translated !== key ? translated : fallback;
-    }
-    return fallback;
-}
+import { API_BASE } from './api.js';
+import { getGameHashId } from './presentation-state.js';
 
 /**
  * Show status message (only for warnings and errors)
@@ -123,22 +114,22 @@ export function updateAutoSaveStatus(status) {
     
     switch (status) {
         case 'pending':
-            statusElement.textContent = `⏱️ ${t('autoSave.pending', 'שינויים ממתינים לשמירה...')}`;
+            statusElement.textContent = '⏱️ שינויים ממתינים לשמירה...';
             statusElement.style.color = '#ffc107';
             statusElement.style.display = 'block';
             break;
         case 'saving':
-            statusElement.textContent = `💾 ${t('autoSave.saving', 'שומר...')}`;
+            statusElement.textContent = '💾 שומר...';
             statusElement.style.color = '#0078d4';
             statusElement.style.display = 'block';
             break;
         case 'saved':
-            statusElement.textContent = `✅ ${t('autoSave.saved', 'נשמר אוטומטית')}`;
+            statusElement.textContent = '✅ נשמר אוטומטית';
             statusElement.style.color = '#28a745';
             statusElement.style.display = 'block';
             break;
         case 'error':
-            statusElement.textContent = `❌ ${t('autoSave.error', 'שגיאה בשמירה')}`;
+            statusElement.textContent = '❌ שגיאה בשמירה';
             statusElement.style.color = '#dc3545';
             statusElement.style.display = 'block';
             break;
@@ -161,13 +152,6 @@ export function loadStartScreen() {
         return;
     }
     
-    const title = t('startScreen.title', 'התחל משחק');
-    const scanQR = t('startScreen.scanQR', 'סרוק קוד QR לכניסה למשחק');
-    const loadingQR = t('startScreen.loadingQR', 'טוען קוד QR...');
-    const scanInstructions = t('startScreen.scanInstructions', 'סרוק את הקוד עם מכשיר נייד או היכנס לכתובת:');
-    const loadingUrl = t('startScreen.loadingUrl', 'טוען כתובת...');
-    const tip = t('startScreen.tip', 'המשתתפים יכולים להיכנס דרך הקוד או הכתובת');
-    
     slideContentArea.innerHTML = `
         <style>
             .start-container { text-align: center; padding: 20px; }
@@ -180,16 +164,16 @@ export function loadStartScreen() {
             .loading { color: #666; font-style: italic; }
         </style>
         <div class="start-container">
-            <div class="game-title">🎮 ${title}</div>
+            <div class="game-title">🎮 התחל משחק</div>
             <div class="qr-section">
-                <h3 style="margin: 0 0 15px 0; color: #0078d4;">${scanQR}</h3>
+                <h3 style="margin: 0 0 15px 0; color: #0078d4;">סרוק קוד QR לכניסה למשחק</h3>
                 <div class="qr-code-container" id="qrCodeArea">
-                    <div class="loading">${loadingQR}</div>
+                    <div class="loading">טוען קוד QR...</div>
                 </div>
-                <div class="instructions">${scanInstructions}</div>
-                <div class="url-display" id="adminUrl">${loadingUrl}</div>
+                <div class="instructions">סרוק את הקוד עם מכשיר נייד או היכנס לכתובת:</div>
+                <div class="url-display" id="adminUrl">טוען כתובת...</div>
             </div>
-            <div style="margin-top: 20px; font-size: 12px; color: #999;">💡 ${tip}</div>
+            <div style="margin-top: 20px; font-size: 12px; color: #999;">💡 המשתתפים יכולים להיכנס דרך הקוד או הכתובת</div>
         </div>
     `;
     
@@ -209,10 +193,9 @@ export async function initializeStartScreen() {
         const hashId = await getGameHashId();
         
         if (!hashId) {
-            const errorNoGameId = t('startScreen.errorNoGameId', 'לא נמצא מזהה משחק. אנא שמור את המצגת תחילה.');
             document.getElementById('qrCodeArea').innerHTML = 
-                `<div style="color: #d13438;">⚠️ ${errorNoGameId}</div>`;
-            document.getElementById('adminUrl').textContent = errorNoGameId;
+                '<div style="color: #d13438;">⚠️ לא נמצא מזהה משחק. אנא שמור את המצגת תחילה.</div>';
+            document.getElementById('adminUrl').textContent = 'שגיאה: לא נמצא מזהה משחק';
             return;
         }
         
@@ -232,8 +215,6 @@ export async function initializeStartScreen() {
         
         console.log('📸 QR Code URL (from server):', qrCodeUrl);
         
-        const errorLoadingQR = t('startScreen.errorLoadingQR', 'שגיאה בטעינת QR code');
-        
         // Display QR code as image
         const qrCodeArea = document.getElementById('qrCodeArea');
         if (qrCodeArea) {
@@ -242,7 +223,7 @@ export async function initializeStartScreen() {
                      alt="QR Code למשחק" 
                      style="width: 220px; height: 220px; border: 3px solid #0078d4; border-radius: 8px; background: white; padding: 10px;"
                      onload="console.log('✅ QR code image loaded successfully')"
-                     onerror="console.error('❌ QR code failed to load from:', '${qrCodeUrl}'); this.style.display='none'; this.parentElement.innerHTML = '<div style=color:#d13438>⚠️ ${errorLoadingQR}</div>';" />
+                     onerror="console.error('❌ QR code failed to load from:', '${qrCodeUrl}'); this.style.display='none'; this.parentElement.innerHTML = '<div style=color:#d13438>⚠️ שגיאה בטעינת QR code</div>';" />
             `;
         }
         

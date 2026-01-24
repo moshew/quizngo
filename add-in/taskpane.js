@@ -1,6 +1,6 @@
 /* global Office, PowerPoint */
 
-console.log('📄 taskpane.js loaded (Tabbed Version)!');
+console.log('📄 taskpane.js loaded (Tabbed Version with i18n)!');
 
 // Import modules - Core
 import { API_BASE, registerRoom } from './modules/core/api.js';
@@ -67,8 +67,127 @@ import {
     insertQrCodeButton
 } from './modules/elements/game_management.js';
 
+// Import i18n module
+import { 
+    initI18n, 
+    setLanguage, 
+    getLanguage, 
+    t, 
+    updateDOM,
+    getAvailableLanguages,
+    LANGUAGES,
+    isRTL
+} from './modules/i18n/index.js';
+
 // Expose triggerAutoSave globally for modules that need it
 window.triggerAutoSave = triggerAutoSave;
+
+// --- i18n Functions ---
+
+/**
+ * Initialize language selector dropdown
+ */
+function initLanguageSelector() {
+    const select = document.getElementById('settingLanguage');
+    if (!select) return;
+    
+    const languages = getAvailableLanguages();
+    const currentLang = getLanguage();
+    
+    select.innerHTML = languages.map(lang => 
+        `<option value="${lang.code}" ${lang.code === currentLang ? 'selected' : ''}>${lang.flag} ${lang.nativeName}</option>`
+    ).join('');
+    
+    select.addEventListener('change', async (e) => {
+        await changeLanguage(e.target.value);
+    });
+}
+
+/**
+ * Change the interface language
+ */
+window.changeLanguage = async function(langCode) {
+    console.log(`🌐 Changing language to: ${langCode}`);
+    
+    await setLanguage(langCode);
+    
+    // Update all UI
+    updateAllUI();
+    
+    // Save language in presentation settings
+    if (!window.presentationSettings) {
+        window.presentationSettings = {};
+    }
+    window.presentationSettings.language = langCode;
+    
+    // Trigger auto-save
+    if (window.triggerAutoSave) {
+        window.triggerAutoSave();
+    }
+    
+    console.log(`✅ Language changed to: ${langCode}`);
+};
+
+/**
+ * Update all UI elements with translations
+ */
+function updateAllUI() {
+    // Update DOM elements with data-i18n attributes
+    updateDOM();
+    
+    // Update tab labels
+    const tabSlides = document.getElementById('tabSlides');
+    const tabActions = document.getElementById('tabActions');
+    const tabSettings = document.getElementById('tabSettings');
+    
+    if (tabSlides) tabSlides.textContent = t('tabs.slides');
+    if (tabActions) tabActions.textContent = t('tabs.actions');
+    if (tabSettings) tabSettings.textContent = t('tabs.settings');
+    
+    // Update loading text
+    const loadingText = document.getElementById('loadingText');
+    if (loadingText) loadingText.textContent = t('slides.loading');
+    
+    // Update dialogs
+    updateDialogOptions();
+    
+    // Re-render actions tab
+    renderActionsTab();
+    
+    // Refresh slide list to update labels
+    if (window.refreshSlideList) {
+        window.refreshSlideList();
+    }
+}
+
+/**
+ * Update dialog select options with translations
+ */
+function updateDialogOptions() {
+    // Slide type select
+    const slideTypeSelect = document.getElementById('slideTypeSelect');
+    if (slideTypeSelect) {
+        slideTypeSelect.innerHTML = `
+            <option value="opening">${t('slideTypes.opening')}</option>
+            <option value="transition">${t('slideTypes.transition')}</option>
+            <option value="question">${t('slideTypes.question')}</option>
+            <option value="statistics">${t('slideTypes.statistics')}</option>
+            <option value="leaderboard">${t('slideTypes.leaderboard')}</option>
+            <option value="summary">${t('slideTypes.summary')}</option>
+        `;
+    }
+    
+    // Correct answer select
+    const correctAnswerSelect = document.getElementById('correctAnswerSelect');
+    if (correctAnswerSelect) {
+        correctAnswerSelect.innerHTML = `
+            <option value="1">${t('dialogs.answer')} 1 (${t('dialogs.red')})</option>
+            <option value="2">${t('dialogs.answer')} 2 (${t('dialogs.blue')})</option>
+            <option value="3">${t('dialogs.answer')} 3 (${t('dialogs.yellow')})</option>
+            <option value="4">${t('dialogs.answer')} 4 (${t('dialogs.green')})</option>
+        `;
+    }
+}
 
 // --- Global Functions (Attached to window for HTML access) ---
 
@@ -91,6 +210,18 @@ window.switchTab = function(tabName) {
     }
 };
 
+// Setup tab click handlers
+function setupTabHandlers() {
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+            if (tabName) {
+                window.switchTab(tabName);
+            }
+        });
+    });
+}
+
 window.closeDialogs = function() {
     document.querySelectorAll('.overlay').forEach(el => el.style.display = 'none');
 };
@@ -101,13 +232,20 @@ function loadSettingsToTab() {
         questionWaitTime: 30,
         clockActivationDelay: 5,
         afterQuestionStatistics: true,
-        afterQuestionLeaderboard: false
+        afterQuestionLeaderboard: false,
+        language: 'he'
     };
     
     document.getElementById('settingTimeTab').value = settings.questionWaitTime;
     document.getElementById('settingDelayTab').value = settings.clockActivationDelay;
     document.getElementById('settingAfterStatsTab').checked = settings.afterQuestionStatistics !== false;
     document.getElementById('settingAfterLeaderboardTab').checked = settings.afterQuestionLeaderboard === true;
+    
+    // Update language selector
+    const langSelect = document.getElementById('settingLanguage');
+    if (langSelect && settings.language) {
+        langSelect.value = settings.language;
+    }
 }
 
 // Auto-save settings when any setting changes
@@ -116,12 +254,14 @@ function autoSaveSettings() {
     const delay = parseInt(document.getElementById('settingDelayTab').value) || 5;
     const stats = document.getElementById('settingAfterStatsTab').checked;
     const board = document.getElementById('settingAfterLeaderboardTab').checked;
+    const lang = getLanguage();
     
     window.presentationSettings = {
         questionWaitTime: time,
         clockActivationDelay: delay,
         afterQuestionStatistics: stats,
-        afterQuestionLeaderboard: board
+        afterQuestionLeaderboard: board,
+        language: lang
     };
     
     // Trigger auto-save if available
@@ -145,7 +285,8 @@ window.currentSlideId = null;
 window.slideTypeData = {};
 window.presentationSettings = {
     questionWaitTime: 30,
-    clockActivationDelay: 5
+    clockActivationDelay: 5,
+    language: 'he'
 };
 window.contextMenuTargetSlideId = null;
 
@@ -195,10 +336,13 @@ async function selectCurrentSlideOnLoad() {
 }
 
 // Initialize the add-in when Office is ready
-Office.onReady((info) => {
+Office.onReady(async (info) => {
     console.log('🚀 Office.onReady called!', info);
     if (info.host === Office.HostType.PowerPoint) {
         console.log('✅ PowerPoint detected - initializing add-in...');
+        
+        // Initialize i18n first with default language
+        await initI18n('he');
         
         // Check for URL parameters (e.g. from deep link or manual launch)
         const urlParams = new URLSearchParams(window.location.search);
@@ -210,9 +354,12 @@ Office.onReady((info) => {
         }
         
         // Initialize Tabs and Lists
+        setupTabHandlers();
+        initLanguageSelector();
         renderActionsTab();
         setupSettingsListeners();
         loadSettingsToTab();
+        updateAllUI();
         
         // Attach persistent button listeners
         document.getElementById('btnStartGame').onclick = () => startPresentationMode();
@@ -223,6 +370,15 @@ Office.onReady((info) => {
     
         // Load data then initialize slides list
         loadPresentationData().then(async () => {
+            // Check if there's a saved language preference
+            if (window.presentationSettings?.language) {
+                const savedLang = window.presentationSettings.language;
+                if (savedLang !== getLanguage()) {
+                    await setLanguage(savedLang);
+                    updateAllUI();
+                }
+            }
+            
             // Get current slide and select it
             await selectCurrentSlideOnLoad();
             
@@ -309,7 +465,7 @@ Office.onReady((info) => {
                 
                 // Format PIN as XXX-XXX for display
                 const formattedPin = gamePin ? gamePin.slice(0, 3) + '-' + gamePin.slice(3) : 'N/A';
-                showStatus(`🎮 משחק פעיל - Game PIN: ${formattedPin}`, 'success');
+                showStatus(`🎮 ${t('status.gameActive')} ${formattedPin}`, 'success');
             },
             
             // Handle slide navigation commands
@@ -321,13 +477,13 @@ Office.onReady((info) => {
                         case 'go_to_first_slide':
                             console.log('📍 Resetting to first slide...');
                             await goToFirstSlideInPowerPoint();
-                            showStatus('חזרה לשקף הראשון...', 'info');
+                            showStatus(t('status.backToFirstSlide'), 'info');
                             break;
                         case 'go_to_next_slide':
                         case 'next_slide':
                             console.log('📄 Executing next slide navigation...');
                             await goToNextSlideInPowerPoint();
-                            showStatus('מעבר לשקף הבא...', 'info');
+                            showStatus(t('status.nextSlide'), 'info');
                             break;
                         default:
                             console.warn('⚠️ Unknown slide navigation action:', data.action);
@@ -345,7 +501,7 @@ Office.onReady((info) => {
                     console.log('⌨️ Executing spacebar simulation...');
                     try {
                         await simulateClickInPowerPoint();
-                        showStatus('מדמה לחיצה על רווח...', 'info');
+                        showStatus(t('status.simulatingClick'), 'info');
                     } catch (error) {
                         console.error('❌ Error handling click navigation:', error);
                     }
@@ -406,22 +562,23 @@ Office.onReady((info) => {
 
 function renderActionsTab() {
     const grid = document.getElementById('actionsGrid');
+    if (!grid) return;
     
-    // Global Actions
+    // Global Actions with translations
     const actions = [
         // Slide Elements
-        { label: 'מזהה משחק', icon: 'Game', onclick: insertGameIdButton },
-        { label: 'מספר משתתפים', icon: 'PeopleAdd', onclick: insertParticipantsNumButton },
-        { label: 'רשימת משתתפים', icon: 'ContactList', onclick: insertParticipantsListButton },
-        { label: 'QR Code', icon: 'QRCode', onclick: insertQrCodeButton },
+        { label: t('actions.gameId'), icon: 'Game', onclick: insertGameIdButton },
+        { label: t('actions.participantsCount'), icon: 'PeopleAdd', onclick: insertParticipantsNumButton },
+        { label: t('actions.participantsList'), icon: 'ContactList', onclick: insertParticipantsListButton },
+        { label: t('actions.qrCode'), icon: 'QRCode', onclick: insertQrCodeButton },
 
         // Game Control
-        { label: 'זמן שאלה', icon: 'Clock', onclick: addQuestionTime },
-        { label: 'מספר עונים', icon: 'People', onclick: addRespondentsCount },
+        { label: t('actions.questionTime'), icon: 'Clock', onclick: addQuestionTime },
+        { label: t('actions.respondersCount'), icon: 'People', onclick: addRespondentsCount },
         
         // Analysis Elements
-        { label: 'פילוג תשובות', icon: 'BarChart4', onclick: addAnswersDistribution },
-        { label: 'טבלת מובילים', icon: 'Trophy', onclick: addLeaderboardElements }
+        { label: t('actions.answersDistribution'), icon: 'BarChart4', onclick: addAnswersDistribution },
+        { label: t('actions.leaderboard'), icon: 'Trophy', onclick: addLeaderboardElements }
     ];
     
     grid.innerHTML = '';
@@ -433,3 +590,8 @@ function renderActionsTab() {
         grid.appendChild(btn);
     });
 }
+
+// Expose t function globally for other modules
+window.t = t;
+window.getLanguage = getLanguage;
+window.isRTL = isRTL;

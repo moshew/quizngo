@@ -3,9 +3,20 @@
  * Handles inline editing of slide types in the slides list
  */
 
-// Get type label in Hebrew
+// Get type label using i18n (with fallback)
 export function getTypeLabel(type) {
-    const map = {
+    // Try to use i18n if available
+    if (window.t) {
+        const key = `slideTypes.${type}`;
+        const translated = window.t(key);
+        // If translation found (not the key itself), use it
+        if (translated !== key) {
+            return translated;
+        }
+    }
+    
+    // Fallback to Hebrew if i18n not ready
+    const fallbackMap = {
         'opening': 'פתיחה',
         'transition': 'מעבר',
         'question': 'שאלה',
@@ -14,7 +25,18 @@ export function getTypeLabel(type) {
         'summary': 'סיכום',
         'start': 'מסך פתיחה'
     };
-    return map[type] || type;
+    return fallbackMap[type] || type;
+}
+
+/**
+ * Get all slide type options with translations
+ */
+function getSlideTypeOptions() {
+    const types = ['opening', 'transition', 'question', 'statistics', 'leaderboard', 'summary'];
+    return types.map(type => ({
+        value: type,
+        label: getTypeLabel(type)
+    }));
 }
 
 /**
@@ -125,6 +147,9 @@ function actualOpenInlineEdit(slideId, currentType) {
     // Prevent clicking the li from navigating while editing
     li.onclick = null;
 
+    // Get all slide type options with translations
+    const slideTypeOptions = getSlideTypeOptions();
+
     // Build answer numbers HTML for question type (inside trigger)
     const buildAnswerNumsHtml = (selectedAnswer) => {
         return `
@@ -136,6 +161,15 @@ function actualOpenInlineEdit(slideId, currentType) {
             </span>
         `;
     };
+
+    // Build dropdown items HTML
+    const dropdownItemsHtml = slideTypeOptions.map(opt => 
+        `<div class="custom-dropdown-item ${currentType === opt.value ? 'selected' : ''}" onclick="selectDropdownItem(event, '${opt.value}')">${opt.label}</div>`
+    ).join('');
+
+    // Get tooltip translations
+    const saveTitle = window.t ? window.t('tooltips.save') : 'שמור';
+    const cancelTitle = window.t ? window.t('tooltips.cancel') : 'ביטול';
 
     li.innerHTML = `
         <div class="inline-edit-container" onclick="event.stopPropagation()">
@@ -150,19 +184,14 @@ function actualOpenInlineEdit(slideId, currentType) {
                     <span class="arrow">▼</span>
                 </div>
                 <div class="custom-dropdown-menu" id="dropdownMenu">
-                    <div class="custom-dropdown-item ${currentType === 'opening' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'opening')">פתיחה</div>
-                    <div class="custom-dropdown-item ${currentType === 'transition' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'transition')">מעבר</div>
-                    <div class="custom-dropdown-item ${currentType === 'question' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'question')">שאלה</div>
-                    <div class="custom-dropdown-item ${currentType === 'statistics' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'statistics')">סטטיסטיקת מענה</div>
-                    <div class="custom-dropdown-item ${currentType === 'leaderboard' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'leaderboard')">מובילים</div>
-                    <div class="custom-dropdown-item ${currentType === 'summary' ? 'selected' : ''}" onclick="selectDropdownItem(event, 'summary')">סיכום</div>
+                    ${dropdownItemsHtml}
                 </div>
             </div>
             <div class="inline-actions">
-                <button class="inline-btn confirm" onclick="confirmInlineSlideTypeChange(event, '${slideId}')" title="שמור">
+                <button class="inline-btn confirm" onclick="confirmInlineSlideTypeChange(event, '${slideId}')" title="${saveTitle}">
                     <i class="ms-Icon ms-Icon--CheckMark"></i>
                 </button>
-                <button class="inline-btn cancel" onclick="cancelInlineEdit(event)" title="ביטול">
+                <button class="inline-btn cancel" onclick="cancelInlineEdit(event)" title="${cancelTitle}">
                     <i class="ms-Icon ms-Icon--Cancel"></i>
                 </button>
             </div>
@@ -206,7 +235,7 @@ export function selectDropdownItem(event, type) {
     
     window.selectedType = type;
     
-    // Update label
+    // Update label with translation
     const label = document.getElementById('dropdownLabel');
     if (label) {
         label.textContent = getTypeLabel(type);

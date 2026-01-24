@@ -15,6 +15,15 @@ import {
 // Cache for slide index lookup (slideId -> 1-based index)
 const slideIndexCache = new Map();
 
+// Helper function to get translations
+function t(key, fallback = '') {
+    if (window.t) {
+        const translated = window.t(key);
+        return translated !== key ? translated : fallback;
+    }
+    return fallback;
+}
+
 // Inject CSS to force cursor during Office API operations
 (function injectCursorOverride() {
     const style = document.createElement('style');
@@ -97,6 +106,10 @@ export async function refreshSlideList() {
             // Build HTML string for better performance and less flicker
             let listHtml = '';
 
+            // Get translated "Slide" text
+            const slideText = t('slides.slide', 'שקף');
+            const editTitle = t('tooltips.edit', 'עריכה');
+
             slides.items.forEach((slide, index) => {
                 const slideNumber = index + 1;
                 const slideId = slide.id;
@@ -122,9 +135,9 @@ export async function refreshSlideList() {
                 listHtml += `
                     <li id="slide-item-${slideId}" class="slide-item${isSelected}" data-index="${slideNumber}" data-id="${slideId}">
                         <div class="slide-info">
-                            <span class="slide-title">שקף ${slideNumber} - ${typeLabel}${extraInfo}</span>
+                            <span class="slide-title">${slideText} ${slideNumber} - ${typeLabel}${extraInfo}</span>
                         </div>
-                        <button class="edit-btn" title="עריכה" data-id="${slideId}" data-type="${type}">✎</button>
+                        <button class="edit-btn" title="${editTitle}" data-id="${slideId}" data-type="${type}">✎</button>
                     </li>
                 `;
             });
@@ -175,7 +188,7 @@ export async function refreshSlideList() {
         });
     } catch (error) {
         console.error('Error refreshing slide list:', error);
-        showError('שגיאה בטעינת רשימת השקפים');
+        showError(t('slides.errorLoading', 'שגיאה בטעינת רשימת השקפים'));
     }
 }
 
