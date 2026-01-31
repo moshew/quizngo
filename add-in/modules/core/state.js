@@ -46,6 +46,7 @@ let _refreshSlideListCallback = null;
 // GAME STATE - Getters & Setters
 // ============================================================================
 
+// Note: hashId is deprecated - gamePin is now the primary identifier
 export function getHashId() { return _currentHashId; }
 export function setHashId(value) { 
     _currentHashId = value;
@@ -56,6 +57,17 @@ export function getGamePIN() { return _gamePIN; }
 export function setGamePIN(value) { 
     _gamePIN = value;
     console.log('📝 State: gamePIN =', value);
+}
+
+/**
+ * Generate a 6-digit game PIN
+ * This is now done in the Add-in (not Admin)
+ * @returns {string} 6-digit PIN
+ */
+export function generateGamePin() {
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log('🎲 Generated new Game PIN:', pin);
+    return pin;
 }
 
 export function getCurrentUsers() { return _currentUsers; }

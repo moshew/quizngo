@@ -1,6 +1,10 @@
 """
 Info routes for Kahoot Quiz Server.
 Handles game info, QR codes, documentation, status, and widgets.
+
+NEW ARCHITECTURE:
+- gamePin is the PRIMARY identifier (6 digits, generated in Add-in)
+- hashId is REMOVED from the system
 """
 
 import re
@@ -28,40 +32,40 @@ def create_info_routes(game):
         """Serve the save location debug page"""
         return send_from_directory('.', 'debug_save_location.html')
 
-    @info_bp.route('/game-info/<hash_id>', methods=['GET'])
-    def get_game_info(hash_id):
-        """Get game information including QR code for a specific game hash."""
+    @info_bp.route('/game-info/<game_pin>', methods=['GET'])
+    def get_game_info(game_pin):
+        """Get game information including QR code for a specific game PIN."""
         try:
             print("=" * 50)
-            print(f"📋 GAME INFO REQUEST for hash: {hash_id}")
+            print(f"📋 GAME INFO REQUEST for game PIN: {game_pin}")
             
-            # Validate hash ID
-            if not hash_id or not isinstance(hash_id, str) or hash_id.strip() == '':
+            # Validate game PIN (6 digits)
+            if not game_pin or not isinstance(game_pin, str) or game_pin.strip() == '':
                 return jsonify({
                     'status': 'error',
-                    'message': 'Invalid hash ID'
+                    'message': 'Invalid game PIN'
                 }), 400
             
-            # Sanitize hash ID
-            hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+            # Sanitize game PIN (digits only)
+            game_pin = re.sub(r'[^0-9]', '', game_pin)
             
-            if len(hash_id) < 8 or len(hash_id) > 20:
+            if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
-                    'message': 'Invalid hash ID length'
+                    'message': 'Game PIN must be 6 digits'
                 }), 400
             
             # Build admin URL (for QR code in "Start Game" button)
-            admin_url = f'http://192.168.31.22:3002/{hash_id}'
+            admin_url = f'http://192.168.31.22:3002/{game_pin}'
             
-            game.log(f'✅ Generated game info for hash: {hash_id}')
+            game.log(f'✅ Generated game info for PIN: {game_pin}')
             game.log(f'   Admin URL: {admin_url}')
             
             return jsonify({
                 'status': 'success',
-                'hashId': hash_id,
+                'gamePin': game_pin,
                 'adminUrl': admin_url,
-                'qrCodeUrl': f'/qr-code/{hash_id}'
+                'qrCodeUrl': f'/qr-code/{game_pin}'
             })
             
         except Exception as e:
@@ -71,18 +75,18 @@ def create_info_routes(game):
                 'message': f'Error: {str(e)}'
             }), 500
 
-    @info_bp.route('/qr-code/<hash_id>', methods=['GET'])
-    def get_qr_code(hash_id):
-        """Generate and return QR code image for admin (uses hash_id)."""
+    @info_bp.route('/qr-code/<game_pin>', methods=['GET'])
+    def get_qr_code(game_pin):
+        """Generate and return QR code image for admin (uses gamePin)."""
         try:
-            # Validate and sanitize hash ID
-            hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+            # Validate and sanitize game PIN
+            game_pin = re.sub(r'[^0-9]', '', game_pin)
             
-            if len(hash_id) < 8 or len(hash_id) > 20:
-                return "Invalid hash ID", 400
+            if len(game_pin) != 6:
+                return "Invalid game PIN (must be 6 digits)", 400
             
             # Build admin URL (port 3002)
-            admin_url = f'http://192.168.31.22:3002/{hash_id}'
+            admin_url = f'http://192.168.31.22:3002/{game_pin}'
             
             # Generate QR code
             qr = qrcode.QRCode(
@@ -102,7 +106,7 @@ def create_info_routes(game):
             img.save(img_io, 'PNG')
             img_io.seek(0)
             
-            game.log(f'✅ Generated QR code for admin with hash: {hash_id}')
+            game.log(f'✅ Generated QR code for admin with game PIN: {game_pin}')
             
             return send_file(img_io, mimetype='image/png', as_attachment=False)
             
@@ -359,8 +363,7 @@ def create_info_routes(game):
             
             <div class="note" style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
                 <h4 style="margin-top: 0;">📌 הערה חשובה - מבנה המערכת</h4>
-                <p><strong>מזהה משחק (Hash ID):</strong> מזהה ייחודי המחושב מנתיב קובץ המצגת (12 תווים הקסדצימליים)</p>
-                <p><strong>קוד משחק (Game PIN):</strong> קוד בן 6 ספרות שמשתתפים משתמשים בו כדי להצטרף למשחק</p>
+                <p><strong>קוד משחק (Game PIN):</strong> קוד בן 6 ספרות שהוא המזהה הראשי למשחק (נוצר ב-Add-in)</p>
                 <p><strong>מזהה משתתף (UID):</strong> מזהה ייחודי שהשרת מייצר לכל משתתף בעת ההצטרפות</p>
             </div>
             
@@ -368,19 +371,19 @@ def create_info_routes(game):
             
             <div class="endpoint">
                 <h3>🎯 רישום סשן משחק</h3>
-                <div class="url">GET /?register_session&amp;hash_id=HASH&amp;game_pin=PIN</div>
-                <p>רושם סשן משחק חדש עם hash_id (מזהה מצגת) ו-game_pin (קוד כניסה למשחק)</p>
+                <div class="url">GET /?register_session&amp;game_pin=PIN</div>
+                <p>רושם סשן משחק חדש עם game_pin (קוד משחק בן 6 ספרות)</p>
             </div>
             
             <div class="endpoint">
                 <h3>🔍 בדיקת קיום משחק פעיל</h3>
-                <div class="url">GET /?check_active_game&amp;hash_id=HASH</div>
-                <p>בודק אם קיים משחק פעיל עבור ה-hash_id הנתון</p>
+                <div class="url">GET /?check_active_game&amp;game_pin=PIN</div>
+                <p>בודק אם קיים משחק פעיל עבור ה-game_pin הנתון</p>
             </div>
             
             <div class="endpoint">
                 <h3>🔒 סגירת משחק</h3>
-                <div class="url">GET /?close_game&amp;hash_id=HASH</div>
+                <div class="url">GET /?close_game&amp;game_pin=PIN</div>
                 <p>סוגר משחק פעיל (מסמן אותו כ-inactive)</p>
             </div>
             
@@ -388,12 +391,12 @@ def create_info_routes(game):
             
             <div class="endpoint">
                 <h3>🚪 התחל קבלת משתתפים</h3>
-                <div class="url">GET /?start_accepting_participants&amp;hash_id=HASH</div>
+                <div class="url">GET /?start_accepting_participants&amp;game_pin=PIN</div>
             </div>
             
             <div class="endpoint">
                 <h3>🚫 הפסק קבלת משתתפים</h3>
-                <div class="url">GET /?stop_accepting_participants&amp;hash_id=HASH</div>
+                <div class="url">GET /?stop_accepting_participants&amp;game_pin=PIN</div>
             </div>
             
             <div class="endpoint">
@@ -406,11 +409,11 @@ def create_info_routes(game):
             
             <div class="endpoint">
                 <h3>➡️ מעבר לשקף הבא</h3>
-                <div class="url">GET /?next_slide&amp;hash_id=HASH</div>
+                <div class="url">GET /?next_slide&amp;game_pin=PIN</div>
             </div>
             
             <hr>
-            <p><small>Kahoot Quiz Server API v1.0 (Python) - תוכנן לעבודה עם PowerPoint Add-in</small></p>
+            <p><small>Kahoot Quiz Server API v2.0 (Python) - gamePin-based architecture - תוכנן לעבודה עם PowerPoint Add-in</small></p>
         </body>
         </html>
         """

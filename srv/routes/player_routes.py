@@ -1,6 +1,7 @@
 """
 Player routes for Kahoot Quiz Server.
 Handles player join, leave, rejoin, and answer submission.
+Uses gamePin as primary identifier for all room operations.
 """
 
 import re
@@ -11,18 +12,17 @@ from flask import Blueprint, request, jsonify
 from utils.room_utils import emit_to_room, check_game_active
 
 
-def create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash):
+def create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player):
     """
     Create player routes blueprint.
     
     Args:
         socketio: Flask-SocketIO instance
         game: GameManager instance
-        game_sessions: Dict of active game sessions
+        game_sessions: Dict of active game sessions (keyed by gamePin)
         player_registry: Dict of registered players
-        client_rooms: Dict mapping socket ID to hash ID
+        client_rooms: Dict mapping socket ID to gamePin
         socket_to_player: Dict mapping socket ID to player UID
-        pin_to_hash: Dict mapping game PIN to hash ID (O(1) reverse lookup)
     
     Returns:
         Blueprint with player routes
@@ -64,19 +64,18 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             
             player = player_registry[user_id]
             player_name = player['nickname']
-            hash_id = player['hashId']
+            player_game_pin = player['gamePin']
             
             # Verify game is still active
-            if hash_id not in game_sessions or not game_sessions[hash_id].get('active', False):
-                game.log(f'❌ Game {hash_id} is not active')
+            if player_game_pin not in game_sessions or not game_sessions[player_game_pin].get('active', False):
+                game.log(f'❌ Game {player_game_pin} is not active')
                 return jsonify({
                     'status': 'error',
                     'message': 'Game is no longer active'
                 }), 404
             
-            # Verify game PIN matches
-            session = game_sessions[hash_id]
-            if session['gamePin'] != game_pin:
+            # Verify game PIN matches player's game
+            if player_game_pin != game_pin:
                 game.log(f'❌ Game PIN mismatch for {player_name}')
                 return jsonify({
                     'status': 'error',
@@ -87,7 +86,9 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             player_registry[user_id]['connected'] = True
             player_registry[user_id]['reconnectedAt'] = time.time()
             
-            game.log(f'✅ Player {player_name} (UID: {user_id}) reconnected to game {hash_id}')
+            game.log(f'✅ Player {player_name} (UID: {user_id}) reconnected to game {game_pin}')
+            
+            session = game_sessions[player_game_pin]
             
             # Always send add update on rejoin to ensure add-in has the player
             emit_to_room(socketio, client_rooms, game.logger, 'participant_update', {
@@ -96,7 +97,7 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'type': 'add',
                 'user_id': user_id,
                 'timestamp': time.time()
-            }, hash_id)
+            }, game_pin)
             
             if session.get('acceptingParticipants', False):
                 game.log(f'📢 Lobby active - sent add update for reconnected player {player_name}')
@@ -111,7 +112,7 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'message': 'Reconnected successfully',
                 'userId': user_id,
                 'nickname': player_name,
-                'hashId': hash_id,
+                'gamePin': game_pin,
                 'gameState': game_state
             }
             
@@ -120,13 +121,13 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 response_data['needsSync'] = True
                 response_data['syncData'] = session['currentQuestion']
             
-            # If socketId provided, register socket to room
+            # If socketId provided, register socket to room (room = gamePin)
             if socket_id:
-                socketio.server.enter_room(socket_id, hash_id, namespace='/')
-                client_rooms[socket_id] = hash_id
+                socketio.server.enter_room(socket_id, game_pin, namespace='/')
+                client_rooms[socket_id] = game_pin
                 # Link socket to player for disconnect handling
                 socket_to_player[socket_id] = user_id
-                game.log(f'🔗 Registered socket {socket_id} to room {hash_id} and linked to player {user_id}')
+                game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {user_id}')
             
             return jsonify(response_data)
             
@@ -181,13 +182,13 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'message': 'Player is disconnected. Please reconnect.'
                 }), 403
             
-            # Get hash_id from player registry
-            hash_id = player['hashId']
+            # Get gamePin from player registry
+            game_pin = player['gamePin']
             
-            game.log(f'✅ Answer from {player["nickname"]} (UID: {user_id}) in game {hash_id}')
+            game.log(f'✅ Answer from {player["nickname"]} (UID: {user_id}) in game {game_pin}')
             
             # Broadcast answer to add-in in this game room via WebSocket
-            emit_to_room(socketio, client_rooms, game.logger, 'player_answer', data, hash_id)
+            emit_to_room(socketio, client_rooms, game.logger, 'player_answer', data, game_pin)
             
             return jsonify({
                 'status': 'success',
@@ -232,10 +233,8 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'message': 'Game PIN must be 6 digits'
                 }), 400
             
-            # Find hash_id for this game_pin (O(1) lookup)
-            hash_id = pin_to_hash.get(game_pin)
-            
-            if not hash_id:
+            # Check if game exists with this gamePin (direct lookup)
+            if game_pin not in game_sessions:
                 return jsonify({
                     'status': 'error',
                     'message': f'No active game found with PIN {game_pin}'
@@ -244,7 +243,7 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             # Check for existing player with same name in this game (Rejoin logic)
             existing_uid = None
             for uid, player in player_registry.items():
-                if player.get('hashId') == hash_id and player.get('nickname') == name:
+                if player.get('gamePin') == game_pin and player.get('nickname') == name:
                     existing_uid = uid
                     break
             
@@ -280,27 +279,27 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                         'timestamp': time.time()
                     }
                     
-                    sent = emit_to_room(socketio, client_rooms, game.logger, 'participant_update', participant_data, hash_id)
+                    sent = emit_to_room(socketio, client_rooms, game.logger, 'participant_update', participant_data, game_pin)
                     game.log(f'✅ Player rejoined, participant_update sent to {sent} client(s)')
                     
-                    # If socketId provided, register socket to room
+                    # If socketId provided, register socket to room (room = gamePin)
                     if socket_id:
-                        socketio.server.enter_room(socket_id, hash_id, namespace='/')
-                        client_rooms[socket_id] = hash_id
+                        socketio.server.enter_room(socket_id, game_pin, namespace='/')
+                        client_rooms[socket_id] = game_pin
                         # Link socket to player for disconnect handling
                         socket_to_player[socket_id] = uid
-                        game.log(f'🔗 Registered socket {socket_id} to room {hash_id} and linked to player {uid}')
+                        game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {uid}')
                     
                     return jsonify({
                         'status': 'success',
                         'uid': uid,
-                        'hashId': hash_id,
+                        'gamePin': game_pin,
                         'message': 'Rejoined successfully'
                     })
 
             # Check if game is active
-            if not check_game_active(game_sessions, hash_id):
-                game.log(f'🚫 Rejected join attempt - game {hash_id} is closed')
+            if not check_game_active(game_sessions, game_pin):
+                game.log(f'🚫 Rejected join attempt - game {game_pin} is closed')
                 return jsonify({
                     'status': 'warning',
                     'message': 'This game has been closed. Please ask the teacher to start a new game.',
@@ -308,9 +307,9 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 }), 403
             
             # Check if session is accepting participants
-            session = game_sessions[hash_id]
+            session = game_sessions[game_pin]
             if not session.get('acceptingParticipants', False):
-                game.log(f'🚫 Rejected join attempt - session {hash_id} not accepting participants')
+                game.log(f'🚫 Rejected join attempt - session {game_pin} not accepting participants')
                 return jsonify({
                     'status': 'error',
                     'message': 'Game is not accepting participants yet. Please wait for the game to start.'
@@ -319,17 +318,16 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             # Generate unique user ID (uid)
             uid = str(uuid.uuid4())
             
-            # Register player in player registry
+            # Register player in player registry (gamePin is primary identifier)
             player_registry[uid] = {
                 'nickname': name,
                 'icon': icon,
-                'hashId': hash_id,
                 'gamePin': game_pin,
                 'connected': True,
                 'joinedAt': time.time()
             }
             
-            game.log(f'👥 Player joining: {name} (UID: {uid}) to game PIN: {game_pin} (hash: {hash_id})')
+            game.log(f'👥 Player joining: {name} (UID: {uid}) to game PIN: {game_pin}')
             game.log(f'💾 Registered player in registry: {player_registry[uid]}')
             
             # Send participant update to add-ins in this specific game room
@@ -341,22 +339,22 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'timestamp': time.time()
             }
             
-            sent = emit_to_room(socketio, client_rooms, game.logger, 'participant_update', participant_data, hash_id)
+            sent = emit_to_room(socketio, client_rooms, game.logger, 'participant_update', participant_data, game_pin)
             
             game.log(f'✅ Player joined, participant_update sent to {sent} client(s)')
             
-            # If socketId provided, register socket to room
+            # If socketId provided, register socket to room (room = gamePin)
             if socket_id:
-                socketio.server.enter_room(socket_id, hash_id, namespace='/')
-                client_rooms[socket_id] = hash_id
+                socketio.server.enter_room(socket_id, game_pin, namespace='/')
+                client_rooms[socket_id] = game_pin
                 # Link socket to player for disconnect handling
                 socket_to_player[socket_id] = uid
-                game.log(f'🔗 Registered socket {socket_id} to room {hash_id} and linked to player {uid}')
+                game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {uid}')
             
             return jsonify({
                 'status': 'success',
                 'uid': uid,
-                'hashId': hash_id
+                'gamePin': game_pin
             })
             
         except Exception as e:
@@ -390,13 +388,13 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             
             player = player_registry[uid]
             player_name = player['nickname']
-            hash_id = player['hashId']
+            game_pin = player['gamePin']
             
             game.log(f'👋 Player disconnecting: {player_name} (UID: {uid})')
             
             # Check if we are in Lobby (acceptingParticipants=True)
             should_remove_permanently = False
-            if hash_id in game_sessions and game_sessions[hash_id].get('acceptingParticipants', False):
+            if game_pin in game_sessions and game_sessions[game_pin].get('acceptingParticipants', False):
                 should_remove_permanently = True
             
             if should_remove_permanently:
@@ -410,7 +408,7 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'type': 'remove',
                     'user_id': uid,
                     'timestamp': time.time()
-                }, hash_id)
+                }, game_pin)
                 
                 return jsonify({
                     'status': 'success',

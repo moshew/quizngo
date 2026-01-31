@@ -75,11 +75,10 @@ CORS(app,
 
 # Global state containers
 connected_clients = set()
-client_rooms = {}  # maps session_id -> hash_id
+client_rooms = {}  # maps session_id -> gamePin (room name)
 socket_to_player = {}  # maps socket_id -> uid
-game_sessions = {}  # maps hash_id -> session info
+game_sessions = {}  # maps gamePin -> session info
 player_registry = {}  # maps uid -> player info
-pin_to_hash = {}  # maps game_pin -> hash_id (reverse lookup for O(1) performance)
 
 # Initialize logger (replaces GameManager)
 game = GameLogger()
@@ -91,8 +90,8 @@ register_websocket_handlers(
 )
 
 # Create and register blueprints
-player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash)
-game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash)
+player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
+game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
 navigation_bp = create_navigation_routes(socketio, game, game_sessions, client_rooms)
 info_bp = create_info_routes(game)
 
@@ -121,6 +120,10 @@ def api_handler():
             action = 'stop_accepting_participants'
         elif 'check_active_game' in request.args:
             action = 'check_active_game'
+        elif 'create_room' in request.args:
+            action = 'create_room'
+        elif 'start_game' in request.args:
+            action = 'start_game'
         elif 'close_game' in request.args:
             action = 'close_game'
         elif 'next_page' in request.args:
@@ -157,6 +160,12 @@ def api_handler():
         
         elif action == 'check_active_game':
             return game_bp.handle_check_active_game()
+        
+        elif action == 'create_room':
+            return game_bp.handle_create_room()
+        
+        elif action == 'start_game':
+            return game_bp.handle_start_game()
         
         elif action == 'close_game':
             return game_bp.handle_close_game()

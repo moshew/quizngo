@@ -68,13 +68,16 @@ export async function initializeSlidesList() {
     // Listen for slide added/deleted events
     try {
         await PowerPoint.run(async (context) => {
-            context.presentation.slides.onAdded.add(onSlidesChanged);
-            context.presentation.slides.onDeleted.add(onSlidesChanged);
-            await context.sync();
-            console.log('✅ Registered slide add/delete listeners');
+            const slides = context.presentation.slides;
+            // Check if event handlers are available (not supported in all PowerPoint versions)
+            if (slides.onAdded && slides.onDeleted) {
+                slides.onAdded.add(onSlidesChanged);
+                slides.onDeleted.add(onSlidesChanged);
+                await context.sync();
+            }
         });
     } catch (error) {
-        console.warn('⚠️ Could not register slide change listeners:', error);
+        // Slide change listeners are optional - polling will handle updates
     }
 
     // Load initial list

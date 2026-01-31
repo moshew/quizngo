@@ -131,19 +131,19 @@ export async function processAnswersAndScores(slideId, questionStartTime, questi
 /**
  * Send results to server
  * 
- * @param {string} hashId - Game hash ID
+ * @param {string} gamePin - Game PIN (primary identifier)
  * @param {Array} results - Processed results with scores and rankings
  */
-export async function sendResultsToServer(hashId, results) {
+export async function sendResultsToServer(gamePin, results) {
     try {
         console.log('📤 Sending results to server...');
-        console.log('📤 hashId:', hashId);
+        console.log('📤 gamePin:', gamePin);
         console.log('📤 results count:', results?.length);
         
-        if (!hashId) {
-            console.error('❌ Cannot send results - hashId is missing');
-            console.error('   hashId value:', hashId);
-            throw new Error('Missing hashId - cannot send results to server');
+        if (!gamePin) {
+            console.error('❌ Cannot send results - gamePin is missing');
+            console.error('   gamePin value:', gamePin);
+            throw new Error('Missing gamePin - cannot send results to server');
         }
         
         if (!results || results.length === 0) {
@@ -157,7 +157,7 @@ export async function sendResultsToServer(hashId, results) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                hashId: hashId,
+                gamePin: gamePin,
                 results: results,
                 timestamp: Date.now()
             })

@@ -1,11 +1,14 @@
 /**
  * UI Manager Module
  * Handles all UI updates and interactions for slide types
+ * 
+ * NEW ARCHITECTURE:
+ * - gamePin is the PRIMARY identifier (6 digits, generated when game starts)
+ * - Admin accesses via /:gamePin URL
  */
 
 import { API_BASE } from '../core/api.js';
 import { 
-    getGameHashId,
     getGamePIN,
     getCurrentSlideNumber
 } from '../core/state.js';
@@ -173,6 +176,9 @@ export function loadStartScreen() {
 /**
  * Initialize start screen with QR code
  * Called when loading a slide of type 'start'
+ * 
+ * NOTE: In the new architecture, gamePin is generated when game starts.
+ * The start screen shows the admin URL/QR only when a game is active.
  */
 export async function initializeStartScreen() {
     console.log('🎮 Initializing start screen...');
@@ -180,20 +186,26 @@ export async function initializeStartScreen() {
     try {
         await new Promise(resolve => setTimeout(resolve, 0));
         
-        const hashId = await getGameHashId();
+        // Get the current gamePin (set when game starts)
+        const gamePin = getGamePIN();
         
-        if (!hashId) {
-            const errorNoGameId = t('startScreen.errorNoGameId', 'לא נמצא מזהה משחק. אנא שמור את המצגת תחילה.');
+        if (!gamePin) {
+            // No active game - show message to start game first
+            const startGameFirst = t('startScreen.startGameFirst', 'לחץ על "התחל משחק" כדי לקבל קישור לשלט');
             document.getElementById('qrCodeArea').innerHTML = 
-                `<div style="color: #d13438;">⚠️ ${errorNoGameId}</div>`;
-            document.getElementById('adminUrl').textContent = errorNoGameId;
+                `<div style="color: #666; text-align: center; padding: 40px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">🎮</div>
+                    <div>${startGameFirst}</div>
+                </div>`;
+            const adminUrlEl = document.getElementById('adminUrl');
+            if (adminUrlEl) adminUrlEl.textContent = startGameFirst;
             return;
         }
         
-        console.log('✅ Hash ID for start screen:', hashId);
+        console.log('✅ Game PIN for start screen:', gamePin);
         
-        // Build the admin URL
-        const adminUrl = `http://192.168.31.22:3002/${hashId}`;
+        // Build the admin URL using gamePin
+        const adminUrl = `http://192.168.31.22:3002/${gamePin}`;
         
         // Display the URL
         const adminUrlElement = document.getElementById('adminUrl');
@@ -201,8 +213,8 @@ export async function initializeStartScreen() {
             adminUrlElement.textContent = adminUrl;
         }
         
-        // Use server's QR code endpoint (works with Office Add-in CSP)
-        const qrCodeUrl = `${API_BASE}qr-code/${hashId}`;
+        // Use server's QR code endpoint (now uses gamePin)
+        const qrCodeUrl = `${API_BASE}qr-code/${gamePin}`;
         
         console.log('📸 QR Code URL (from server):', qrCodeUrl);
         

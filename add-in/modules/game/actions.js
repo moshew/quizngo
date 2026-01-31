@@ -1,39 +1,61 @@
 /**
  * Game Actions Module
  * Handles game-related actions like starting game, timers, leaderboards, etc.
+ * 
+ * NEW ARCHITECTURE:
+ * - gamePin is generated here when game starts
+ * - WebSocket connects only when game starts, disconnects on game end
  */
 
 /* global PowerPoint */
 
-import { API_BASE } from '../core/api.js';
+import { API_BASE, registerRoom, createRoom } from '../core/api.js';
 import { 
-    getGameHashId, 
     getSlideData,
     getPresentationSettings,
     getCurrentSlideId,
     getCurrentSlideNumber,
-    getHashId
+    getGamePIN,
+    setGamePIN,
+    generateGamePin
 } from '../core/state.js';
 import { showStatus, showError, loadStartScreen, initializeStartScreen } from '../ui/manager.js';
 import { updateCurrentSlideQuestionTime } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
+import { connectWebSocket, disconnectWebSocket } from '../core/websocket.js';
 
 /**
  * Start presentation mode (game start screen)
+ * This is where the gamePin is generated and WebSocket connects
+ * NOTE: This only creates a room - Admin must click "Start Game" to begin accepting participants
  */
 export async function startPresentationMode() {
-    console.log('🎮 Start game button clicked - loading start screen');
+    console.log('🎮 Start game button clicked - generating gamePin and creating room...');
     
     try {
-        // Check if presentation is saved
-        const hashId = await getGameHashId();
+        // Generate a new gamePin (Add-in is responsible for this)
+        const gamePin = generateGamePin();
+        setGamePIN(gamePin);
         
-        if (!hashId) {
-            showError('⚠️ שמור תחילה את המצגת לפני הפעלת המשחק');
+        console.log('✅ Generated Game PIN:', gamePin);
+        
+        // Create room on server (does NOT start accepting participants yet)
+        const createResult = await createRoom(gamePin);
+        if (createResult.status !== 'success') {
+            showError('⚠️ שגיאה ביצירת חדר: ' + createResult.message);
             return;
         }
         
-        console.log('✅ Hash ID:', hashId);
+        console.log('✅ Room created on server (waiting for Admin to start game)');
+        
+        // Connect WebSocket with the gamePin
+        const socket = await connectWebSocketForGame(gamePin);
+        if (!socket) {
+            showError('⚠️ שגיאה בחיבור WebSocket');
+            return;
+        }
+        
+        console.log('✅ WebSocket connected for game:', gamePin);
         
         // Load the start screen UI
         loadStartScreen();
@@ -50,12 +72,208 @@ export async function startPresentationMode() {
         // Initialize the start screen with QR code
         await initializeStartScreen();
         
-        showStatus('✅ מסך התחלה נטען - סרוק את קוד ה-QR', 'success');
+        // Format PIN as XXX-XXX for display
+        const formattedPin = gamePin.slice(0, 3) + '-' + gamePin.slice(3);
+        showStatus(`✅ חדר נוצר! PIN: ${formattedPin} - ממתין ל-Admin להתחיל משחק`, 'success');
         
     } catch (error) {
         console.error('❌ Error starting presentation mode:', error);
         showError('שגיאה בהפעלת המשחק: ' + error.message);
     }
+}
+
+/**
+ * Connect WebSocket for the game with appropriate event handlers
+ */
+async function connectWebSocketForGame(gamePin) {
+    const { connectWebSocket } = await import('../core/websocket.js');
+    const { registerRoom } = await import('../core/api.js');
+    const { 
+        resetParticipantAcceptanceState,
+        setParticipantAcceptanceState
+    } = await import('./events.js');
+    const { resetParticipantsList } = await import('../core/websocket.js');
+    const { 
+        goToFirstSlideInPowerPoint,
+        goToNextSlideInPowerPoint,
+        simulateClickInPowerPoint,
+        resetAnimationState
+    } = await import('./navigation.js');
+    const { 
+        updateParticipantsNumInSlides,
+        updateParticipantsListInSlides,
+        resetParticipantsNumInSlides
+    } = await import('../elements/participants_management.js');
+    const { 
+        resetAnswersDistribution,
+        resetLeaderboard
+    } = await import('../elements/answers_analysis.js');
+    const { 
+        updateAllQuestionTimeElements,
+        updateAllRespondentsCountElements
+    } = await import('../elements/question_timer.js');
+    const { 
+        updateGameIdInSlides,
+        updateQrCodeInSlides
+    } = await import('../elements/game_management.js');
+    const { 
+        setCurrentUsers,
+        triggerRefreshSlideList,
+        setSocket
+    } = await import('../core/state.js');
+    const { t } = await import('../i18n/index.js');
+    
+    const socket = connectWebSocket(gamePin, {
+        onConnect: async (socket, pin) => {
+            console.log('✅ Connected to WebSocket for game:', pin);
+            
+            // Register to room using gamePin
+            await registerRoom(socket.id, pin);
+            
+            // === UPDATE GAME ID & QR CODE IN SLIDES (only this, no initialization) ===
+            try {
+                await updateGameIdInSlides(pin);
+                await updateQrCodeInSlides(pin);
+            } catch (updateError) {
+                console.error('❌ Error updating Game ID/QR Code:', updateError);
+            }
+            
+            // NOTE: Game initialization happens when Admin clicks "Start Game"
+            // and we receive the game_started event
+            console.log('🕐 Room ready, waiting for Admin to start game...');
+        },
+        
+        onDisconnect: (reason) => {
+            console.log('❌ Disconnected from game:', reason);
+        },
+        
+        onError: (msg) => {
+            showError(msg);
+        },
+        
+        onSlideNavigation: async (data) => {
+            console.log('🎯 Handling slide navigation:', data.action);
+            
+            try {
+                switch (data.action) {
+                    case 'go_to_first_slide':
+                        await goToFirstSlideInPowerPoint();
+                        break;
+                    case 'go_to_next_slide':
+                    case 'next_slide':
+                        await goToNextSlideInPowerPoint();
+                        break;
+                    default:
+                        console.warn('⚠️ Unknown slide navigation action:', data.action);
+                }
+            } catch (error) {
+                console.error('❌ Error handling slide navigation:', error);
+            }
+        },
+        
+        onClickNavigation: async (data) => {
+            if (data.action === 'simulate_click') {
+                try {
+                    await simulateClickInPowerPoint();
+                } catch (error) {
+                    console.error('❌ Error handling click navigation:', error);
+                }
+            }
+        },
+        
+        onAnimationReset: async (data) => {
+            if (data.action === 'reset_animations') {
+                resetAnimationState();
+            }
+        },
+        
+        onParticipantUpdate: async (data, participantIds) => {
+            setCurrentUsers(participantIds.length);
+            
+            try {
+                await updateParticipantsNumInSlides(participantIds.length);
+                await updateParticipantsListInSlides();
+            } catch (error) {
+                console.error('❌ Error updating participants in slides:', error);
+            }
+            
+            triggerRefreshSlideList();
+        },
+        
+        onPlayerAnswer: (data, answersMap) => {
+            console.log('📝 Player answer handled, total answers:', answersMap.size);
+        },
+        
+        onGameClosed: (data) => {
+            console.log('🛑 Game closed:', data);
+            showError('המשחק נסגר: ' + (data.message || 'סיום'));
+        },
+        
+        onReconnectionFailed: () => {
+            console.log('❌ Reconnection failed after 30 seconds');
+            showError('החיבור אבד. המשחק נסגר.');
+        },
+        
+        onGameStarted: async (data) => {
+            console.log('🎮 Game started by Admin - initializing game state');
+            showStatus('✅ המשחק התחיל! מקבל משתתפים...', 'success');
+            
+            // Initialize all add-in state for the game
+            try {
+                resetParticipantAcceptanceState();
+                resetParticipantsList();
+                resetAnimationState();
+                
+                // Note: acceptingParticipants will be set to true when reaching opening slide
+                
+                const settings = getPresentationSettings();
+                const initialTime = settings?.questionWaitTime || 30;
+                await updateAllQuestionTimeElements(initialTime);
+                await updateAllRespondentsCountElements(0);
+                await resetParticipantsNumInSlides();
+                await updateParticipantsListInSlides();
+                await resetAnswersDistribution();
+                await resetLeaderboard();
+                
+                console.log('✅ Game state initialized after admin started game');
+            } catch (error) {
+                console.error('❌ Error initializing game state:', error);
+            }
+            
+            // Navigate to first slide when game starts
+            try {
+                console.log('📄 Navigating to first slide...');
+                await goToFirstSlideInPowerPoint();
+            } catch (error) {
+                console.error('❌ Error navigating to first slide:', error);
+            }
+        }
+    });
+    
+    setSocket(socket);
+    return socket;
+}
+
+/**
+ * End the current game and disconnect WebSocket
+ */
+export async function endGame() {
+    console.log('🛑 Ending game...');
+    
+    const gamePin = getGamePIN();
+    if (gamePin) {
+        try {
+            const { closeGameSession } = await import('../core/api.js');
+            await closeGameSession(gamePin);
+        } catch (error) {
+            console.error('❌ Error closing game session:', error);
+        }
+    }
+    
+    disconnectWebSocket();
+    setGamePIN(null);
+    
+    console.log('✅ Game ended');
 }
 
 // Global timer variables
@@ -173,10 +391,10 @@ async function handleQuestionEnd() {
             return;
         }
         
-        // Get hash ID from state
-        const hashId = getHashId();
-        if (!hashId) {
-            console.error('❌ No hash ID available');
+        // Get gamePin from state (primary identifier)
+        const gamePin = getGamePIN();
+        if (!gamePin) {
+            console.error('❌ No gamePin available');
             return;
         }
         
@@ -235,7 +453,7 @@ async function handleQuestionEnd() {
         
         if (results) {
             // Send results to server (this also signals end of question)
-            await sendResultsToServer(hashId, results);
+            await sendResultsToServer(gamePin, results);
             
             console.log('✅ Scores processed and sent to server');
         }
@@ -252,16 +470,16 @@ function sendAnswerTimeStarted() {
     try {
         console.log('📤 Attempting to send answer_time_started via REST...');
         
-        const hashId = getHashId();
-        if (!hashId) {
-            console.warn('⚠️ No hashId available - cannot send answer_time_started');
+        const gamePin = getGamePIN();
+        if (!gamePin) {
+            console.warn('⚠️ No gamePin available - cannot send answer_time_started');
             return;
         }
         
         const settings = getPresentationSettings();
         
         const data = {
-            hashId: hashId,
+            gamePin: gamePin,
             timestamp: Date.now(),
             questionWaitTime: settings?.questionWaitTime || 30
         };

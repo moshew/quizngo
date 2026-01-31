@@ -1,6 +1,9 @@
 /**
  * Event Handlers Module
  * Handles Office events like slide changes
+ * 
+ * NEW ARCHITECTURE:
+ * - gamePin is the primary identifier (not hashId)
  */
 
 /* global Office */
@@ -13,7 +16,7 @@ import {
     getCurrentSlideNumber as getSlideNumber,
     getCurrentSlideId,
     getSlideData,
-    getHashId,
+    getGamePIN,
     triggerRefreshSlideList
 } from '../core/state.js';
 
@@ -120,26 +123,26 @@ export async function processSlideChange(fromWebSocket = false) {
         triggerRefreshSlideList().catch(e => console.error('Error refreshing list:', e));
         
         // Control participant acceptance based on slide type
-        const hashId = getHashId();
+        const gamePin = getGamePIN();
         
         if (slideType === 'opening') {
             // On "opening" slide - start accepting participants (only if not already accepting)
-            if (hashId && !isAcceptingParticipants) {
+            if (gamePin && !isAcceptingParticipants) {
                 console.log('🟢 Opening slide detected - starting to accept participants...');
-                const success = await startAcceptingParticipants(hashId);
+                const success = await startAcceptingParticipants(gamePin);
                 if (success) {
                     isAcceptingParticipants = true;
                 }
             } else if (isAcceptingParticipants) {
                 console.log('ℹ️ Already accepting participants - no action needed');
             } else {
-                console.warn('⚠️ Cannot start accepting participants - hashId not available');
+                console.warn('⚠️ Cannot start accepting participants - gamePin not available');
             }
         } else if (slideType !== 'opening') {
             // Not on "opening" slide - stop accepting participants (only if currently accepting)
-            if (hashId && isAcceptingParticipants) {
+            if (gamePin && isAcceptingParticipants) {
                 console.log('🔴 Left opening slide - stopping participant acceptance...');
-                const success = await stopAcceptingParticipants(hashId);
+                const success = await stopAcceptingParticipants(gamePin);
                 if (success) {
                     isAcceptingParticipants = false;
                 }
@@ -195,4 +198,13 @@ export function setWebSocketNavigationFlag(value) {
 export function resetParticipantAcceptanceState() {
     isAcceptingParticipants = false;
     console.log('🔄 Reset participant acceptance state to: false');
+}
+
+/**
+ * Set participant acceptance state
+ * Called when Admin clicks "Start Game" (game_started event)
+ */
+export function setParticipantAcceptanceState(accepting) {
+    isAcceptingParticipants = accepting;
+    console.log(`🔄 Set participant acceptance state to: ${accepting}`);
 }

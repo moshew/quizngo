@@ -151,7 +151,7 @@ function App() {
         // Store the UID for this player
         setPlayerUIDs(prev => ({ ...prev, [player.id]: data.uid }))
         setConnectedPlayers(prev => new Set([...prev, player.id]))
-        console.log(`💾 Stored UID for ${player.name}: ${data.uid}, socket registered to room ${data.hashId}`)
+        console.log(`💾 Stored UID for ${player.name}: ${data.uid}, socket registered to room ${data.gamePin}`)
 
         // Setup socket event handlers (socket was already created and connected above)
         playerSocket.on('disconnect', () => {
@@ -414,7 +414,7 @@ function App() {
       console.log(`✅ Rejoin response:`, data)
 
       if (response.ok && data.status === 'success') {
-        console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.hashId}`)
+        console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.gamePin}`)
         
         // Handle sync data if player reconnected during answer time
         if (data.syncData) {

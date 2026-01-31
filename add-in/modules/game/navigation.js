@@ -504,28 +504,29 @@ export async function goToNextSlideInPowerPoint() {
 
 /**
  * Notify server that game is complete (reached last slide)
+ * Uses gamePin as the primary identifier
  */
 async function notifyGameComplete() {
     try {
-        // Get hash ID from state
-        const { getHashId } = await import('../core/state.js');
-        const hashId = getHashId();
+        // Get gamePin from state (gamePin is now the primary identifier)
+        const { getGamePIN } = await import('../core/state.js');
+        const gamePin = getGamePIN();
         
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('🏁 notifyGameComplete called');
-        console.log(`   Hash ID: ${hashId}`);
+        console.log(`   Game PIN: ${gamePin}`);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
-        if (!hashId) {
-            console.warn('⚠️ Cannot notify game complete - no hash ID available');
+        if (!gamePin) {
+            console.warn('⚠️ Cannot notify game complete - no game PIN available');
             return;
         }
         
-        console.log(`📤 Notifying server: game complete for hash ${hashId}`);
+        console.log(`📤 Notifying server: game complete for PIN ${gamePin}`);
         
         // Import API_BASE if needed
         const API_BASE = 'http://localhost:5000/';
-        const url = `${API_BASE}?close_game&hash_id=${hashId}`;
+        const url = `${API_BASE}?close_game&game_pin=${gamePin}`;
         
         console.log(`📡 Sending request to: ${url}`);
         

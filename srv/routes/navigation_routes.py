@@ -1,6 +1,10 @@
 """
 Navigation routes for Kahoot Quiz Server.
 Handles slide navigation, click actions, and animation reset.
+
+NEW ARCHITECTURE:
+- gamePin is the PRIMARY identifier (6 digits, generated in Add-in)
+- hashId is REMOVED from the system
 """
 
 import re
@@ -17,8 +21,8 @@ def create_navigation_routes(socketio, game, game_sessions, client_rooms):
     Args:
         socketio: Flask-SocketIO instance
         game: GameManager instance
-        game_sessions: Dict of active game sessions
-        client_rooms: Dict mapping socket ID to hash ID
+        game_sessions: Dict of active game sessions (keyed by gamePin)
+        client_rooms: Dict mapping socket ID to gamePin
     
     Returns:
         Blueprint with navigation routes
@@ -28,12 +32,12 @@ def create_navigation_routes(socketio, game, game_sessions, client_rooms):
     def handle_next_slide():
         """Handle next slide navigation - called from main API handler"""
         try:
-            # Get hash_id from request (sent by admin)
-            hash_id = request.args.get('hash_id')
+            # Get game_pin from request (sent by admin)
+            game_pin = request.args.get('game_pin')
             
-            if not hash_id:
-                game.log('⚠️ Next slide request without hash_id - broadcasting to all')
-                # Fallback: broadcast to all if no hash_id
+            if not game_pin:
+                game.log('⚠️ Next slide request without game_pin - broadcasting to all')
+                # Fallback: broadcast to all if no game_pin
                 slide_command = {
                     'action': 'go_to_next_slide',
                     'timestamp': time.time()
@@ -46,18 +50,18 @@ def create_navigation_routes(socketio, game, game_sessions, client_rooms):
                     'action': 'go_to_next_slide'
                 })
             
-            # Validate and sanitize hash_id
-            hash_id = re.sub(r'[^a-zA-Z0-9]', '', hash_id)
+            # Validate and sanitize game_pin (6 digits)
+            game_pin = re.sub(r'[^0-9]', '', game_pin)
             
-            if len(hash_id) < 8 or len(hash_id) > 20:
+            if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
-                    'message': 'Invalid hash ID length'
+                    'message': 'Game PIN must be 6 digits'
                 }), 400
             
             # Check if game is active
-            if not check_game_active(game_sessions, hash_id):
-                game.log(f'⚠️ Next slide request for inactive game {hash_id}')
+            if not check_game_active(game_sessions, game_pin):
+                game.log(f'⚠️ Next slide request for inactive game {game_pin}')
                 return jsonify({
                     'status': 'warning',
                     'message': 'Game session is not active or has been closed',
@@ -68,27 +72,27 @@ def create_navigation_routes(socketio, game, game_sessions, client_rooms):
             slide_command = {
                 'action': 'go_to_next_slide',
                 'timestamp': time.time(),
-                'hashId': hash_id
+                'gamePin': game_pin
             }
             
-            # Use emit_to_room to send only to clients in this game
-            sent_count = emit_to_room(socketio, client_rooms, game.logger, 'slide_navigation', slide_command, hash_id)
+            # Use emit_to_room to send only to clients in this game (room = gamePin)
+            sent_count = emit_to_room(socketio, client_rooms, game.logger, 'slide_navigation', slide_command, game_pin)
             
             if sent_count > 0:
-                game.log(f'✅ Next slide command sent to {sent_count} client(s) in game {hash_id}')
+                game.log(f'✅ Next slide command sent to {sent_count} client(s) in game {game_pin}')
                 return jsonify({
                     'status': 'success',
-                    'message': f'Next slide command sent to {sent_count} client(s) in game {hash_id}',
+                    'message': f'Next slide command sent to {sent_count} client(s) in game {game_pin}',
                     'action': 'go_to_next_slide',
-                    'hashId': hash_id,
+                    'gamePin': game_pin,
                     'clientsNotified': sent_count
                 })
             else:
-                game.log(f'⚠️ No clients found in game {hash_id}')
+                game.log(f'⚠️ No clients found in game {game_pin}')
                 return jsonify({
                     'status': 'warning',
-                    'message': f'No clients connected to game {hash_id}',
-                    'hashId': hash_id
+                    'message': f'No clients connected to game {game_pin}',
+                    'gamePin': game_pin
                 }), 404
                 
         except Exception as e:

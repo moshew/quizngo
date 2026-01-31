@@ -1,6 +1,12 @@
 /**
  * WebSocket Module
  * Handles all WebSocket connections and real-time updates
+ * 
+ * NEW ARCHITECTURE:
+ * - WebSocket connects only when game starts (with gamePin)
+ * - WebSocket disconnects when game ends
+ * - 30-second reconnection timeout - after that, game closes
+ * - gamePin is the primary room identifier (not hashId)
  */
 
 import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './state.js';
@@ -11,11 +17,22 @@ export const WEBSOCKET_URL = 'http://localhost:5000';
 // WebSocket instance
 let socket = null;
 
+// Connection state
+let isConnecting = false;
+let reconnectionTimeout = null;
+let currentGamePin = null;
+let reconnectionAttempts = 0;
+const MAX_RECONNECTION_TIME_MS = 30000; // 30 seconds total
+let reconnectionStartTime = null;
+
 // Participants management - enhanced with scoring data
 let participantsData = new Map(); // Map of userId -> { userId, nickname, score, lastAnswerTime, lastAnswerCorrect }
 
 // Current question answer tracking
 let currentQuestionAnswers = new Map(); // Map of userId -> { answerIndex, timestamp }
+
+// Event config reference for reconnection
+let eventConfig = null;
 
 /**
  * Get the current socket instance
@@ -25,40 +42,185 @@ export function getSocket() {
 }
 
 /**
- * Initialize WebSocket connection
+ * Check if socket is connected
  */
-export function initializeWebSocket(config = {}) {
+export function isSocketConnected() {
+    return socket && socket.connected;
+}
+
+/**
+ * Get current game PIN
+ */
+export function getCurrentGamePin() {
+    return currentGamePin;
+}
+
+/**
+ * Connect WebSocket when game starts
+ * This is called when the Add-in generates a gamePin and starts a game
+ * @param {string} gamePin - The 6-digit game PIN
+ * @param {object} config - Event handlers configuration
+ */
+export function connectWebSocket(gamePin, config = {}) {
+    if (isConnecting) {
+        console.log('⏳ Already connecting to WebSocket...');
+        return null;
+    }
+    
+    if (socket && socket.connected && currentGamePin === gamePin) {
+        console.log('✅ Already connected to game:', gamePin);
+        return socket;
+    }
+    
+    // Disconnect existing socket if different game
+    if (socket) {
+        console.log('🔄 Disconnecting from previous game');
+        disconnectWebSocket();
+    }
+    
     try {
-        console.log('🔌 Initializing WebSocket connection to:', WEBSOCKET_URL);
+        console.log('🔌 Connecting WebSocket for game:', gamePin);
+        isConnecting = true;
+        currentGamePin = gamePin;
+        eventConfig = config;
         
         if (typeof io === 'undefined') {
             console.error('Socket.io not loaded');
+            isConnecting = false;
             throw new Error('Socket.io לא נטען');
         }
         
         socket = io(WEBSOCKET_URL, {
             transports: ['websocket', 'polling'],
             forceNew: true,
-            timeout: 5000
+            timeout: 5000,
+            reconnection: false // We handle reconnection ourselves
         });
         
         // Setup event handlers
-        setupSocketEventHandlers(config);
+        setupSocketEventHandlers(config, gamePin);
         
         console.log('🎯 WebSocket event handlers set up successfully');
         
         return socket;
         
     } catch (error) {
-        console.error('WebSocket initialization failed:', error);
+        console.error('WebSocket connection failed:', error);
+        isConnecting = false;
         throw error;
     }
 }
 
 /**
- * Setup socket event handlers
+ * Disconnect WebSocket when game ends
  */
-function setupSocketEventHandlers(config) {
+export function disconnectWebSocket() {
+    console.log('🔌 Disconnecting WebSocket...');
+    
+    // Clear reconnection state
+    clearReconnectionTimeout();
+    reconnectionAttempts = 0;
+    reconnectionStartTime = null;
+    
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
+    
+    currentGamePin = null;
+    isConnecting = false;
+    
+    console.log('✅ WebSocket disconnected');
+}
+
+/**
+ * Clear reconnection timeout
+ */
+function clearReconnectionTimeout() {
+    if (reconnectionTimeout) {
+        clearTimeout(reconnectionTimeout);
+        reconnectionTimeout = null;
+    }
+}
+
+/**
+ * Handle reconnection with 30-second timeout
+ */
+function handleReconnection() {
+    if (!currentGamePin || !eventConfig) {
+        console.log('❌ Cannot reconnect - no active game');
+        return;
+    }
+    
+    // Start tracking reconnection time
+    if (!reconnectionStartTime) {
+        reconnectionStartTime = Date.now();
+    }
+    
+    const elapsedTime = Date.now() - reconnectionStartTime;
+    
+    if (elapsedTime >= MAX_RECONNECTION_TIME_MS) {
+        console.log('⏰ Reconnection timeout exceeded (30 seconds) - closing game');
+        
+        // Notify about game closure
+        if (eventConfig.onReconnectionFailed) {
+            eventConfig.onReconnectionFailed();
+        }
+        
+        disconnectWebSocket();
+        return;
+    }
+    
+    reconnectionAttempts++;
+    const remainingTime = Math.ceil((MAX_RECONNECTION_TIME_MS - elapsedTime) / 1000);
+    console.log(`🔄 Reconnection attempt ${reconnectionAttempts} (${remainingTime}s remaining)...`);
+    
+    // Exponential backoff: 1s, 2s, 4s, 8s, max 10s
+    const delay = Math.min(1000 * Math.pow(2, reconnectionAttempts - 1), 10000);
+    
+    reconnectionTimeout = setTimeout(() => {
+        if (!socket || !socket.connected) {
+            // Try to reconnect
+            try {
+                socket = io(WEBSOCKET_URL, {
+                    transports: ['websocket', 'polling'],
+                    forceNew: true,
+                    timeout: 5000,
+                    reconnection: false
+                });
+                
+                setupSocketEventHandlers(eventConfig, currentGamePin);
+                
+            } catch (error) {
+                console.error('Reconnection failed:', error);
+                handleReconnection(); // Try again
+            }
+        }
+    }, delay);
+}
+
+/**
+ * Initialize WebSocket connection (LEGACY - for backward compatibility)
+ * Use connectWebSocket(gamePin, config) for new game-based connection
+ */
+export function initializeWebSocket(config = {}) {
+    console.log('⚠️ initializeWebSocket called - storing config for later game start');
+    eventConfig = config;
+    
+    // Return a mock socket object for compatibility
+    // Actual connection happens when game starts
+    return {
+        connected: false,
+        id: null
+    };
+}
+
+/**
+ * Setup socket event handlers
+ * @param {object} config - Event handler callbacks
+ * @param {string} gamePin - The game PIN for room registration
+ */
+function setupSocketEventHandlers(config, gamePin) {
     const {
         onConnect,
         onDisconnect,
@@ -71,27 +233,49 @@ function setupSocketEventHandlers(config) {
         onAnimationReset,
         onSlideChange,
         onPlayerAnswer,
-        onError
+        onError,
+        onGameClosed,
+        onReconnectionFailed,
+        onGameStarted
     } = config;
     
     socket.on('connect', async () => {
-        console.log('✅ WebSocket connected successfully');
+        console.log('✅ WebSocket connected successfully for game:', gamePin);
+        
+        // Reset reconnection state on successful connection
+        clearReconnectionTimeout();
+        reconnectionAttempts = 0;
+        reconnectionStartTime = null;
+        isConnecting = false;
         
         if (onConnect) {
-            await onConnect(socket);
+            await onConnect(socket, gamePin);
         }
     });
     
-    socket.on('disconnect', () => {
-        console.log('❌ WebSocket disconnected');
+    socket.on('disconnect', (reason) => {
+        console.log('❌ WebSocket disconnected:', reason);
+        
+        // Only attempt reconnection if game is still active and it wasn't a clean disconnect
+        if (currentGamePin && reason !== 'io client disconnect') {
+            console.log('🔄 Starting reconnection process...');
+            handleReconnection();
+        }
         
         if (onDisconnect) {
-            onDisconnect();
+            onDisconnect(reason);
         }
     });
     
     socket.on('connect_error', (error) => {
         console.error('WebSocket connection error:', error);
+        isConnecting = false;
+        
+        // Attempt reconnection
+        if (currentGamePin) {
+            handleReconnection();
+        }
+        
         if (onError) {
             onError('שגיאה בחיבור WebSocket: ' + error.message);
         }
@@ -171,6 +355,30 @@ function setupSocketEventHandlers(config) {
     socket.on('player_answer', (data) => {
         console.log('📝 Player answer received:', data);
         handlePlayerAnswer(data, onPlayerAnswer);
+    });
+    
+    // Handle game closed event (from server)
+    socket.on('game_closed', (data) => {
+        console.log('🛑 Game closed event received:', data);
+        
+        // Clear reconnection - game is intentionally closed
+        clearReconnectionTimeout();
+        
+        if (onGameClosed) {
+            onGameClosed(data);
+        }
+        
+        // Disconnect and cleanup
+        disconnectWebSocket();
+    });
+    
+    // Handle game started event (from Admin clicking "Start Game")
+    socket.on('game_started', (data) => {
+        console.log('🎮 Game started event received:', data);
+        
+        if (onGameStarted) {
+            onGameStarted(data);
+        }
     });
 }
 
@@ -295,7 +503,7 @@ export function resetParticipantsList() {
  */
 function handlePlayerAnswer(data, callback) {
     // Expected data format:
-    // { userId: "uid", answerIndex: 1-4, hashId: "...", timestamp: ... }
+    // { userId: "uid", answerIndex: 1-4, gamePin: "123456", timestamp: ... }
     
     const { userId, answerIndex, timestamp } = data;
     

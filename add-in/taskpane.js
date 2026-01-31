@@ -3,15 +3,12 @@
 console.log('📄 taskpane.js loaded (Tabbed Version with i18n)!');
 
 // Import modules - Core
-import { API_BASE, registerRoom } from './modules/core/api.js';
-import { initializeWebSocket, resetParticipantsList } from './modules/core/websocket.js';
+import { API_BASE } from './modules/core/api.js';
 import { 
     getSlideType, 
     loadGameData,
     saveGameData,
-    getGameHashId,
-    // Centralized state management
-    getHashId, setHashId,
+    // Centralized state management - gamePin is the primary identifier
     getGamePIN, setGamePIN,
     getCurrentUsers, setCurrentUsers,
     getSocket, setSocket,
@@ -39,40 +36,24 @@ import {
 } from './modules/game/slides.js';
 import { 
     setupSlideChangeListener, 
-    onSlideChanged,
-    resetParticipantAcceptanceState 
+    onSlideChanged
 } from './modules/game/events.js';
 import { startPresentationMode } from './modules/game/actions.js';
-import {
-    goToFirstSlideInPowerPoint,
-    goToNextSlideInPowerPoint,
-    simulateClickInPowerPoint,
-    resetAnimationState
-} from './modules/game/navigation.js';
 
 // Import modules - Elements
 import {
-    updateAllQuestionTimeElements,
-    updateAllRespondentsCountElements,
     addQuestionTime,
     addRespondentsCount
 } from './modules/elements/question_timer.js';
 import {
-    resetParticipantsNumInSlides,
-    updateParticipantsListInSlides,
-    updateParticipantsNumInSlides,
     insertParticipantsListButton,
     insertParticipantsNumButton
 } from './modules/elements/participants_management.js';
 import {
-    resetAnswersDistribution,
-    resetLeaderboard,
     addAnswersDistribution, 
     addLeaderboardElements
 } from './modules/elements/answers_analysis.js';
 import {
-    updateGameIdInSlides,
-    updateQrCodeInSlides,
     insertGameIdButton,
     insertQrCodeButton
 } from './modules/elements/game_management.js';
@@ -332,30 +313,11 @@ Office.onReady(async (info) => {
         // Initialize i18n first with default language
         await initI18n('he');
         
-        // Check for URL parameters (e.g. from deep link or manual launch)
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlHashId = urlParams.get('hash_id');
-        
-        if (urlHashId) {
-            console.log('🔗 Found hash_id in URL:', urlHashId);
-            setHashId(urlHashId);
-        }
-        
-        // Get/create the presentation's unique Kahoot ID from PowerPoint tags
-        // This MUST happen before WebSocket connects so we can register to the correct room
-        if (!getHashId()) {
-            try {
-                const hashId = await getGameHashId();
-                if (hashId) {
-                    console.log('🔑 Got Kahoot ID from presentation:', hashId);
-                    // Note: getGameHashId already calls setHashId internally
-                } else {
-                    console.warn('⚠️ Could not get Kahoot ID from presentation');
-                }
-            } catch (error) {
-                console.error('❌ Error getting Kahoot ID:', error);
-            }
-        }
+        // NEW ARCHITECTURE NOTE:
+        // - gamePin is generated when game starts (in startPresentationMode)
+        // - WebSocket connects only when game starts
+        // - No pre-registration needed at startup
+        console.log('ℹ️ WebSocket will connect when game starts');
         
         // Initialize Tabs and Lists
         setupTabHandlers();
@@ -389,175 +351,15 @@ Office.onReady(async (info) => {
             
             // Initialize the slides list module (handles refresh, navigation, inline editing)
             await initializeSlidesList();
-            
-            // Ensure we are registered to the room if hashId is available
-            const socket = getSocket();
-            const hashId = getHashId();
-            if (socket && socket.connected && hashId) {
-                console.log('🔗 Late registration for hash:', hashId);
-                await registerRoom(socket.id, hashId);
-            }
         });
 
         // Set up slide change event listener
         setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs));
         
-        // Initialize WebSocket
-        const socketInstance = initializeWebSocket({
-            onConnect: async (socket) => {
-                console.log('✅ Connected to WebSocket');
-                
-                // Register room if we have a hash ID
-                const hashId = getHashId();
-                if (hashId) {
-                    console.log('🔗 Registering room for hash:', hashId);
-                    await registerRoom(socket.id, hashId);
-                }
-            },
-            onDisconnect: () => {
-                console.log('❌ Disconnected');
-            },
-            onError: (msg) => showError(msg),
-            
-            // Handle game PIN registration from Admin
-            onGamePinRegistered: async (data) => {
-                const gamePin = data.gamePin;
-                
-                // Store the hash ID and game PIN
-                if (data.hashId) {
-                    setHashId(data.hashId);
-                }
-                if (gamePin) {
-                    setGamePIN(gamePin);
-                }
-                
-                // === UPDATE GAME ID & QR CODE IN SLIDES ===
-                try {
-                    if (gamePin) {
-                        await updateGameIdInSlides(gamePin);
-                    }
-                    
-                    const currentHashId = getHashId();
-                    if (currentHashId && gamePin) {
-                        await updateQrCodeInSlides(currentHashId, gamePin);
-                    } else {
-                        console.warn('⚠️ No hash ID or game PIN available for QR code update');
-                    }
-                } catch (updateError) {
-                    console.error('❌ Error updating Game ID/QR Code:', updateError);
-                }
-                
-                // === RESET ALL GAME STATE ===
-                resetParticipantAcceptanceState();
-                resetParticipantsList();
-                resetAnimationState();
-                
-                try {
-                    const settings = getPresentationSettings();
-                    const initialTime = settings?.questionWaitTime || 30;
-                    await updateAllQuestionTimeElements(initialTime);
-                    await updateAllRespondentsCountElements(0);
-                    await resetParticipantsNumInSlides();
-                    await updateParticipantsListInSlides();
-                    await resetAnswersDistribution();
-                    await resetLeaderboard();
-                } catch (resetError) {
-                    console.error('❌ Error during resets:', resetError);
-                }
-                
-                // Navigate to first slide when game starts
-                try {
-                    await goToFirstSlideInPowerPoint();
-                } catch (error) {
-                    console.error('❌ Error navigating to first slide:', error);
-                }
-                
-                // Format PIN as XXX-XXX for display
-                const formattedPin = gamePin ? gamePin.slice(0, 3) + '-' + gamePin.slice(3) : 'N/A';
-                showStatus(`🎮 ${t('status.gameActive')} ${formattedPin}`, 'success');
-            },
-            
-            // Handle slide navigation commands
-            onSlideNavigation: async (data) => {
-                console.log('🎯 Handling slide navigation:', data.action);
-                
-                try {
-                    switch (data.action) {
-                        case 'go_to_first_slide':
-                            console.log('📍 Resetting to first slide...');
-                            await goToFirstSlideInPowerPoint();
-                            showStatus(t('status.backToFirstSlide'), 'info');
-                            break;
-                        case 'go_to_next_slide':
-                        case 'next_slide':
-                            console.log('📄 Executing next slide navigation...');
-                            await goToNextSlideInPowerPoint();
-                            showStatus(t('status.nextSlide'), 'info');
-                            break;
-                        default:
-                            console.warn('⚠️ Unknown slide navigation action:', data.action);
-                    }
-                } catch (error) {
-                    console.error('❌ Error handling slide navigation:', error);
-                }
-            },
-            
-            // Handle click navigation (spacebar simulation)
-            onClickNavigation: async (data) => {
-                console.log('⌨️ Handling click navigation (spacebar)...', data);
-                
-                if (data.action === 'simulate_click') {
-                    console.log('⌨️ Executing spacebar simulation...');
-                    try {
-                        await simulateClickInPowerPoint();
-                        showStatus(t('status.simulatingClick'), 'info');
-                    } catch (error) {
-                        console.error('❌ Error handling click navigation:', error);
-                    }
-                }
-            },
-            
-            // Handle animation reset
-            onAnimationReset: async (data) => {
-                console.log('🔄 Handling animation reset...', data);
-                
-                if (data.action === 'reset_animations') {
-                    console.log('🔄 Executing animation reset...');
-                    resetAnimationState();
-                }
-            },
-            
-            // Handle participant updates
-            onParticipantUpdate: async (data, participantIds) => {
-                console.log('👥 Participant update received:', data);
-                console.log('👥 Total participants:', participantIds.length);
-                
-                setCurrentUsers(participantIds.length);
-                
-                try {
-                    await updateParticipantsNumInSlides(participantIds.length);
-                    console.log('✅ Updated participant count in slides to:', participantIds.length);
-                } catch (error) {
-                    console.error('❌ Error updating participant count in slides:', error);
-                }
-                
-                try {
-                    await updateParticipantsListInSlides();
-                    console.log('✅ Updated participant list in slides');
-                } catch (error) {
-                    console.error('❌ Error updating participant list in slides:', error);
-                }
-                
-                // Trigger UI refresh if needed
-                triggerRefreshSlideList();
-            },
-            
-            // Handle player answers
-            onPlayerAnswer: (data, answersMap) => {
-                console.log('📝 Player answer handled, total answers:', answersMap.size);
-            }
-        });
-        setSocket(socketInstance);
+        // Note: WebSocket no longer initializes at startup
+        // WebSocket connects only when game starts (via startPresentationMode)
+        // This is done in actions.js -> startPresentationMode() -> connectWebSocketForGame()
+        console.log('ℹ️ WebSocket will connect when game starts');
 
     } else {
         console.log('❌ Not in PowerPoint');
