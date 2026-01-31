@@ -45,7 +45,7 @@ const hashId = createHashFromPath(fileInfo.fullPath);
 **קוד רלוונטי:**
 ```javascript
 // Admin - App.jsx
-const generateSessionId = () => {
+const generateGamePin = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
   // Result: "123456" (displayed as 123-456)
 }

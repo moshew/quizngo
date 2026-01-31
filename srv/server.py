@@ -22,22 +22,17 @@ from flask_socketio import SocketIO
 # Add srv directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from models.game_manager import GameManager
 from handlers.websocket_handlers import register_websocket_handlers
 from routes.player_routes import create_player_routes
 from routes.game_routes import create_game_routes
-from routes.presentation_routes import create_presentation_routes
 from routes.navigation_routes import create_navigation_routes
 from routes.info_routes import create_info_routes
 
 # Configuration
-DATA_DIR = Path(__file__).parent / 'data'
 LOG_DIR = Path(__file__).parent / 'logs'
-GAME_DATA_FILE = DATA_DIR / 'game_data.json'
 LOG_FILE = LOG_DIR / 'kahoot.log'
 
-# Create directories if they don't exist
-DATA_DIR.mkdir(exist_ok=True)
+# Create log directory if it doesn't exist
 LOG_DIR.mkdir(exist_ok=True)
 
 # Setup logging
@@ -49,6 +44,15 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+
+class GameLogger:
+    """Simple logger wrapper to replace GameManager"""
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    def log(self, message):
+        self.logger.info(message)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -75,9 +79,10 @@ client_rooms = {}  # maps session_id -> hash_id
 socket_to_player = {}  # maps socket_id -> uid
 game_sessions = {}  # maps hash_id -> session info
 player_registry = {}  # maps uid -> player info
+pin_to_hash = {}  # maps game_pin -> hash_id (reverse lookup for O(1) performance)
 
-# Initialize game manager
-game = GameManager(GAME_DATA_FILE)
+# Initialize logger (replaces GameManager)
+game = GameLogger()
 
 # Register WebSocket handlers
 register_websocket_handlers(
@@ -86,15 +91,13 @@ register_websocket_handlers(
 )
 
 # Create and register blueprints
-player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
-game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, DATA_DIR)
-presentation_bp = create_presentation_routes(game, DATA_DIR)
+player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash)
+game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash)
 navigation_bp = create_navigation_routes(socketio, game, game_sessions, client_rooms)
 info_bp = create_info_routes(game)
 
 app.register_blueprint(player_bp)
 app.register_blueprint(game_bp)
-app.register_blueprint(presentation_bp)
 app.register_blueprint(navigation_bp)
 app.register_blueprint(info_bp)
 
@@ -124,18 +127,6 @@ def api_handler():
             action = 'next_page'
         elif 'next_slide' in request.args:
             action = 'next_slide'
-        elif 'get_users' in request.args:
-            action = 'get_users'
-        elif 'get_time' in request.args:
-            action = 'get_time'
-        elif 'status' in request.args:
-            action = 'status'
-        elif 'reset' in request.args:
-            action = 'reset'
-        elif 'start' in request.args:
-            action = 'start'
-        elif 'stop' in request.args:
-            action = 'stop'
         elif 'click_action' in request.args:
             action = 'click_action'
         elif 'reset_animations' in request.args:
@@ -173,38 +164,6 @@ def api_handler():
         elif action == 'next_page' or action == 'next_slide':
             return navigation_bp.handle_next_slide()
         
-        elif action == 'get_users':
-            users = game.get_user_count()
-            return str(users)
-        
-        elif action == 'get_time':
-            time_remaining = game.get_time_remaining()
-            return str(time_remaining)
-        
-        elif action == 'status':
-            status = game.get_game_status()
-            return jsonify(status)
-        
-        elif action == 'reset':
-            game_data = game.reset_game()
-            return jsonify({
-                'status': 'reset',
-                'message': 'Game has been reset',
-                'data': game_data
-            })
-        
-        elif action == 'start':
-            return jsonify({
-                'status': 'error',
-                'message': 'Legacy timer endpoint is no longer supported.'
-            }), 410
-        
-        elif action == 'stop':
-            return jsonify({
-                'status': 'error',
-                'message': 'Legacy timer endpoint is no longer supported.'
-            }), 410
-        
         elif action == 'click_action':
             return navigation_bp.handle_click_action()
         
@@ -224,19 +183,12 @@ if __name__ == '__main__':
     print("=" * 40)
     print("Server will run on: http://localhost:5000")
     print("API Documentation: http://localhost:5000/docs")
-    print("Participants Widget: http://localhost:5000/participants_widget")
     print("WebSocket URL: ws://localhost:5000")
     print("")
     print("Available endpoints:")
     print("  /?init          - Initialize game")
     print("  /?next_slide    - Next slide")
     print("  /?click_action  - Simulate spacebar press")
-    print("  /?get_users     - Get user count")
-    print("  /?get_time      - Get time remaining")
-    print("  /?status        - Get full status")
-    print("  /?reset         - Reset game")
-    print("  /save           - Save presentation data (POST)")
-    print("  /load           - Load presentation data (POST)")
     print("")
     print("WebSocket Events:")
     print("  participant_update - Participant add/remove")

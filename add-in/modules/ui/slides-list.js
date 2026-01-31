@@ -4,7 +4,13 @@
  * Handles the slides list UI, navigation, and slide selection
  */
 
-import { getSlideType } from '../core/state.js';
+import { 
+    getSlideType, 
+    getSlideData,
+    getCurrentSlideId, setCurrentSlideId,
+    getCurrentSlideNumber, setCurrentSlideNumber,
+    setRefreshSlideListCallback
+} from '../core/state.js';
 import { showError } from './manager.js';
 import { 
     initializeSlideTypeEditor, 
@@ -43,7 +49,10 @@ export async function initializeSlidesList() {
     // Initialize the slide type editor with our refresh callback
     initializeSlideTypeEditor(refreshSlideList);
     
-    // Expose functions globally for other modules
+    // Register refresh callback in state module
+    setRefreshSlideListCallback(refreshSlideList);
+    
+    // Expose functions globally for HTML access (backward compatibility)
     window.refreshSlideList = refreshSlideList;
     window.goToSlide = goToSlide;
     window.updateListSelection = updateListSelection;
@@ -110,6 +119,8 @@ export async function refreshSlideList() {
             const slideText = t('slides.slide', 'שקף');
             const editTitle = t('tooltips.edit', 'עריכה');
 
+            const currentSlideId = getCurrentSlideId();
+            
             slides.items.forEach((slide, index) => {
                 const slideNumber = index + 1;
                 const slideId = slide.id;
@@ -124,12 +135,12 @@ export async function refreshSlideList() {
                 // Check if it's a question and has an answer
                 let extraInfo = '';
                 if (type === 'question') {
-                    const slideData = window.slideTypeData ? window.slideTypeData[slideId] : null;
+                    const slideData = getSlideData(slideId);
                     const answer = slideData?.correctAnswer || '1';
                     extraInfo = ` [${answer}]`;
                 }
 
-                const isSelected = window.currentSlideId === slideId ? ' selected' : '';
+                const isSelected = currentSlideId === slideId ? ' selected' : '';
                 
                 // Use data attributes for click handling instead of inline onclick
                 listHtml += `
@@ -159,9 +170,9 @@ export async function refreshSlideList() {
                     const index = parseInt(li.getAttribute('data-index'));
                     const slideId = li.getAttribute('data-id');
                     
-                    // Update global state immediately
-                    window.currentSlideId = slideId;
-                    window.currentSlideNumber = index;
+                    // Update state immediately
+                    setCurrentSlideId(slideId);
+                    setCurrentSlideNumber(index);
 
                     navigateToSlide(slideId);
                 });
@@ -182,8 +193,9 @@ export async function refreshSlideList() {
             slideListEl.style.display = 'block';
             
             // Re-highlight current if known
-            if (window.currentSlideId) {
-                updateListSelection(window.currentSlideId);
+            const currentId = getCurrentSlideId();
+            if (currentId) {
+                updateListSelection(currentId);
             }
         });
     } catch (error) {

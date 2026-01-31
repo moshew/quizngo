@@ -6,7 +6,14 @@
 /* global PowerPoint */
 
 import { API_BASE } from '../core/api.js';
-import { getGameHashId, getSlideData } from '../core/state.js';
+import { 
+    getGameHashId, 
+    getSlideData,
+    getPresentationSettings,
+    getCurrentSlideId,
+    getCurrentSlideNumber,
+    getHashId
+} from '../core/state.js';
 import { showStatus, showError, loadStartScreen, initializeStartScreen } from '../ui/manager.js';
 import { updateCurrentSlideQuestionTime } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
@@ -73,11 +80,8 @@ export async function startTimer() {
         timerInterval = null;
     }
     
-    // Get settings
-    const settings = window.presentationSettings || {
-        questionWaitTime: 30,
-        clockActivationDelay: 5
-    };
+    // Get settings from state
+    const settings = getPresentationSettings();
     
     // Use explicit check for undefined/null to allow 0 values
     const questionWaitTime = settings.questionWaitTime !== undefined && settings.questionWaitTime !== null 
@@ -162,22 +166,23 @@ async function handleQuestionEnd() {
     try {
         console.log('🎯 Handling question end - processing scores...');
         
-        // Get current slide ID
-        const slideId = window.currentSlideId;
+        // Get current slide ID from state
+        const slideId = getCurrentSlideId();
         if (!slideId) {
             console.error('❌ No current slide ID available');
             return;
         }
         
-        // Get hash ID
-        const hashId = window.currentHashId;
+        // Get hash ID from state
+        const hashId = getHashId();
         if (!hashId) {
             console.error('❌ No hash ID available');
             return;
         }
         
         // Get question time from settings
-        const questionTime = window.presentationSettings?.questionWaitTime || 30;
+        const settings = getPresentationSettings();
+        const questionTime = settings?.questionWaitTime || 30;
         
         // Process answers and calculate scores
         const results = await processAnswersAndScores(slideId, questionStartTime, questionTime);
@@ -247,16 +252,18 @@ function sendAnswerTimeStarted() {
     try {
         console.log('📤 Attempting to send answer_time_started via REST...');
         
-        const hashId = window.currentHashId;
+        const hashId = getHashId();
         if (!hashId) {
             console.warn('⚠️ No hashId available - cannot send answer_time_started');
             return;
         }
         
+        const settings = getPresentationSettings();
+        
         const data = {
             hashId: hashId,
             timestamp: Date.now(),
-            questionWaitTime: window.presentationSettings?.questionWaitTime || 30
+            questionWaitTime: settings?.questionWaitTime || 30
         };
         
         // Send via REST API instead of WebSocket
@@ -289,8 +296,8 @@ function sendAnswerTimeStarted() {
  */
 async function updateQuestionTimeDisplay(timeValue) {
     try {
-        // Use the slide number from window (updated by processSlideChange)
-        const slideNumber = window.currentSlideNumber || null;
+        // Use the slide number from state (updated by processSlideChange)
+        const slideNumber = getCurrentSlideNumber() || null;
         
         await updateCurrentSlideQuestionTime(timeValue, slideNumber);
     } catch (error) {

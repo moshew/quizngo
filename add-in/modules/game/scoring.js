@@ -143,7 +143,6 @@ export async function sendResultsToServer(hashId, results) {
         if (!hashId) {
             console.error('❌ Cannot send results - hashId is missing');
             console.error('   hashId value:', hashId);
-            console.error('   window.currentHashId:', window.currentHashId);
             throw new Error('Missing hashId - cannot send results to server');
         }
         

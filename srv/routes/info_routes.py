@@ -325,8 +325,6 @@ def create_info_routes(game):
     @info_bp.route('/docs')
     def docs():
         """API documentation page"""
-        status = game.get_game_status()
-        
         html = f"""
         <!DOCTYPE html>
         <html dir="rtl" lang="he">
@@ -354,8 +352,7 @@ def create_info_routes(game):
             <div class="status">
                 <strong>סטטוס שרת:</strong> פעיל<br>
                 <strong>גרסה:</strong> 1.0.0 (Python)<br>
-                <strong>זמן שרת:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
-                <strong>משחק מאותחל:</strong> {'כן' if status['initialized'] else 'לא'}
+                <strong>זמן שרת:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             </div>
             
             <h2>נקודות קצה זמינות (Endpoints)</h2>
@@ -411,28 +408,6 @@ def create_info_routes(game):
                 <h3>➡️ מעבר לשקף הבא</h3>
                 <div class="url">GET /?next_slide&amp;hash_id=HASH</div>
             </div>
-            
-            <h3>📊 מידע ונתונים</h3>
-            
-            <div class="endpoint">
-                <h3>📈 סטטוס מלא</h3>
-                <div class="url">GET /?status</div>
-            </div>
-            
-            <h3>💾 שמירה וטעינה</h3>
-            
-            <div class="endpoint">
-                <h3>💾 שמירת מצגת</h3>
-                <div class="url">POST /save</div>
-            </div>
-            
-            <div class="endpoint">
-                <h3>📂 טעינת מצגת</h3>
-                <div class="url">POST /load</div>
-            </div>
-            
-            <h2>מידע נוכחי</h2>
-            <pre>{json.dumps(status, indent=2, ensure_ascii=False)}</pre>
             
             <hr>
             <p><small>Kahoot Quiz Server API v1.0 (Python) - תוכנן לעבודה עם PowerPoint Add-in</small></p>

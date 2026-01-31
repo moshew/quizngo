@@ -14,7 +14,7 @@ def check_game_active(game_sessions, hash_id):
 
 
 def schedule_game_timeout(game_sessions, player_registry, client_rooms, socket_to_player, 
-                          socketio, hash_id, logger, timeout_seconds=3600):
+                          socketio, hash_id, logger, pin_to_hash=None, timeout_seconds=3600):
     """Schedule automatic game closure after timeout (default 1 hour)"""
     from flask_socketio import leave_room
     
@@ -28,7 +28,7 @@ def schedule_game_timeout(game_sessions, player_registry, client_rooms, socket_t
             # Close game and clean up players
             close_game_and_cleanup(
                 game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, hash_id, logger, reason='timeout'
+                socketio, hash_id, logger, pin_to_hash, reason='timeout'
             )
     
     timeout_thread = threading.Thread(target=timeout_worker)
@@ -38,7 +38,7 @@ def schedule_game_timeout(game_sessions, player_registry, client_rooms, socket_t
 
 
 def close_game_and_cleanup(game_sessions, player_registry, client_rooms, socket_to_player,
-                           socketio, hash_id, logger, reason='manual'):
+                           socketio, hash_id, logger, pin_to_hash=None, reason='manual'):
     """
     Close a game session and remove all associated players.
     
@@ -50,6 +50,7 @@ def close_game_and_cleanup(game_sessions, player_registry, client_rooms, socket_
         socketio: SocketIO instance
         hash_id: The game hash ID to close
         logger: Logger instance
+        pin_to_hash: Dict mapping game PIN to hash ID (for O(1) reverse lookup cleanup)
         reason: Reason for closure (e.g., 'manual', 'timeout', 'ended')
     """
     from flask_socketio import leave_room
@@ -104,6 +105,13 @@ def close_game_and_cleanup(game_sessions, player_registry, client_rooms, socket_
             del client_rooms[sid]
             
     logger.info(f'🧹 Data cleanup for {hash_id}: Removed {len(players_to_remove)} players and {len(player_sockets_to_remove)} player sockets')
+    
+    # Remove from pin_to_hash reverse lookup
+    if pin_to_hash is not None:
+        game_pin = game_sessions[hash_id].get('gamePin')
+        if game_pin and game_pin in pin_to_hash:
+            del pin_to_hash[game_pin]
+            logger.info(f'🗑️ Removed PIN {game_pin} from reverse lookup')
     
     # Delete the game session entirely
     del game_sessions[hash_id]

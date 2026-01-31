@@ -4,9 +4,14 @@
  */
 
 import { 
-    triggerAutoSave,
+    saveGameData,
     getSlideType,
-    setSlideType
+    setSlideType,
+    getSlideTypeData,
+    setSlideData,
+    getCurrentSlideId,
+    getCurrentSlideNumber,
+    triggerRefreshSlideList
 } from '../core/state.js';
 
 /**
@@ -21,23 +26,24 @@ export function handleSlideTypeChange() {
  * Save slide type to slideTypeData
  */
 export function saveSlideType(slideType) {
-    if (!window.currentSlideId) {
+    const slideId = getCurrentSlideId();
+    if (!slideId) {
         console.warn('⚠️ No slide ID available, cannot save slide type');
         return;
     }
     
-    const slideId = window.currentSlideId;
     const previousType = getSlideType(slideId);
     
     // Special handling for "question" type
     if (slideType === 'question') {
-        const existingData = window.slideTypeData[slideId];
+        const slideTypeData = getSlideTypeData();
+        const existingData = slideTypeData[slideId];
         
         if (!existingData || typeof existingData === 'string') {
-            window.slideTypeData[slideId] = {
+            setSlideData(slideId, {
                 type: slideType,
                 correctAnswer: '1'
-            };
+            });
         } else {
             existingData.type = slideType;
         }
@@ -47,13 +53,11 @@ export function saveSlideType(slideType) {
     
     console.log(`💾 Slide type SAVED: ${slideType} for slide ${slideId}`);
     
-    // Trigger auto-save
-    triggerAutoSave();
+    // Save to presentation
+    saveGameData();
     
-    // Refresh list if function exists
-    if (window.refreshSlideList) {
-        window.refreshSlideList();
-    }
+    // Refresh slide list
+    triggerRefreshSlideList().catch(e => console.error('Error refreshing list:', e));
 }
 
 /**
@@ -61,11 +65,11 @@ export function saveSlideType(slideType) {
  * Now just logs and ensures state is consistent. No UI loading in tab-based architecture.
  */
 export function loadSlideType() {
-    if (!window.currentSlideId) {
+    const slideId = getCurrentSlideId();
+    if (!slideId) {
         return;
     }
     
-    const slideId = window.currentSlideId;
     let slideType = getSlideType(slideId);
     
     // Default to "transition" for new slides
@@ -73,22 +77,11 @@ export function loadSlideType() {
         slideType = 'transition';
     }
     
-    console.log(`🔍 Slide ${window.currentSlideNumber} (ID: ${slideId}) is type: ${slideType}`);
+    console.log(`🔍 Slide ${getCurrentSlideNumber()} (ID: ${slideId}) is type: ${slideType}`);
     
     // We don't load HTML anymore. The List in Tab 1 updates via refreshSlideList.
     // However, we might want to ensure the list highlights the correct item.
-    if (window.refreshSlideList) {
-        // We can just highlight the row without full refresh if optimized, 
-        // but for now refreshSlideList handles selection class.
-        // But refreshSlideList is async and reads from PPT.
-        // We can optimize by just updating the DOM class if we know the ID.
-        
-        const rows = document.querySelectorAll('.slide-item');
-        rows.forEach(row => row.classList.remove('selected'));
-        
-        // Find row by some attribute? We didn't add ID to LI.
-        // Let's rely on refreshSlideList called by onSlideChanged.
-    }
+    // triggerRefreshSlideList handles selection class.
     
     // Load hidden state
     loadHiddenSlideState();

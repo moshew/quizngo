@@ -3,6 +3,20 @@
  * Handles inline editing of slide types in the slides list
  */
 
+import { 
+    saveGameData,
+    getSlideData,
+    getSlideTypeData,
+    setSlideData,
+    ensureSlideData,
+    getContextMenuTargetSlideId, setContextMenuTargetSlideId,
+    getContextMenuTargetType, setContextMenuTargetType,
+    getCurrentEditingSlideId, setCurrentEditingSlideId,
+    getSelectedType, setSelectedType,
+    getSelectedAnswer, setSelectedAnswer,
+    triggerRefreshSlideList
+} from '../core/state.js';
+
 // Get type label using i18n (with fallback)
 export function getTypeLabel(type) {
     // Try to use i18n if available
@@ -39,14 +53,17 @@ function getSlideTypeOptions() {
     }));
 }
 
+// Module-level reference to refresh callback (for backward compatibility)
+let _refreshCallback = null;
+
 /**
  * Initialize the slide type editor
  * Attaches global functions to window for HTML onclick handlers
  * @param {Function} refreshCallback - Function to refresh the slides list after changes
  */
 export function initializeSlideTypeEditor(refreshCallback) {
-    // Store the refresh callback
-    window._slideEditorRefreshCallback = refreshCallback;
+    // Store the refresh callback locally
+    _refreshCallback = refreshCallback;
     
     // Attach functions to window for HTML onclick handlers
     window.showContextMenu = showContextMenu;
@@ -65,12 +82,19 @@ export function initializeSlideTypeEditor(refreshCallback) {
 }
 
 /**
+ * Get the refresh callback (local or from state)
+ */
+function getRefreshCallback() {
+    return _refreshCallback || triggerRefreshSlideList;
+}
+
+/**
  * Show context menu for a slide
  */
 export function showContextMenu(event, slideId, currentType) {
     event.stopPropagation();
-    window.contextMenuTargetSlideId = slideId;
-    window.contextMenuTargetType = currentType;
+    setContextMenuTargetSlideId(slideId);
+    setContextMenuTargetType(currentType);
     
     const menu = document.getElementById('slideContextMenu');
     if (!menu) return;
@@ -101,20 +125,26 @@ export function showContextMenu(event, slideId, currentType) {
  * Open inline edit for a slide
  */
 export function openInlineEdit(slideId, currentType) {
-    const refreshCallback = window._slideEditorRefreshCallback || window.refreshSlideList;
+    const refreshCallback = getRefreshCallback();
     
     // Close any existing edit first (without full refresh)
-    if (window.currentEditingSlideId && window.currentEditingSlideId !== slideId) {
+    const currentEditingId = getCurrentEditingSlideId();
+    if (currentEditingId && currentEditingId !== slideId) {
         // Clear state and refresh to close previous edit
-        window.selectedType = null;
-        window.selectedAnswer = null;
-        window.currentEditingSlideId = null;
+        setSelectedType(null);
+        setSelectedAnswer(null);
+        setCurrentEditingSlideId(null);
         
         // Do a refresh then continue
         if (refreshCallback) {
-            refreshCallback().then(() => {
+            const result = refreshCallback();
+            if (result && result.then) {
+                result.then(() => {
+                    actualOpenInlineEdit(slideId, currentType);
+                });
+            } else {
                 actualOpenInlineEdit(slideId, currentType);
-            });
+            }
         }
         return;
     }
@@ -130,19 +160,19 @@ function actualOpenInlineEdit(slideId, currentType) {
     if (!li) return;
 
     // Mark this slide as being edited
-    window.currentEditingSlideId = slideId;
+    setCurrentEditingSlideId(slideId);
 
     // Store for later use
-    window.contextMenuTargetSlideId = slideId;
-    window.contextMenuTargetType = currentType;
+    setContextMenuTargetSlideId(slideId);
+    setContextMenuTargetType(currentType);
 
     // Get current answer for question type
-    const slideData = window.slideTypeData ? window.slideTypeData[slideId] : null;
+    const slideData = getSlideData(slideId);
     const currentAnswer = slideData?.correctAnswer || '1';
     
     // Store the initial selection
-    window.selectedType = currentType;
-    window.selectedAnswer = currentAnswer;
+    setSelectedType(currentType);
+    setSelectedAnswer(currentAnswer);
 
     // Prevent clicking the li from navigating while editing
     li.onclick = null;
@@ -233,7 +263,7 @@ export function toggleCustomDropdown(event) {
 export function selectDropdownItem(event, type) {
     event.stopPropagation();
     
-    window.selectedType = type;
+    setSelectedType(type);
     
     // Update label with translation
     const label = document.getElementById('dropdownLabel');
@@ -264,7 +294,7 @@ export function selectDropdownItem(event, type) {
 export function selectAnswer(event, answer) {
     event.stopPropagation();
     
-    window.selectedAnswer = answer;
+    setSelectedAnswer(answer);
     
     // Update visual selection
     document.querySelectorAll('.answer-num-link').forEach(link => {
@@ -282,8 +312,8 @@ export function openSlideTypeDialog() {
         contextMenu.style.display = 'none';
     }
     
-    const slideId = window.contextMenuTargetSlideId;
-    const currentType = window.contextMenuTargetType;
+    const slideId = getContextMenuTargetSlideId();
+    const currentType = getContextMenuTargetType();
     openInlineEdit(slideId, currentType);
 }
 
@@ -294,11 +324,11 @@ export function cancelInlineEdit(event) {
     if (event) event.stopPropagation();
     
     // Clear temporary selections
-    window.selectedType = null;
-    window.selectedAnswer = null;
-    window.currentEditingSlideId = null;
+    setSelectedType(null);
+    setSelectedAnswer(null);
+    setCurrentEditingSlideId(null);
     
-    const refreshCallback = window._slideEditorRefreshCallback || window.refreshSlideList;
+    const refreshCallback = getRefreshCallback();
     if (refreshCallback) {
         refreshCallback();
     }
@@ -310,35 +340,34 @@ export function cancelInlineEdit(event) {
 export function confirmInlineSlideTypeChange(event, slideId) {
     if (event) event.stopPropagation();
     
-    const newType = window.selectedType || 'transition';
+    const newType = getSelectedType() || 'transition';
     
     if (slideId) {
-        if (!window.slideTypeData) window.slideTypeData = {};
-        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
+        // Ensure slide data exists
+        const currentData = getSlideData(slideId) || {};
         
-        // Handle legacy string format if exists
-        if (typeof window.slideTypeData[slideId] === 'string') {
-            window.slideTypeData[slideId] = { type: newType };
-        } else {
-            window.slideTypeData[slideId].type = newType;
-        }
+        // Build new data
+        const newData = { ...currentData, type: newType };
         
         // Save the selected answer if type is question
         if (newType === 'question') {
-            const answer = window.selectedAnswer || '1';
-            window.slideTypeData[slideId].correctAnswer = answer;
+            const answer = getSelectedAnswer() || '1';
+            newData.correctAnswer = answer;
         }
         
-        // Clear temporary selections
-        window.selectedType = null;
-        window.selectedAnswer = null;
-        window.currentEditingSlideId = null;
+        // Save to state
+        setSlideData(slideId, newData);
         
-        // Trigger auto-save
-        if (window.triggerAutoSave) window.triggerAutoSave();
+        // Clear temporary selections
+        setSelectedType(null);
+        setSelectedAnswer(null);
+        setCurrentEditingSlideId(null);
+        
+        // Save to presentation
+        saveGameData();
         
         // Refresh the list
-        const refreshCallback = window._slideEditorRefreshCallback || window.refreshSlideList;
+        const refreshCallback = getRefreshCallback();
         if (refreshCallback) {
             refreshCallback();
         }
@@ -358,8 +387,8 @@ export function openSetAnswerDialog() {
     if (!dialog) return;
     
     // Get current answer from state
-    const slideId = window.contextMenuTargetSlideId;
-    const slideData = window.slideTypeData ? window.slideTypeData[slideId] : null;
+    const slideId = getContextMenuTargetSlideId();
+    const slideData = getSlideData(slideId);
     const currentAnswer = slideData?.correctAnswer || '1';
     
     const select = document.getElementById('correctAnswerSelect');
@@ -378,27 +407,27 @@ export function confirmSlideTypeChange() {
     if (!select) return;
     
     const newType = select.value;
-    const slideId = window.contextMenuTargetSlideId;
+    const slideId = getContextMenuTargetSlideId();
     
     if (slideId) {
-        if (!window.slideTypeData) window.slideTypeData = {};
-        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = {};
+        // Ensure slide data exists
+        const currentData = getSlideData(slideId) || {};
         
-        if (typeof window.slideTypeData[slideId] === 'string') {
-            window.slideTypeData[slideId] = { type: newType };
-        } else {
-            window.slideTypeData[slideId].type = newType;
+        // Build new data
+        const newData = { ...currentData, type: newType };
+        
+        if (newType === 'question' && !newData.correctAnswer) {
+            newData.correctAnswer = '1';
         }
         
-        if (newType === 'question' && !window.slideTypeData[slideId].correctAnswer) {
-            window.slideTypeData[slideId].correctAnswer = '1';
-        }
+        // Save to state
+        setSlideData(slideId, newData);
         
-        if (window.triggerAutoSave) window.triggerAutoSave();
+        saveGameData();
         
         console.log(`Updated slide ${slideId} to ${newType}`);
         
-        const refreshCallback = window._slideEditorRefreshCallback || window.refreshSlideList;
+        const refreshCallback = getRefreshCallback();
         if (refreshCallback) {
             refreshCallback();
         }
@@ -415,21 +444,21 @@ export function confirmSetAnswer() {
     if (!select) return;
     
     const answer = select.value;
-    const slideId = window.contextMenuTargetSlideId;
+    const slideId = getContextMenuTargetSlideId();
     
     if (slideId) {
-        if (!window.slideTypeData) window.slideTypeData = {};
-        if (!window.slideTypeData[slideId]) window.slideTypeData[slideId] = { type: 'question' };
+        // Ensure slide data exists
+        const currentData = getSlideData(slideId) || { type: 'question' };
         
-        if (typeof window.slideTypeData[slideId] === 'string') {
-            window.slideTypeData[slideId] = { type: window.slideTypeData[slideId] };
-        }
+        // Build new data
+        const newData = { ...currentData, correctAnswer: answer };
         
-        window.slideTypeData[slideId].correctAnswer = answer;
+        // Save to state
+        setSlideData(slideId, newData);
         
-        if (window.triggerAutoSave) window.triggerAutoSave();
+        saveGameData();
         
-        const refreshCallback = window._slideEditorRefreshCallback || window.refreshSlideList;
+        const refreshCallback = getRefreshCallback();
         if (refreshCallback) {
             refreshCallback();
         }

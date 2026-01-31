@@ -7,8 +7,18 @@ import { API_BASE, registerRoom } from './modules/core/api.js';
 import { initializeWebSocket, resetParticipantsList } from './modules/core/websocket.js';
 import { 
     getSlideType, 
-    loadPresentationData,
-    triggerAutoSave 
+    loadGameData,
+    saveGameData,
+    getGameHashId,
+    // Centralized state management
+    getHashId, setHashId,
+    getGamePIN, setGamePIN,
+    getCurrentUsers, setCurrentUsers,
+    getSocket, setSocket,
+    getCurrentSlideNumber, setCurrentSlideNumber,
+    getCurrentSlideId, setCurrentSlideId,
+    getPresentationSettings, setPresentationSettings, updatePresentationSettings,
+    setRefreshSlideListCallback, triggerRefreshSlideList
 } from './modules/core/state.js';
 
 // Import modules - UI
@@ -79,9 +89,6 @@ import {
     isRTL
 } from './modules/i18n/index.js';
 
-// Expose triggerAutoSave globally for modules that need it
-window.triggerAutoSave = triggerAutoSave;
-
 // --- i18n Functions ---
 
 /**
@@ -115,15 +122,10 @@ window.changeLanguage = async function(langCode) {
     updateAllUI();
     
     // Save language in presentation settings
-    if (!window.presentationSettings) {
-        window.presentationSettings = {};
-    }
-    window.presentationSettings.language = langCode;
+    updatePresentationSettings({ language: langCode });
     
-    // Trigger auto-save
-    if (window.triggerAutoSave) {
-        window.triggerAutoSave();
-    }
+    // Save to presentation
+    saveGameData();
     
     console.log(`✅ Language changed to: ${langCode}`);
 };
@@ -155,9 +157,7 @@ function updateAllUI() {
     renderActionsTab();
     
     // Refresh slide list to update labels
-    if (window.refreshSlideList) {
-        window.refreshSlideList();
-    }
+    triggerRefreshSlideList();
 }
 
 /**
@@ -228,13 +228,7 @@ window.closeDialogs = function() {
 
 // Load settings into the settings tab
 function loadSettingsToTab() {
-    const settings = window.presentationSettings || {
-        questionWaitTime: 30,
-        clockActivationDelay: 5,
-        afterQuestionStatistics: true,
-        afterQuestionLeaderboard: false,
-        language: 'he'
-    };
+    const settings = getPresentationSettings();
     
     document.getElementById('settingTimeTab').value = settings.questionWaitTime;
     document.getElementById('settingDelayTab').value = settings.clockActivationDelay;
@@ -248,26 +242,28 @@ function loadSettingsToTab() {
     }
 }
 
-// Auto-save settings when any setting changes
+// Save settings when any setting changes
 function autoSaveSettings() {
-    const time = parseInt(document.getElementById('settingTimeTab').value) || 30;
-    const delay = parseInt(document.getElementById('settingDelayTab').value) || 5;
+    const timeValue = parseInt(document.getElementById('settingTimeTab').value);
+    const time = isNaN(timeValue) ? 30 : timeValue;
+    const delayValue = parseInt(document.getElementById('settingDelayTab').value);
+    const delay = isNaN(delayValue) ? 5 : delayValue;
     const stats = document.getElementById('settingAfterStatsTab').checked;
     const board = document.getElementById('settingAfterLeaderboardTab').checked;
     const lang = getLanguage();
     
-    window.presentationSettings = {
+    setPresentationSettings({
         questionWaitTime: time,
         clockActivationDelay: delay,
         afterQuestionStatistics: stats,
         afterQuestionLeaderboard: board,
         language: lang
-    };
+    });
     
-    // Trigger auto-save if available
-    if (window.triggerAutoSave) window.triggerAutoSave();
+    // Save to presentation
+    saveGameData();
     
-    console.log('Settings auto-saved:', window.presentationSettings);
+    console.log('Settings saved:', getPresentationSettings());
 }
 
 // Setup settings auto-save listeners
@@ -279,16 +275,8 @@ function setupSettingsListeners() {
 }
 
 
-// State variables
-window.currentSlideNumber = 1;
-window.currentSlideId = null;
-window.slideTypeData = {};
-window.presentationSettings = {
-    questionWaitTime: 30,
-    clockActivationDelay: 5,
-    language: 'he'
-};
-window.contextMenuTargetSlideId = null;
+// Note: State variables are now managed in state.js
+// No need to initialize window.* variables here
 
 // Select current slide on load or navigate to first slide
 async function selectCurrentSlideOnLoad() {
@@ -305,28 +293,28 @@ async function selectCurrentSlideOnLoad() {
             if (selection.items.length > 0) {
                 // A slide is selected, use it
                 const selectedSlide = selection.items[0];
-                window.currentSlideId = selectedSlide.id;
+                setCurrentSlideId(selectedSlide.id);
                 
                 // Find the slide index
                 const slideIndex = slides.items.findIndex(s => s.id === selectedSlide.id);
-                window.currentSlideNumber = slideIndex + 1;
+                setCurrentSlideNumber(slideIndex + 1);
                 
-                console.log('📍 Current slide on load:', window.currentSlideNumber, window.currentSlideId);
+                console.log('📍 Current slide on load:', getCurrentSlideNumber(), getCurrentSlideId());
             } else if (slides.items.length > 0) {
                 // No slide selected, go to first slide
                 const firstSlide = slides.items[0];
-                window.currentSlideId = firstSlide.id;
-                window.currentSlideNumber = 1;
+                setCurrentSlideId(firstSlide.id);
+                setCurrentSlideNumber(1);
                 
                 // Navigate to first slide
                 await navigateToSlideByIndex(1);
-                console.log('📍 Navigated to first slide:', window.currentSlideId);
+                console.log('📍 Navigated to first slide:', getCurrentSlideId());
             }
         });
     } catch (error) {
         console.error('Error selecting current slide on load:', error);
         // Fallback: try to go to first slide
-        window.currentSlideNumber = 1;
+        setCurrentSlideNumber(1);
         try {
             await navigateToSlideByIndex(1);
         } catch (e) {
@@ -350,7 +338,23 @@ Office.onReady(async (info) => {
         
         if (urlHashId) {
             console.log('🔗 Found hash_id in URL:', urlHashId);
-            window.currentHashId = urlHashId;
+            setHashId(urlHashId);
+        }
+        
+        // Get/create the presentation's unique Kahoot ID from PowerPoint tags
+        // This MUST happen before WebSocket connects so we can register to the correct room
+        if (!getHashId()) {
+            try {
+                const hashId = await getGameHashId();
+                if (hashId) {
+                    console.log('🔑 Got Kahoot ID from presentation:', hashId);
+                    // Note: getGameHashId already calls setHashId internally
+                } else {
+                    console.warn('⚠️ Could not get Kahoot ID from presentation');
+                }
+            } catch (error) {
+                console.error('❌ Error getting Kahoot ID:', error);
+            }
         }
         
         // Initialize Tabs and Lists
@@ -369,10 +373,11 @@ Office.onReady(async (info) => {
         const tabs = document.querySelector('.tabs');
     
         // Load data then initialize slides list
-        loadPresentationData().then(async () => {
+        loadGameData().then(async () => {
             // Check if there's a saved language preference
-            if (window.presentationSettings?.language) {
-                const savedLang = window.presentationSettings.language;
+            const settings = getPresentationSettings();
+            if (settings?.language) {
+                const savedLang = settings.language;
                 if (savedLang !== getLanguage()) {
                     await setLanguage(savedLang);
                     updateAllUI();
@@ -386,9 +391,11 @@ Office.onReady(async (info) => {
             await initializeSlidesList();
             
             // Ensure we are registered to the room if hashId is available
-            if (window.socket && window.socket.connected && window.currentHashId) {
-                console.log('🔗 Late registration for hash:', window.currentHashId);
-                await registerRoom(window.socket.id, window.currentHashId);
+            const socket = getSocket();
+            const hashId = getHashId();
+            if (socket && socket.connected && hashId) {
+                console.log('🔗 Late registration for hash:', hashId);
+                await registerRoom(socket.id, hashId);
             }
         });
 
@@ -396,12 +403,12 @@ Office.onReady(async (info) => {
         setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs));
         
         // Initialize WebSocket
-        const socket = initializeWebSocket({
+        const socketInstance = initializeWebSocket({
             onConnect: async (socket) => {
                 console.log('✅ Connected to WebSocket');
                 
                 // Register room if we have a hash ID
-                const hashId = window.currentHashId;
+                const hashId = getHashId();
                 if (hashId) {
                     console.log('🔗 Registering room for hash:', hashId);
                     await registerRoom(socket.id, hashId);
@@ -416,12 +423,12 @@ Office.onReady(async (info) => {
             onGamePinRegistered: async (data) => {
                 const gamePin = data.gamePin;
                 
-                // Store the hash ID and game PIN globally
+                // Store the hash ID and game PIN
                 if (data.hashId) {
-                    window.currentHashId = data.hashId;
+                    setHashId(data.hashId);
                 }
                 if (gamePin) {
-                    window.gamePIN = gamePin;
+                    setGamePIN(gamePin);
                 }
                 
                 // === UPDATE GAME ID & QR CODE IN SLIDES ===
@@ -430,8 +437,9 @@ Office.onReady(async (info) => {
                         await updateGameIdInSlides(gamePin);
                     }
                     
-                    if (window.currentHashId && gamePin) {
-                        await updateQrCodeInSlides(window.currentHashId, gamePin);
+                    const currentHashId = getHashId();
+                    if (currentHashId && gamePin) {
+                        await updateQrCodeInSlides(currentHashId, gamePin);
                     } else {
                         console.warn('⚠️ No hash ID or game PIN available for QR code update');
                     }
@@ -445,7 +453,8 @@ Office.onReady(async (info) => {
                 resetAnimationState();
                 
                 try {
-                    const initialTime = window.presentationSettings?.questionWaitTime || 30;
+                    const settings = getPresentationSettings();
+                    const initialTime = settings?.questionWaitTime || 30;
                     await updateAllQuestionTimeElements(initialTime);
                     await updateAllRespondentsCountElements(0);
                     await resetParticipantsNumInSlides();
@@ -523,7 +532,7 @@ Office.onReady(async (info) => {
                 console.log('👥 Participant update received:', data);
                 console.log('👥 Total participants:', participantIds.length);
                 
-                window.currentUsers = participantIds.length;
+                setCurrentUsers(participantIds.length);
                 
                 try {
                     await updateParticipantsNumInSlides(participantIds.length);
@@ -540,9 +549,7 @@ Office.onReady(async (info) => {
                 }
                 
                 // Trigger UI refresh if needed
-                if (window.refreshSlideList) {
-                    window.refreshSlideList();
-                }
+                triggerRefreshSlideList();
             },
             
             // Handle player answers
@@ -550,7 +557,7 @@ Office.onReady(async (info) => {
                 console.log('📝 Player answer handled, total answers:', answersMap.size);
             }
         });
-        window.socket = socket;
+        setSocket(socketInstance);
 
     } else {
         console.log('❌ Not in PowerPoint');

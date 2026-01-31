@@ -6,6 +6,14 @@
 /* global PowerPoint, Office */
 
 import { processSlideChange, setWebSocketNavigationFlag } from './events.js';
+import { 
+    getSlideTypeData, 
+    getPresentationSettings,
+    getCurrentSlideNumber as getStateSlideNumber,
+    getCurrentSlideId as getStateSlideId,
+    setCurrentSlideNumber,
+    setCurrentSlideId
+} from '../core/state.js';
 
 /**
  * Navigate to first slide in PowerPoint
@@ -284,9 +292,9 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
     // *** UPDATE TRACKING IMMEDIATELY BEFORE NAVIGATION ***
     // This ensures the tracking is updated synchronously, preventing race conditions
     // when rapid navigation commands are issued (e.g., go_to_first + next_slide)
-    window.currentSlideNumber = slideIndex + 1;
-    window.currentSlideId = targetSlideId;
-    console.log(`   Pre-navigation tracking update: slideNumber=${window.currentSlideNumber}, slideId=${window.currentSlideId}`);
+    setCurrentSlideNumber(slideIndex + 1);
+    setCurrentSlideId(targetSlideId);
+    console.log(`   Pre-navigation tracking update: slideNumber=${slideIndex + 1}, slideId=${targetSlideId}`);
     
     // Navigate using goToByIdAsync (works in both edit and presentation modes)
     const navigationSucceeded = await new Promise((resolve) => {
@@ -310,7 +318,7 @@ export async function navigateToSlideByIndex(slideIndex, newSlideId = null) {
     
     // Tracking was already updated before navigation (see above)
     // This ensures immediate availability for subsequent navigation calls
-    console.log(`   Post-navigation verification: slideNumber=${window.currentSlideNumber}, slideId=${window.currentSlideId}`);
+    console.log(`   Post-navigation verification: slideNumber=${getStateSlideNumber()}, slideId=${getStateSlideId()}`);
     
     // Trigger slide change processing (timer, UI updates, etc.)
     if (navigationSucceeded) {
@@ -365,14 +373,15 @@ export async function goToNextSlideInPowerPoint() {
             }
             await context.sync();
             
-            // Get current slide index from window object (works in both edit and presentation modes)
+            // Get current slide index from state (works in both edit and presentation modes)
             let currentIndex = -1;
-            let currentSlideId = window.currentSlideId || null;
+            let currentSlideId = getStateSlideId() || null;
             
             // Use tracked slide number (1-based) and convert to 0-based index
-            if (window.currentSlideNumber && window.currentSlideNumber > 0) {
-                currentIndex = window.currentSlideNumber - 1;
-                console.log(`📍 Using tracked slide number: ${window.currentSlideNumber} (index: ${currentIndex})`);
+            const trackedSlideNumber = getStateSlideNumber();
+            if (trackedSlideNumber && trackedSlideNumber > 0) {
+                currentIndex = trackedSlideNumber - 1;
+                console.log(`📍 Using tracked slide number: ${trackedSlideNumber} (index: ${currentIndex})`);
             }
             
             // Fallback: try to detect current slide from PowerPoint (works only in edit mode)
@@ -416,11 +425,12 @@ export async function goToNextSlideInPowerPoint() {
             // If we don't have currentSlideId yet, get it from the slides array
             if (!currentSlideId && currentIndex >= 0 && currentIndex < slideIds.length) {
                 currentSlideId = slideIds[currentIndex];
-                window.currentSlideId = currentSlideId;
+                setCurrentSlideId(currentSlideId);
                 console.log(`🔍 Retrieved slide ID from index: ${currentSlideId}`);
             }
             
-            const slideTypeValue = window.slideTypeData[currentSlideId];
+            const slideTypeData = getSlideTypeData();
+            const slideTypeValue = slideTypeData[currentSlideId];
             let currentSlideType = null;
             
             // Handle both string and object formats
@@ -439,8 +449,8 @@ export async function goToNextSlideInPowerPoint() {
                 currentIndex,
                 currentSlideType,
                 slideIds,
-                window.slideTypeData || {},
-                window.presentationSettings || {},
+                slideTypeData || {},
+                getPresentationSettings() || {},
                 totalSlides
             );
             
@@ -497,8 +507,9 @@ export async function goToNextSlideInPowerPoint() {
  */
 async function notifyGameComplete() {
     try {
-        // Get hash ID from window object (stored as currentHashId)
-        const hashId = window.currentHashId;
+        // Get hash ID from state
+        const { getHashId } = await import('../core/state.js');
+        const hashId = getHashId();
         
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('🏁 notifyGameComplete called');
@@ -507,7 +518,6 @@ async function notifyGameComplete() {
         
         if (!hashId) {
             console.warn('⚠️ Cannot notify game complete - no hash ID available');
-            console.warn('   window.currentHashId is:', window.currentHashId);
             return;
         }
         
@@ -839,9 +849,9 @@ export async function getCurrentSlideNumber() {
                         if (slides.items[i].id === currentSlideId) {
                             const slideNumber = i + 1;
                             
-                            // Update global variables
-                            window.currentSlideNumber = slideNumber;
-                            window.currentSlideId = currentSlideId;
+                            // Update state
+                            setCurrentSlideNumber(slideNumber);
+                            setCurrentSlideId(currentSlideId);
                             
                             console.log(`📍 Current slide: ${slideNumber} (ID: ${currentSlideId})`);
                             return slideNumber;
@@ -850,18 +860,18 @@ export async function getCurrentSlideNumber() {
                     
                     // Fallback: return 1 if not found
                     console.log('⚠️ Could not determine slide position, defaulting to 1');
-                    window.currentSlideNumber = 1;
+                    setCurrentSlideNumber(1);
                     return 1;
                     
                 } else {
                     console.log('⚠️ No selected slides, defaulting to slide 1');
-                    window.currentSlideNumber = 1;
+                    setCurrentSlideNumber(1);
                     return 1;
                 }
                 
             } catch (error) {
                 console.error('Error getting selected slides:', error);
-                window.currentSlideNumber = 1;
+                setCurrentSlideNumber(1);
                 return 1;
             }
         });

@@ -4,7 +4,12 @@
  */
 
 import { API_BASE } from '../core/api.js';
-import { getGameHashId } from '../core/state.js';
+import { 
+    getGameHashId,
+    getGamePIN,
+    getCurrentSlideNumber
+} from '../core/state.js';
+import { getParticipantsCount } from '../core/websocket.js';
 
 // Helper function to get translations with fallback
 function t(key, fallback = '') {
@@ -89,64 +94,33 @@ export function showError(message, error = null) {
  * Update displayed values in the current UI
  */
 export function updateDisplayedValues() {
-    // Update Game ID
+    // Update Game ID (PIN)
     const gameIdElements = document.querySelectorAll('[id^="gameId"]');
+    const gamePIN = getGamePIN();
     gameIdElements.forEach(el => {
-        if (window.gameId) el.textContent = window.gameId;
+        if (gamePIN) el.textContent = gamePIN;
     });
     
     // Update user count
     const userCountEl = document.getElementById('userCount');
-    if (userCountEl && typeof window.getParticipantsCount === 'function') {
-        userCountEl.textContent = window.getParticipantsCount();
-    }
-    
-    // Update time remaining
-    const timeRemainingEl = document.getElementById('timeRemaining');
-    if (timeRemainingEl && window.currentTime) {
-        timeRemainingEl.textContent = window.currentTime + 's';
+    if (userCountEl) {
+        userCountEl.textContent = getParticipantsCount();
     }
     
     // Update current slide
     const currentSlideEl = document.getElementById('currentSlide');
-    if (currentSlideEl && window.currentSlideNumber) {
-        currentSlideEl.textContent = window.currentSlideNumber;
+    const slideNum = getCurrentSlideNumber();
+    if (currentSlideEl && slideNum) {
+        currentSlideEl.textContent = slideNum;
     }
 }
 
 /**
- * Update auto-save status indicator
+ * Update auto-save status indicator (deprecated - no longer used)
+ * Kept as no-op for backward compatibility
  */
 export function updateAutoSaveStatus(status) {
-    const statusElement = document.getElementById('autoSaveStatus');
-    if (!statusElement) return;
-    
-    switch (status) {
-        case 'pending':
-            statusElement.textContent = `⏱️ ${t('autoSave.pending', 'שינויים ממתינים לשמירה...')}`;
-            statusElement.style.color = '#ffc107';
-            statusElement.style.display = 'block';
-            break;
-        case 'saving':
-            statusElement.textContent = `💾 ${t('autoSave.saving', 'שומר...')}`;
-            statusElement.style.color = '#0078d4';
-            statusElement.style.display = 'block';
-            break;
-        case 'saved':
-            statusElement.textContent = `✅ ${t('autoSave.saved', 'נשמר אוטומטית')}`;
-            statusElement.style.color = '#28a745';
-            statusElement.style.display = 'block';
-            break;
-        case 'error':
-            statusElement.textContent = `❌ ${t('autoSave.error', 'שגיאה בשמירה')}`;
-            statusElement.style.color = '#dc3545';
-            statusElement.style.display = 'block';
-            break;
-        case 'idle':
-        default:
-            statusElement.style.display = 'none';
-            break;
-    }
+    // No-op: Auto-save UI removed, data saves directly to PowerPoint tags
 }
 
 /**

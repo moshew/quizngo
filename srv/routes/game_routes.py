@@ -10,7 +10,7 @@ from flask import Blueprint, request, jsonify
 from utils.room_utils import emit_to_room, check_game_active, close_game_and_cleanup, schedule_game_timeout
 
 
-def create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, data_dir=None):
+def create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash):
     """
     Create game management routes blueprint.
     
@@ -21,7 +21,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
         player_registry: Dict of registered players
         client_rooms: Dict mapping socket ID to hash ID
         socket_to_player: Dict mapping socket ID to player UID
-        data_dir: Path to data directory for saved presentations
+        pin_to_hash: Dict mapping game PIN to hash ID (O(1) reverse lookup)
     
     Returns:
         Blueprint with game routes
@@ -225,7 +225,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 game.log(f'🧹 Cleaning up previous game session: {hash_id}')
                 close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
-                    socketio, hash_id, game.logger, reason='new_session'
+                    socketio, hash_id, game.logger, pin_to_hash, reason='new_session'
                 )
             
             # Store session
@@ -236,10 +236,13 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 'acceptingParticipants': False
             }
             
+            # Add reverse lookup: PIN -> hash_id (O(1) lookup for player join)
+            pin_to_hash[game_pin] = hash_id
+            
             # Schedule auto-close after 1 hour
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, hash_id, game.logger
+                socketio, hash_id, game.logger, pin_to_hash
             )
             
             game.log(f'✅ Session registered: hash={hash_id}, PIN={game_pin}')
@@ -373,11 +376,6 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'message': 'Invalid hash ID length'
                 }), 400
             
-            # Check if this presentation exists (has saved data)
-            saved_files_dir = data_dir / 'saved_presentations'
-            save_file = saved_files_dir / f'{hash_id}.json'
-            presentation_exists = save_file.exists()
-            
             # Check if session exists and is active
             if hash_id in game_sessions and game_sessions[hash_id].get('active', False):
                 session = game_sessions[hash_id]
@@ -386,17 +384,15 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 return jsonify({
                     'status': 'success',
                     'active': True,
-                    'presentationExists': presentation_exists,
                     'gamePin': session.get('gamePin'),
                     'timestamp': session.get('timestamp'),
                     'hashId': hash_id
                 })
             else:
-                game.log(f'ℹ️ No active game for hash {hash_id}, presentation exists: {presentation_exists}')
+                game.log(f'ℹ️ No active game for hash {hash_id}')
                 return jsonify({
                     'status': 'success',
                     'active': False,
-                    'presentationExists': presentation_exists,
                     'hashId': hash_id
                 })
                 
@@ -492,7 +488,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             # Use centralized cleanup function
             close_game_and_cleanup(
                 game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, hash_id, game.logger, reason='manual'
+                socketio, hash_id, game.logger, pin_to_hash, reason='manual'
             )
             
             return jsonify({

@@ -9,6 +9,13 @@ import { getCurrentSlideNumber } from './navigation.js';
 import { loadSlideType } from './slides.js';
 import { startTimer, stopTimer } from './actions.js';
 import { startAcceptingParticipants, stopAcceptingParticipants } from '../core/api.js';
+import { 
+    getCurrentSlideNumber as getSlideNumber,
+    getCurrentSlideId,
+    getSlideData,
+    getHashId,
+    triggerRefreshSlideList
+} from '../core/state.js';
 
 // Debounce timer for slide changes
 let slideChangeDebounceTimer = null;
@@ -73,31 +80,33 @@ export async function processSlideChange(fromWebSocket = false) {
         console.log('🔄 Processing slide change...');
         console.log(`   Source: ${fromWebSocket ? 'WebSocket' : 'Manual/Event'}`);
         
-        // For WebSocket navigation: window.currentSlideNumber and window.currentSlideId 
-        // are already set by navigateToSlideByIndex
+        // For WebSocket navigation: state is already set by navigateToSlideByIndex
         // For manual navigation: get current slide info
         if (!fromWebSocket) {
             await getCurrentSlideNumber();
         }
         
-        console.log(`📍 Detected slide: ${window.currentSlideNumber} (ID: ${window.currentSlideId})`);
+        const currentSlideNumber = getSlideNumber();
+        const currentSlideId = getCurrentSlideId();
+        
+        console.log(`📍 Detected slide: ${currentSlideNumber} (ID: ${currentSlideId})`);
         
         // Update UI for new slide
         const currentSlideEl = document.getElementById('currentSlide');
         if (currentSlideEl) {
-            currentSlideEl.textContent = window.currentSlideNumber;
+            currentSlideEl.textContent = currentSlideNumber;
         }
         
         // Get slide type BEFORE loading new UI
-        const slideId = window.currentSlideId;
+        const slideId = currentSlideId;
         let slideType = null;
         
-        if (window.slideTypeData && window.slideTypeData[slideId]) {
-            const slideTypeValue = window.slideTypeData[slideId];
-            if (typeof slideTypeValue === 'object' && slideTypeValue.type) {
-                slideType = slideTypeValue.type;
-            } else {
-                slideType = slideTypeValue;
+        const slideData = getSlideData(slideId);
+        if (slideData) {
+            if (typeof slideData === 'object' && slideData.type) {
+                slideType = slideData.type;
+            } else if (typeof slideData === 'string') {
+                slideType = slideData;
             }
         }
         
@@ -107,18 +116,17 @@ export async function processSlideChange(fromWebSocket = false) {
         loadSlideType();
         
         // Update Slide List in Tab 1
-        if (window.refreshSlideList) {
-            console.log('🔄 Refreshing slide list...');
-            // Don't await this to avoid blocking other logic, or do await if critical
-            window.refreshSlideList().catch(e => console.error('Error refreshing list:', e));
-        }
+        console.log('🔄 Refreshing slide list...');
+        triggerRefreshSlideList().catch(e => console.error('Error refreshing list:', e));
         
         // Control participant acceptance based on slide type
+        const hashId = getHashId();
+        
         if (slideType === 'opening') {
             // On "opening" slide - start accepting participants (only if not already accepting)
-            if (window.currentHashId && !isAcceptingParticipants) {
+            if (hashId && !isAcceptingParticipants) {
                 console.log('🟢 Opening slide detected - starting to accept participants...');
-                const success = await startAcceptingParticipants(window.currentHashId);
+                const success = await startAcceptingParticipants(hashId);
                 if (success) {
                     isAcceptingParticipants = true;
                 }
@@ -129,9 +137,9 @@ export async function processSlideChange(fromWebSocket = false) {
             }
         } else if (slideType !== 'opening') {
             // Not on "opening" slide - stop accepting participants (only if currently accepting)
-            if (window.currentHashId && isAcceptingParticipants) {
+            if (hashId && isAcceptingParticipants) {
                 console.log('🔴 Left opening slide - stopping participant acceptance...');
-                const success = await stopAcceptingParticipants(window.currentHashId);
+                const success = await stopAcceptingParticipants(hashId);
                 if (success) {
                     isAcceptingParticipants = false;
                 }

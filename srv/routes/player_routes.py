@@ -11,7 +11,7 @@ from flask import Blueprint, request, jsonify
 from utils.room_utils import emit_to_room, check_game_active
 
 
-def create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player):
+def create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player, pin_to_hash):
     """
     Create player routes blueprint.
     
@@ -22,6 +22,7 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
         player_registry: Dict of registered players
         client_rooms: Dict mapping socket ID to hash ID
         socket_to_player: Dict mapping socket ID to player UID
+        pin_to_hash: Dict mapping game PIN to hash ID (O(1) reverse lookup)
     
     Returns:
         Blueprint with player routes
@@ -231,12 +232,8 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'message': 'Game PIN must be 6 digits'
                 }), 400
             
-            # Find hash_id for this game_pin
-            hash_id = None
-            for h_id, session in game_sessions.items():
-                if session.get('gamePin') == game_pin:
-                    hash_id = h_id
-                    break
+            # Find hash_id for this game_pin (O(1) lookup)
+            hash_id = pin_to_hash.get(game_pin)
             
             if not hash_id:
                 return jsonify({

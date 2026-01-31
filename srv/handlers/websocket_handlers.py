@@ -33,13 +33,8 @@ def register_websocket_handlers(socketio, game, connected_clients, client_rooms,
             connected_clients.add(request.sid)
             game.log(f'📡 WS ← connect: {request.sid}')
             
-            # Send current status to newly connected client
-            game_data = game.get_game_status()
-            
-            emit('status_update', {
-                'users': game_data['users'],
-                'current_slide': game_data['current_slide']
-            })
+            # Send connection acknowledgment
+            emit('status_update', {'connected': True})
         except Exception as e:
             game.log(f'❌ Error in connect handler: {e}')
             import traceback

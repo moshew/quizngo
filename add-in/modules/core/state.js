@@ -1,12 +1,149 @@
 /**
  * Presentation State Manager Module
- * Handles presentation data saving, loading, file management, and auto-save
+ * Handles presentation data saving, loading, and file management
+ * Data is stored directly in PowerPoint presentation tags
+ * 
+ * CENTRALIZED STATE MANAGEMENT - All state is managed here instead of window.*
  */
 
 /* global Office, PowerPoint */
 
-import { API_BASE } from './api.js';
-import { updateAutoSaveStatus } from '../ui/manager.js';
+// ============================================================================
+// CENTRALIZED STATE - All application state is stored here
+// ============================================================================
+
+// Game State
+let _currentHashId = null;
+let _gamePIN = null;
+let _currentUsers = 0;
+let _socket = null;
+
+// Slide State
+let _currentSlideNumber = 1;
+let _currentSlideId = null;
+let _slideTypeData = {};
+
+// Presentation Settings
+let _presentationSettings = {
+    questionWaitTime: 30,
+    clockActivationDelay: 5,
+    afterQuestionStatistics: true,
+    afterQuestionLeaderboard: false,
+    language: 'he'
+};
+
+// UI State (for slide editor)
+let _contextMenuTargetSlideId = null;
+let _contextMenuTargetType = null;
+let _currentEditingSlideId = null;
+let _selectedType = null;
+let _selectedAnswer = null;
+
+// Callbacks
+let _refreshSlideListCallback = null;
+
+// ============================================================================
+// GAME STATE - Getters & Setters
+// ============================================================================
+
+export function getHashId() { return _currentHashId; }
+export function setHashId(value) { 
+    _currentHashId = value;
+    console.log('📝 State: hashId =', value);
+}
+
+export function getGamePIN() { return _gamePIN; }
+export function setGamePIN(value) { 
+    _gamePIN = value;
+    console.log('📝 State: gamePIN =', value);
+}
+
+export function getCurrentUsers() { return _currentUsers; }
+export function setCurrentUsers(value) { 
+    _currentUsers = value;
+}
+
+export function getSocket() { return _socket; }
+export function setSocket(value) { 
+    _socket = value;
+    console.log('📝 State: socket connected =', value?.connected);
+}
+
+// ============================================================================
+// SLIDE STATE - Getters & Setters
+// ============================================================================
+
+export function getCurrentSlideNumber() { return _currentSlideNumber; }
+export function setCurrentSlideNumber(value) { 
+    _currentSlideNumber = value;
+}
+
+export function getCurrentSlideId() { return _currentSlideId; }
+export function setCurrentSlideId(value) { 
+    _currentSlideId = value;
+}
+
+export function getSlideTypeData() { return _slideTypeData; }
+export function setSlideTypeData(value) { 
+    _slideTypeData = value || {};
+}
+
+// ============================================================================
+// PRESENTATION SETTINGS - Getters & Setters
+// ============================================================================
+
+export function getPresentationSettings() { return _presentationSettings; }
+export function setPresentationSettings(value) { 
+    _presentationSettings = value || {
+        questionWaitTime: 30,
+        clockActivationDelay: 5,
+        afterQuestionStatistics: true,
+        afterQuestionLeaderboard: false,
+        language: 'he'
+    };
+}
+
+export function updatePresentationSettings(updates) {
+    _presentationSettings = { ..._presentationSettings, ...updates };
+}
+
+// ============================================================================
+// UI STATE - Getters & Setters (for slide editor)
+// ============================================================================
+
+export function getContextMenuTargetSlideId() { return _contextMenuTargetSlideId; }
+export function setContextMenuTargetSlideId(value) { _contextMenuTargetSlideId = value; }
+
+export function getContextMenuTargetType() { return _contextMenuTargetType; }
+export function setContextMenuTargetType(value) { _contextMenuTargetType = value; }
+
+export function getCurrentEditingSlideId() { return _currentEditingSlideId; }
+export function setCurrentEditingSlideId(value) { _currentEditingSlideId = value; }
+
+export function getSelectedType() { return _selectedType; }
+export function setSelectedType(value) { _selectedType = value; }
+
+export function getSelectedAnswer() { return _selectedAnswer; }
+export function setSelectedAnswer(value) { _selectedAnswer = value; }
+
+// ============================================================================
+// CALLBACKS - For UI refresh
+// ============================================================================
+
+export function setRefreshSlideListCallback(callback) { 
+    _refreshSlideListCallback = callback; 
+}
+
+export function triggerRefreshSlideList() {
+    if (_refreshSlideListCallback) {
+        return _refreshSlideListCallback();
+    }
+    return Promise.resolve();
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
 
 /**
  * Generate UUID v4
@@ -28,15 +165,12 @@ export async function getSlideUniqueId(slide, context) {
     return slide.id;
 }
 
-// Auto-save mechanism variables
-let autoSaveTimer = null;
-let hasUnsavedChanges = false;
-const AUTO_SAVE_DELAY = 0; // Immediate save
+// ============================================================================
+// HIDDEN PARTICIPANTS TRACKING (for row overflow management)
+// ============================================================================
 
-// Hidden participants tracking (for row overflow management)
-// Once a row is "hidden" due to overflow, participants in it are permanently hidden until reset
-let hiddenParticipantIds = new Set(); // Set of userId that are hidden and won't be displayed
-let hiddenRowsCount = 0; // Number of rows that have been hidden
+let hiddenParticipantIds = new Set();
+let hiddenRowsCount = 0;
 
 /**
  * Get hidden participant IDs
@@ -258,7 +392,7 @@ export async function getGameHashId() {
             for (const tag of presentation.tags.items) {
                 if (tag.key.toLowerCase() === 'kahoot_id') {
                     console.log('✅ Found existing Kahoot ID:', tag.value);
-                    window.currentHashId = tag.value;
+                    setHashId(tag.value);
                     return tag.value;
                 }
             }
@@ -273,7 +407,7 @@ export async function getGameHashId() {
             console.log('✅ Kahoot ID created and saved to presentation tags');
             console.log('💾 Remember to save the presentation to persist the ID!');
             
-            window.currentHashId = newId;
+            setHashId(newId);
             return newId;
         });
         
@@ -325,132 +459,56 @@ export async function getWindowId() {
 }
 
 /**
- * Save presentation data to server
+ * Save game data directly to PowerPoint presentation tags
  */
-export async function savePresentationData() {
+export async function saveGameData() {
     try {
-        console.log('🚀 Starting save process...');
-        
-        // Get Kahoot ID from presentation tags (creates one if doesn't exist)
-        const hashId = await getGameHashId();
-        
-        if (!hashId) {
-            console.error('❌ Failed to get Kahoot ID');
-            return;
-        }
-        
-        console.log('🔑 Kahoot ID:', hashId);
-        
-        // Prepare game state to save
-        const gameState = {
-            slideTypeData: window.slideTypeData || {},
-            presentationSettings: window.presentationSettings || {}
-        };
-        
-        console.log('📦 Saving game state:', JSON.stringify(gameState, null, 2));
-        
-        // Send to server
-        const response = await fetch(API_BASE + 'save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                hashId: hashId,
-                data: gameState
-            })
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const gameState = {
+                slideTypeData: _slideTypeData,
+                presentationSettings: _presentationSettings
+            };
+            presentation.tags.add('kahoot_game_data', JSON.stringify(gameState));
+            await context.sync();
         });
-
-        if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('✅ Server response:', result);
-        
-        if (result.status === 'success') {
-            console.log('✅ Data saved successfully');
-            return true;
-        } else {
-            throw new Error(result.message || 'Unknown error');
-        }
-        
+        console.log('✅ Game data saved to presentation');
     } catch (error) {
-        console.error('❌ Save failed:', error);
-        throw error;
+        console.error('❌ Failed to save game data:', error);
     }
 }
 
 /**
- * Load presentation data from server
+ * Load game data from PowerPoint presentation tags
  */
-export async function loadPresentationData() {
+export async function loadGameData() {
     try {
-        console.log('📂 Starting load process...');
-        
-        // Get Kahoot ID from presentation tags (creates one if doesn't exist)
-        const hashId = await getGameHashId();
-        
-        if (!hashId) {
-            console.error('❌ Failed to get Kahoot ID for loading');
-            return;
-        }
-        
-        console.log('🔑 Kahoot ID:', hashId);
-        
-        const response = await fetch(API_BASE + 'load', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hashId: hashId })  // Send hash directly
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            presentation.tags.load("items");
+            await context.sync();
+            
+            for (const tag of presentation.tags.items) {
+                if (tag.key.toLowerCase() === 'kahoot_game_data') {
+                    const gameState = JSON.parse(tag.value);
+                    _slideTypeData = gameState.slideTypeData || {};
+                    _presentationSettings = gameState.presentationSettings || {
+                        questionWaitTime: 30,
+                        clockActivationDelay: 5,
+                        afterQuestionStatistics: true,
+                        afterQuestionLeaderboard: false,
+                        language: 'he'
+                    };
+                    console.log('✅ Game data loaded from presentation');
+                    console.log('📋 Slide types loaded:', Object.keys(_slideTypeData).length);
+                    console.log('⚙️ Settings loaded:', _presentationSettings);
+                    return;
+                }
+            }
+            console.log('ℹ️ No saved game data found (first time)');
         });
-
-        if (response.ok) {
-            const result = await response.json();
-            
-            // Handle 'not_found' status (no saved data yet - normal for new presentations)
-            if (result.status === 'not_found') {
-                console.log('ℹ️ No saved data found for this presentation (first time)');
-                return null;
-            }
-            
-            console.log('📦 Server response:', JSON.stringify(result, null, 2));
-            
-            // Server returns data directly (not wrapped in gameState)
-            if (result.status === 'success' && result.data) {
-                const gameState = result.data;
-                
-                // Restore slide type data (by slide ID, NOT slide number)
-                if (gameState.slideTypeData) {
-                    window.slideTypeData = gameState.slideTypeData;
-                    const slideIds = Object.keys(window.slideTypeData);
-                    console.log('✅ Data loaded successfully');
-                    console.log('📋 Slide types loaded:', slideIds.length);
-                    console.log('🔑 Slide IDs:', slideIds);
-                    console.log('📝 Slide type data:', JSON.stringify(window.slideTypeData, null, 2));
-                }
-                
-                // Restore presentation settings
-                if (gameState.presentationSettings) {
-                    window.presentationSettings = gameState.presentationSettings;
-                    console.log('⚙️ Settings loaded:', window.presentationSettings);
-                } else {
-                    console.log('⚠️ No saved settings, using defaults');
-                }
-                
-                return gameState;
-            } else {
-                console.log('ℹ️ No saved data found');
-                return null;
-            }
-        } else if (response.status === 404) {
-            // 404 is expected when no data has been saved yet - not an error
-            console.log('ℹ️ No saved data found for this presentation (first time)');
-            return null;
-        } else {
-            console.warn('⚠️ Server returned unexpected status:', response.status);
-            return null;
-        }
     } catch (error) {
-        console.log('ℹ️ Could not load data:', error.message);
-        return null;
+        console.error('❌ Failed to load game data:', error);
     }
 }
 
@@ -458,7 +516,7 @@ export async function loadPresentationData() {
  * Helper functions for slide type data (supports both string and object format)
  */
 export function getSlideType(slideId) {
-    const data = window.slideTypeData[slideId];
+    const data = _slideTypeData[slideId];
     if (!data) return null;
     
     // If it's a string, return it directly (old format)
@@ -469,22 +527,22 @@ export function getSlideType(slideId) {
 }
 
 export function setSlideType(slideId, slideType) {
-    const existingData = window.slideTypeData[slideId];
+    const existingData = _slideTypeData[slideId];
     
     // If there's existing data as an object, preserve other properties
     if (existingData && typeof existingData === 'object') {
-        window.slideTypeData[slideId] = {
+        _slideTypeData[slideId] = {
             ...existingData,
             type: slideType
         };
     } else {
         // Otherwise, just set the string (simple format)
-        window.slideTypeData[slideId] = slideType;
+        _slideTypeData[slideId] = slideType;
     }
 }
 
 export function getSlideData(slideId) {
-    const data = window.slideTypeData[slideId];
+    const data = _slideTypeData[slideId];
     if (!data) return null;
     
     // If it's a string, convert to object format
@@ -497,57 +555,19 @@ export function getSlideData(slideId) {
 }
 
 /**
- * Trigger auto-save (debounced)
+ * Set slide data directly (for editor)
  */
-export function triggerAutoSave() {
-    console.log('⏰ triggerAutoSave called');
-    
-    if (autoSaveTimer) {
-        console.log('🔄 Clearing existing auto-save timer');
-        clearTimeout(autoSaveTimer);
-    }
-    
-    hasUnsavedChanges = true;
-    updateAutoSaveStatus('pending');
-    console.log('📝 Unsaved changes marked, scheduling auto-save...');
-    
-    autoSaveTimer = setTimeout(async () => {
-        await performAutoSave();
-    }, AUTO_SAVE_DELAY);
+export function setSlideData(slideId, data) {
+    _slideTypeData[slideId] = data;
 }
 
 /**
- * Perform auto-save
+ * Initialize slide data if not exists
  */
-async function performAutoSave() {
-    if (!hasUnsavedChanges) {
-        console.log('ℹ️ No unsaved changes, skipping auto-save');
-        return;
+export function ensureSlideData(slideId) {
+    if (!_slideTypeData[slideId]) {
+        _slideTypeData[slideId] = {};
     }
-    
-    console.log('💾 Performing auto-save...');
-    
-    try {
-        updateAutoSaveStatus('saving');
-        
-        await savePresentationData();
-        
-        hasUnsavedChanges = false;
-        autoSaveTimer = null;
-        
-        updateAutoSaveStatus('saved');
-        console.log('✅ Auto-save completed successfully');
-        
-        setTimeout(() => {
-            updateAutoSaveStatus('idle');
-        }, 2000);
-        
-    } catch (error) {
-        console.error('❌ Auto-save failed:', error);
-        updateAutoSaveStatus('error');
-        
-        setTimeout(() => {
-            updateAutoSaveStatus('idle');
-        }, 5000);
-    }
+    return _slideTypeData[slideId];
 }
+
