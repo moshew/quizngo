@@ -97,6 +97,15 @@ export default {
         errorLoadingQR: 'Error loading QR code'
     },
 
+    // Admin connection overlay
+    adminConnection: {
+        title: 'Admin Remote Connection',
+        scanAdmin: 'Scan the code to open the admin panel',
+        orEnterUrl: 'Or go to:',
+        waitingForAdmin: 'Waiting for Admin to start the game...',
+        close: 'Close'
+    },
+
     // Auto-save status
     autoSave: {
         pending: 'Changes pending save...',

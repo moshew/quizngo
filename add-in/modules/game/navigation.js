@@ -21,10 +21,10 @@ import {
 export async function goToFirstSlideInPowerPoint() {
     try {
         console.log('📍 Resetting to first slide...');
-        
+
         // Use navigateToSlideByIndex to ensure consistent behavior in both edit and presentation modes
         const success = await navigateToSlideByIndex(0); // Index 0 = first slide
-        
+
         if (success) {
             console.log('✅ Successfully navigated to first slide');
             return true;
@@ -32,10 +32,65 @@ export async function goToFirstSlideInPowerPoint() {
             console.error('❌ Failed to navigate to first slide');
             return false;
         }
-        
+
     } catch (error) {
         console.error('❌ Error in goToFirstSlideInPowerPoint:', error);
         throw error;
+    }
+}
+
+/**
+ * Navigate to the first slide with type "opening"
+ * Falls back to first slide if no opening slide is found
+ */
+export async function goToOpeningSlide() {
+    try {
+        console.log('📍 Looking for opening slide...');
+
+        return await PowerPoint.run(async (context) => {
+            const slides = context.presentation.slides;
+            slides.load('items');
+            await context.sync();
+
+            // Load all slide IDs
+            for (let i = 0; i < slides.items.length; i++) {
+                slides.items[i].load('id');
+            }
+            await context.sync();
+
+            const slideTypeData = getSlideTypeData();
+
+            // Find the first slide with type "opening"
+            for (let i = 0; i < slides.items.length; i++) {
+                const slideId = slides.items[i].id;
+                const slideTypeValue = slideTypeData[slideId];
+                let slideType = null;
+
+                if (slideTypeValue) {
+                    if (typeof slideTypeValue === 'object' && slideTypeValue.type) {
+                        slideType = slideTypeValue.type;
+                    } else {
+                        slideType = slideTypeValue;
+                    }
+                }
+
+                if (slideType === 'opening') {
+                    console.log(`✅ Found opening slide at index ${i} (ID: ${slideId})`);
+                    const success = await navigateToSlideByIndex(i, slideId);
+                    return success;
+                }
+            }
+
+            // No opening slide found - fall back to first slide
+            console.log('⚠️ No opening slide found, navigating to first slide');
+            const success = await navigateToSlideByIndex(0);
+            return success;
+        });
+
+    } catch (error) {
+        console.error('❌ Error in goToOpeningSlide:', error);
+        // Fallback to first slide
+        return await goToFirstSlideInPowerPoint();
     }
 }
 

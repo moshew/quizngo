@@ -19,7 +19,7 @@ import {
     setGamePIN,
     generateGamePin
 } from '../core/state.js';
-import { showStatus, showError, loadStartScreen, initializeStartScreen } from '../ui/manager.js';
+import { showStatus, showError, showAdminConnectionScreen, hideAdminConnectionScreen, isAdminConnectionScreenOpen } from '../ui/manager.js';
 import { updateCurrentSlideQuestionTime } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
 import { connectWebSocket, disconnectWebSocket } from '../core/websocket.js';
@@ -31,51 +31,58 @@ import { connectWebSocket, disconnectWebSocket } from '../core/websocket.js';
  */
 export async function startPresentationMode() {
     console.log('🎮 Start game button clicked - generating gamePin and creating room...');
-    
+
+    // Prevent starting a new game while admin connection screen is open
+    if (isAdminConnectionScreenOpen()) {
+        console.log('⚠️ Admin connection screen already open - ignoring');
+        return;
+    }
+
     try {
         // Generate a new gamePin (Add-in is responsible for this)
         const gamePin = generateGamePin();
         setGamePIN(gamePin);
-        
+
         console.log('✅ Generated Game PIN:', gamePin);
-        
+
         // Create room on server (does NOT start accepting participants yet)
         const createResult = await createRoom(gamePin);
         if (createResult.status !== 'success') {
             showError('⚠️ שגיאה ביצירת חדר: ' + createResult.message);
             return;
         }
-        
+
         console.log('✅ Room created on server (waiting for Admin to start game)');
-        
+
         // Connect WebSocket with the gamePin
         const socket = await connectWebSocketForGame(gamePin);
         if (!socket) {
             showError('⚠️ שגיאה בחיבור WebSocket');
             return;
         }
-        
+
         console.log('✅ WebSocket connected for game:', gamePin);
-        
-        // Load the start screen UI
-        loadStartScreen();
-        
-        // Switch view to Game Mode
-        const mainContent = document.getElementById('mainContent');
-        const tabs = document.querySelector('.tabs');
-        const slideContentArea = document.getElementById('slideContentArea');
-        
-        if (mainContent) mainContent.style.display = 'none';
-        if (tabs) tabs.style.display = 'none';
-        if (slideContentArea) slideContentArea.style.display = 'block';
-        
-        // Initialize the start screen with QR code
-        await initializeStartScreen();
-        
+
+        // Navigate to opening slide (first slide with type "opening")
+        try {
+            const { goToOpeningSlide } = await import('./navigation.js');
+            await goToOpeningSlide();
+            console.log('✅ Navigated to opening slide');
+        } catch (navError) {
+            console.error('❌ Error navigating to opening slide:', navError);
+        }
+
+        // Show admin connection overlay (does NOT replace the UI)
+        await showAdminConnectionScreen(gamePin);
+
+        // Disable the start game button while overlay is open
+        const btnStartGame = document.getElementById('btnStartGame');
+        if (btnStartGame) btnStartGame.disabled = true;
+
         // Format PIN as XXX-XXX for display
         const formattedPin = gamePin.slice(0, 3) + '-' + gamePin.slice(3);
         showStatus(`✅ חדר נוצר! PIN: ${formattedPin} - ממתין ל-Admin להתחיל משחק`, 'success');
-        
+
     } catch (error) {
         console.error('❌ Error starting presentation mode:', error);
         showError('שגיאה בהפעלת המשחק: ' + error.message);
@@ -217,15 +224,22 @@ async function connectWebSocketForGame(gamePin) {
         onGameStarted: async (data) => {
             console.log('🎮 Game started by Admin - initializing game state');
             showStatus('✅ המשחק התחיל! מקבל משתתפים...', 'success');
-            
+
+            // Close admin connection overlay if still open
+            hideAdminConnectionScreen();
+
+            // Re-enable the start game button
+            const btnStartGame = document.getElementById('btnStartGame');
+            if (btnStartGame) btnStartGame.disabled = false;
+
             // Initialize all add-in state for the game
             try {
                 resetParticipantAcceptanceState();
                 resetParticipantsList();
                 resetAnimationState();
-                
+
                 // Note: acceptingParticipants will be set to true when reaching opening slide
-                
+
                 const settings = getPresentationSettings();
                 const initialTime = settings?.questionWaitTime || 30;
                 await updateAllQuestionTimeElements(initialTime);
@@ -234,12 +248,12 @@ async function connectWebSocketForGame(gamePin) {
                 await updateParticipantsListInSlides();
                 await resetAnswersDistribution();
                 await resetLeaderboard();
-                
+
                 console.log('✅ Game state initialized after admin started game');
             } catch (error) {
                 console.error('❌ Error initializing game state:', error);
             }
-            
+
             // Navigate to first slide when game starts
             try {
                 console.log('📄 Navigating to first slide...');

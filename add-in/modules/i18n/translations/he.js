@@ -97,6 +97,15 @@ export default {
         errorLoadingQR: 'שגיאה בטעינת QR code'
     },
 
+    // Admin connection overlay
+    adminConnection: {
+        title: 'חיבור שלט Admin',
+        scanAdmin: 'סרוק את הקוד כדי לפתוח את ממשק הניהול',
+        orEnterUrl: 'או היכנס לכתובת:',
+        waitingForAdmin: 'ממתין ל-Admin להתחיל את המשחק...',
+        close: 'סגור'
+    },
+
     // Auto-save status
     autoSave: {
         pending: 'שינויים ממתינים לשמירה...',

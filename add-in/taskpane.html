@@ -598,7 +598,226 @@
         .setting-checkbox-group label {
             font-weight: 500;
             margin-bottom: 5px;
+        }
+
+        /* ===== Admin Connection Overlay (Full Panel) ===== */
+        .admin-overlay {
+            position: fixed;
+            inset: 0;
+            background: #fff;
+            display: none;
+            flex-direction: column;
+            z-index: 3000;
+            animation: adminFadeIn 0.25s ease;
+            overflow-y: auto;
+        }
+        @keyframes adminFadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        .admin-overlay__card {
+            background: #fff;
+            width: 100%;
+            max-width: 100%;
+            padding: 20px 24px 24px;
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-overlay__close {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: #f3f2f1;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #605e5c;
+            font-size: 12px;
+            transition: all 0.15s;
+        }
+        body.ltr .admin-overlay__close {
+            left: auto;
+            right: 12px;
+        }
+        .admin-overlay__close:hover {
+            background: #e1dfdd;
+            color: #323130;
+        }
+
+        .admin-overlay__header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .admin-overlay__icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #0078d4, #005a9e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(0, 120, 212, 0.3);
+        }
+
+        .admin-overlay__title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a1a1a;
+            text-align: center;
+        }
+
+        .admin-overlay__divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, #e1dfdd, transparent);
+            margin: 14px 0;
+        }
+
+        .admin-overlay__instruction {
+            text-align: center;
+            font-size: 13px;
+            color: #605e5c;
+            margin: 0 0 14px 0;
+            line-height: 1.5;
+        }
+
+        .admin-overlay__qr {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 190px;
+            margin-bottom: 16px;
+        }
+        .admin-overlay__qr img {
+            width: 180px;
+            height: 180px;
+            border-radius: 12px;
+            border: 3px solid #e8e6e4;
+            padding: 6px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+        .admin-overlay__qr-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: #999;
+            font-size: 12px;
+        }
+
+        .admin-overlay__url-section {
+            margin-bottom: 16px;
+        }
+        .admin-overlay__url-label {
             display: block;
+            text-align: center;
+            font-size: 12px;
+            color: #8a8886;
+            margin-bottom: 6px;
+        }
+        .admin-overlay__url-box {
+            display: flex;
+            align-items: center;
+            background: #f8f8f8;
+            border: 1px solid #e1dfdd;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .admin-overlay__url-box:hover {
+            border-color: #0078d4;
+        }
+        .admin-overlay__url-input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 10px 14px;
+            font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 12.5px;
+            color: #0078d4;
+            outline: none;
+            min-width: 0;
+            direction: ltr;
+            text-align: center;
+        }
+        .admin-overlay__url-copy {
+            border: none;
+            background: transparent;
+            padding: 8px 12px;
+            cursor: pointer;
+            color: #605e5c;
+            font-size: 14px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+        }
+        .admin-overlay__url-copy:hover {
+            color: #0078d4;
+            background: #eff6fc;
+        }
+
+        .admin-overlay__pin-badge {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #e8f5e9, #f1f8e9);
+            border: 2px solid #66bb6a;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        }
+        .admin-overlay__pin-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #388e3c;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        .admin-overlay__pin-value {
+            font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 26px;
+            font-weight: 800;
+            color: #2e7d32;
+            letter-spacing: 3px;
+        }
+
+        .admin-overlay__status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #8a8886;
+        }
+        .admin-overlay__status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f59e0b;
+            animation: adminPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes adminPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.4; transform: scale(0.8); }
         }
 
         .setting-checkbox-item {
@@ -710,6 +929,60 @@
             <button id="btnStartGame" class="btn-start-game">
                 <i class="ms-Icon ms-Icon--Play"></i> <span data-i18n="buttons.startGame"></span>
             </button>
+        </div>
+    </div>
+
+    <!-- Admin Connection Overlay -->
+    <div id="adminConnectionOverlay" class="admin-overlay" style="display: none;">
+        <div class="admin-overlay__card">
+            <!-- Close button -->
+            <button id="btnCloseAdminOverlay" class="admin-overlay__close" title="סגור">
+                <i class="ms-Icon ms-Icon--ChromeClose"></i>
+            </button>
+
+            <!-- Header -->
+            <div class="admin-overlay__header">
+                <div class="admin-overlay__icon">
+                    <i class="ms-Icon ms-Icon--Remote"></i>
+                </div>
+                <h3 class="admin-overlay__title" data-i18n="adminConnection.title"></h3>
+            </div>
+
+            <!-- Divider -->
+            <div class="admin-overlay__divider"></div>
+
+            <!-- Instruction -->
+            <p class="admin-overlay__instruction" data-i18n="adminConnection.scanAdmin"></p>
+
+            <!-- QR Code -->
+            <div id="adminOverlayQrArea" class="admin-overlay__qr">
+                <div class="admin-overlay__qr-loading">
+                    <div class="spinner" style="width:24px;height:24px;border-width:3px;"></div>
+                </div>
+            </div>
+
+            <!-- URL Section -->
+            <div class="admin-overlay__url-section">
+                <span class="admin-overlay__url-label" data-i18n="adminConnection.orEnterUrl"></span>
+                <div class="admin-overlay__url-box">
+                    <input id="adminOverlayUrl" class="admin-overlay__url-input" readonly />
+                    <button id="btnCopyAdminUrl" class="admin-overlay__url-copy" title="Copy">
+                        <i class="ms-Icon ms-Icon--Copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- PIN Badge -->
+            <div class="admin-overlay__pin-badge">
+                <span class="admin-overlay__pin-label">Game PIN</span>
+                <span id="adminOverlayPin" class="admin-overlay__pin-value"></span>
+            </div>
+
+            <!-- Waiting status -->
+            <div class="admin-overlay__status">
+                <span class="admin-overlay__status-dot"></span>
+                <span data-i18n="adminConnection.waitingForAdmin"></span>
+            </div>
         </div>
     </div>
 

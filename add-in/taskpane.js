@@ -19,7 +19,7 @@ import {
 } from './modules/core/state.js';
 
 // Import modules - UI
-import { showStatus, showError } from './modules/ui/manager.js';
+import { showStatus, showError, hideAdminConnectionScreen } from './modules/ui/manager.js';
 import { 
     initializeSlidesList,
     refreshSlideList,
@@ -329,7 +329,14 @@ Office.onReady(async (info) => {
         
         // Attach persistent button listeners
         document.getElementById('btnStartGame').onclick = () => startPresentationMode();
-        
+
+        // Close button for admin connection overlay
+        document.getElementById('btnCloseAdminOverlay').onclick = () => {
+            hideAdminConnectionScreen();
+            const btnStartGame = document.getElementById('btnStartGame');
+            if (btnStartGame) btnStartGame.disabled = false;
+        };
+
         const slideContentArea = document.getElementById('slideContentArea');
         const mainContent = document.getElementById('mainContent');
         const tabs = document.querySelector('.tabs');

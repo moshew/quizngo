@@ -127,126 +127,99 @@ export function updateAutoSaveStatus(status) {
 }
 
 /**
- * Load start screen HTML into slideContentArea
+ * Show admin connection overlay with QR code and admin URL
+ * @param {string} gamePin - The game PIN to display
  */
-export function loadStartScreen() {
-    console.log('🎮 Loading start screen...');
-    
-    const slideContentArea = document.getElementById('slideContentArea');
-    if (!slideContentArea) {
-        console.error('❌ slideContentArea not found');
+export async function showAdminConnectionScreen(gamePin) {
+    console.log('🎮 Showing admin connection overlay...');
+
+    const overlay = document.getElementById('adminConnectionOverlay');
+    if (!overlay) {
+        console.error('❌ adminConnectionOverlay not found');
         return;
     }
-    
-    const title = t('startScreen.title', 'התחל משחק');
-    const scanQR = t('startScreen.scanQR', 'סרוק קוד QR לכניסה למשחק');
-    const loadingQR = t('startScreen.loadingQR', 'טוען קוד QR...');
-    const scanInstructions = t('startScreen.scanInstructions', 'סרוק את הקוד עם מכשיר נייד או היכנס לכתובת:');
-    const loadingUrl = t('startScreen.loadingUrl', 'טוען כתובת...');
-    const tip = t('startScreen.tip', 'המשתתפים יכולים להיכנס דרך הקוד או הכתובת');
-    
-    slideContentArea.innerHTML = `
-        <style>
-            .start-container { text-align: center; padding: 20px; }
-            .game-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 20px; }
-            .qr-section { background: white; border: 2px solid #0078d4; border-radius: 8px; padding: 20px; margin: 20px 0; }
-            .qr-code-container { display: flex; justify-content: center; align-items: center; margin: 20px 0; min-height: 200px; }
-            #qrcode, #qrCanvas { display: inline-block; border: 2px solid #0078d4; border-radius: 8px; background: white; }
-            .url-display { background-color: #f3f2f1; padding: 12px; border-radius: 4px; margin: 15px 0; font-family: monospace; font-size: 14px; word-break: break-all; color: #0078d4; }
-            .instructions { font-size: 16px; color: #605e5c; margin: 15px 0; line-height: 1.6; }
-            .loading { color: #666; font-style: italic; }
-        </style>
-        <div class="start-container">
-            <div class="game-title">🎮 ${title}</div>
-            <div class="qr-section">
-                <h3 style="margin: 0 0 15px 0; color: #0078d4;">${scanQR}</h3>
-                <div class="qr-code-container" id="qrCodeArea">
-                    <div class="loading">${loadingQR}</div>
-                </div>
-                <div class="instructions">${scanInstructions}</div>
-                <div class="url-display" id="adminUrl">${loadingUrl}</div>
-            </div>
-            <div style="margin-top: 20px; font-size: 12px; color: #999;">💡 ${tip}</div>
-        </div>
-    `;
-    
-    console.log('✅ Start screen loaded');
+
+    // Ensure translations are applied before showing
+    if (window.updateDOM) {
+        window.updateDOM();
+    }
+
+    // Show the overlay
+    overlay.style.display = 'flex';
+
+    if (!gamePin) {
+        console.warn('⚠️ No gamePin provided to admin connection screen');
+        return;
+    }
+
+    // Format PIN as XXX-XXX
+    const formattedPin = gamePin.slice(0, 3) + '-' + gamePin.slice(3);
+
+    // Set PIN display
+    const pinEl = document.getElementById('adminOverlayPin');
+    if (pinEl) pinEl.textContent = formattedPin;
+
+    // Set admin URL
+    const adminUrl = `http://192.168.31.22:3002/${gamePin}`;
+    const urlEl = document.getElementById('adminOverlayUrl');
+    if (urlEl) urlEl.value = adminUrl;
+
+    // Copy URL button
+    const copyBtn = document.getElementById('btnCopyAdminUrl');
+    if (copyBtn) {
+        copyBtn.onclick = async () => {
+            try {
+                await navigator.clipboard.writeText(adminUrl);
+                const icon = copyBtn.querySelector('i');
+                if (icon) {
+                    icon.className = 'ms-Icon ms-Icon--CheckMark';
+                    copyBtn.style.color = '#107c10';
+                    setTimeout(() => {
+                        icon.className = 'ms-Icon ms-Icon--Copy';
+                        copyBtn.style.color = '';
+                    }, 1500);
+                }
+            } catch (e) {
+                // Fallback
+                if (urlEl) { urlEl.select(); document.execCommand('copy'); }
+            }
+        };
+    }
+
+    // Load QR code from server
+    const qrCodeUrl = `${API_BASE}qr-code/${gamePin}?type=admin`;
+    const errorLoadingQR = t('startScreen.errorLoadingQR', 'שגיאה בטעינת QR code');
+
+    const qrArea = document.getElementById('adminOverlayQrArea');
+    if (qrArea) {
+        qrArea.innerHTML = `
+            <img src="${qrCodeUrl}"
+                 alt="Admin QR Code"
+                 onload="console.log('✅ Admin QR code loaded')"
+                 onerror="this.style.display='none'; this.parentElement.innerHTML = '<div style=\\'color:#d13438;font-size:13px;\\'>${errorLoadingQR}</div>';" />
+        `;
+    }
+
+    console.log('✅ Admin connection overlay shown for PIN:', formattedPin);
 }
 
 /**
- * Initialize start screen with QR code
- * Called when loading a slide of type 'start'
- * 
- * NOTE: In the new architecture, gamePin is generated when game starts.
- * The start screen shows the admin URL/QR only when a game is active.
+ * Hide admin connection overlay
  */
-export async function initializeStartScreen() {
-    console.log('🎮 Initializing start screen...');
-    
-    try {
-        await new Promise(resolve => setTimeout(resolve, 0));
-        
-        // Get the current gamePin (set when game starts)
-        const gamePin = getGamePIN();
-        
-        if (!gamePin) {
-            // No active game - show message to start game first
-            const startGameFirst = t('startScreen.startGameFirst', 'לחץ על "התחל משחק" כדי לקבל קישור לשלט');
-            document.getElementById('qrCodeArea').innerHTML = 
-                `<div style="color: #666; text-align: center; padding: 40px;">
-                    <div style="font-size: 48px; margin-bottom: 16px;">🎮</div>
-                    <div>${startGameFirst}</div>
-                </div>`;
-            const adminUrlEl = document.getElementById('adminUrl');
-            if (adminUrlEl) adminUrlEl.textContent = startGameFirst;
-            return;
-        }
-        
-        console.log('✅ Game PIN for start screen:', gamePin);
-        
-        // Build the admin URL using gamePin
-        const adminUrl = `http://192.168.31.22:3002/${gamePin}`;
-        
-        // Display the URL
-        const adminUrlElement = document.getElementById('adminUrl');
-        if (adminUrlElement) {
-            adminUrlElement.textContent = adminUrl;
-        }
-        
-        // Use server's QR code endpoint (now uses gamePin)
-        const qrCodeUrl = `${API_BASE}qr-code/${gamePin}`;
-        
-        console.log('📸 QR Code URL (from server):', qrCodeUrl);
-        
-        const errorLoadingQR = t('startScreen.errorLoadingQR', 'שגיאה בטעינת QR code');
-        
-        // Display QR code as image
-        const qrCodeArea = document.getElementById('qrCodeArea');
-        if (qrCodeArea) {
-            qrCodeArea.innerHTML = `
-                <img src="${qrCodeUrl}" 
-                     alt="QR Code למשחק" 
-                     style="width: 220px; height: 220px; border: 3px solid #0078d4; border-radius: 8px; background: white; padding: 10px;"
-                     onload="console.log('✅ QR code image loaded successfully')"
-                     onerror="console.error('❌ QR code failed to load from:', '${qrCodeUrl}'); this.style.display='none'; this.parentElement.innerHTML = '<div style=color:#d13438>⚠️ ${errorLoadingQR}</div>';" />
-            `;
-        }
-        
-        console.log('✅ Start screen initialized with QR code');
-        console.log('📍 Admin URL:', adminUrl);
-        
-    } catch (error) {
-        console.error('❌ Error initializing start screen:', error);
-        const qrCodeArea = document.getElementById('qrCodeArea');
-        if (qrCodeArea) {
-            qrCodeArea.innerHTML = 
-                `<div style="color: #d13438;">⚠️ שגיאה ביצירת קוד QR<br><small>${error.message}</small></div>`;
-        }
-        const adminUrlElement = document.getElementById('adminUrl');
-        if (adminUrlElement) {
-            adminUrlElement.textContent = 'שגיאה: ' + error.message;
-        }
+export function hideAdminConnectionScreen() {
+    const overlay = document.getElementById('adminConnectionOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+        console.log('✅ Admin connection overlay hidden');
     }
+}
+
+/**
+ * Check if admin connection overlay is currently open
+ */
+export function isAdminConnectionScreenOpen() {
+    const overlay = document.getElementById('adminConnectionOverlay');
+    return overlay && overlay.style.display !== 'none';
 }
 
 // Note: Settings are now handled inline in Tab 3 of taskpane.html
