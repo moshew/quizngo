@@ -113,10 +113,18 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'gameState': game_state
             }
             
-            # If in answer time, include sync data in response
+            # If in answer time, include sync data with remaining time in response
             if game_state == 'answering' and 'currentQuestion' in session:
                 response_data['needsSync'] = True
                 response_data['syncData'] = session['currentQuestion']
+                # Calculate remaining time (same logic as join_player)
+                question_data = session['currentQuestion']
+                question_wait_time = question_data.get('questionWaitTime', 30)
+                answer_started_at = session.get('answerStartedAt', 0)
+                elapsed = time.time() - answer_started_at
+                remaining = max(0, question_wait_time - elapsed)
+                response_data['remainingTime'] = round(remaining, 1)
+                game.log(f'⏱️ Mid-question rejoin: {remaining:.1f}s remaining for {player_name}')
             
             # If socketId provided, register socket to room (room = gamePin)
             if socket_id:
@@ -237,33 +245,33 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'message': f'No active game found with PIN {game_pin}'
                 }), 404
             
-            # Check for existing player with same name in this game (Rejoin logic)
-            existing_uid = None
-            for uid, player in player_registry.items():
-                if player.get('gamePin') == game_pin and player.get('nickname') == name:
-                    existing_uid = uid
-                    break
+            # Check if game has been started by admin (players can only join after admin starts)
+            session = game_sessions[game_pin]
+            if not session.get('gameStarted', False) or not session.get('active', False):
+                game.log(f'🚫 Rejected join attempt - game {game_pin} not started yet')
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Game has not started yet. Please wait for the host.'
+                }), 403
             
-            if existing_uid:
-                # Player exists - check if connected
-                if player_registry[existing_uid].get('connected', False):
-                    # Currently connected - reject (Name taken)
-                    game.log(f'🚫 Rejected join attempt - name {name} already taken and connected')
-                    return jsonify({
-                        'status': 'error',
-                        'message': f'The name "{name}" is already in use.'
-                    }), 409
-                else:
-                    # Disconnected - Allow REJOIN (Recover session)
-                    game.log(f'♻️ Player {name} rejoining with existing UID: {existing_uid}')
+            # UID-based rejoin: if client sends a UID, try to recover that specific session
+            request_uid = data.get('uid', '').strip()
+            
+            if request_uid and request_uid in player_registry:
+                existing_player = player_registry[request_uid]
+                # Verify the UID belongs to the same game
+                if existing_player.get('gamePin') == game_pin:
+                    # UID matches — this is a genuine reconnect
+                    game.log(f'♻️ Player {name} rejoining with existing UID: {request_uid}')
                     
-                    uid = existing_uid
+                    uid = request_uid
                     
                     # Update status
                     player_registry[uid]['connected'] = True
                     player_registry[uid]['reconnectedAt'] = time.time()
                     
-                    # If icon changed, update it
+                    # Update name/icon if changed
+                    player_registry[uid]['nickname'] = name
                     if icon:
                         player_registry[uid]['icon'] = icon
                     
@@ -287,12 +295,43 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                         socket_to_player[socket_id] = uid
                         game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {uid}')
                     
-                    return jsonify({
+                    # Build response with game state for mid-game rejoin
+                    rejoin_response = {
                         'status': 'success',
                         'uid': uid,
                         'gamePin': game_pin,
                         'message': 'Rejoined successfully'
-                    })
+                    }
+                    
+                    # Include current game state
+                    session = game_sessions.get(game_pin, {})
+                    rejoin_response['gameStarted'] = session.get('gameStarted', False)
+                    rejoin_response['gameState'] = session.get('currentState', 'waiting')
+                    
+                    # If mid-question, include sync data with remaining time
+                    if session.get('currentState') == 'answering' and 'currentQuestion' in session:
+                        question_data = session['currentQuestion']
+                        question_wait_time = question_data.get('questionWaitTime', 30)
+                        answer_started_at = session.get('answerStartedAt', 0)
+                        elapsed = time.time() - answer_started_at
+                        remaining = max(0, question_wait_time - elapsed)
+                        
+                        rejoin_response['needsSync'] = True
+                        rejoin_response['syncData'] = question_data
+                        rejoin_response['remainingTime'] = round(remaining, 1)
+                        game.log(f'⏱️ Mid-question rejoin: {remaining:.1f}s remaining for {name}')
+                    
+                    return jsonify(rejoin_response)
+            
+            # No UID or UID not found — check if name is taken by another player
+            for existing_uid, player in player_registry.items():
+                if player.get('gamePin') == game_pin and player.get('nickname') == name:
+                    # Name is taken (whether connected or disconnected) — reject
+                    game.log(f'🚫 Rejected join attempt - name {name} already taken in game {game_pin}')
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'The name "{name}" is already in use.'
+                    }), 409
 
             # Check if game is active
             if not check_game_active(game_sessions, game_pin):
@@ -339,11 +378,31 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 socket_to_player[socket_id] = uid
                 game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {uid}')
             
-            return jsonify({
+            # Build response with current game state for mid-game join
+            join_response = {
                 'status': 'success',
                 'uid': uid,
                 'gamePin': game_pin
-            })
+            }
+            
+            session = game_sessions.get(game_pin, {})
+            join_response['gameStarted'] = session.get('gameStarted', False)
+            join_response['gameState'] = session.get('currentState', 'waiting')
+            
+            # If mid-question, include sync data with remaining time
+            if session.get('currentState') == 'answering' and 'currentQuestion' in session:
+                question_data = session['currentQuestion']
+                question_wait_time = question_data.get('questionWaitTime', 30)
+                answer_started_at = session.get('answerStartedAt', 0)
+                elapsed = time.time() - answer_started_at
+                remaining = max(0, question_wait_time - elapsed)
+                
+                join_response['needsSync'] = True
+                join_response['syncData'] = question_data
+                join_response['remainingTime'] = round(remaining, 1)
+                game.log(f'⏱️ Mid-question join: {remaining:.1f}s remaining for {name}')
+            
+            return jsonify(join_response)
             
         except Exception as e:
             game.log(f'❌ Error in join_player: {str(e)}')

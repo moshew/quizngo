@@ -47,6 +47,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 if game_pin in game_sessions:
                     game_sessions[game_pin]['currentState'] = 'answering'
                     game_sessions[game_pin]['currentQuestion'] = data
+                    game_sessions[game_pin]['answerStartedAt'] = time.time()
                     game.log(f'💾 Saved current question state for game {game_pin}')
                 
                 # Find all players in this game
@@ -113,6 +114,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 game_sessions[game_pin]['currentState'] = 'results'
                 if 'currentQuestion' in game_sessions[game_pin]:
                     del game_sessions[game_pin]['currentQuestion']
+                if 'answerStartedAt' in game_sessions[game_pin]:
+                    del game_sessions[game_pin]['answerStartedAt']
                 game.log(f'💾 Cleared current question state for game {game_pin}')
             
             if not game_pin:
@@ -129,7 +132,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'message': 'Missing or empty results'
                 }), 400
             
-            # Broadcast individual results to each player
+            # Send individual results to each player's own socket (not broadcast)
             for result in results:
                 user_id = result.get('userId')
                 
@@ -144,9 +147,18 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'timestamp': data.get('timestamp')
                 }
                 
-                emit_to_room(socketio, client_rooms, game.logger, 'player_results', player_data, game_pin)
+                # Find the specific socket for this player
+                target_sid = None
+                for sid, uid in socket_to_player.items():
+                    if uid == user_id:
+                        target_sid = sid
+                        break
                 
-                game.log(f'   → {result.get("nickname")}: Rank #{result.get("rank")}, Score: {result.get("cumulativeScore")}')
+                if target_sid:
+                    socketio.emit('player_results', player_data, to=target_sid)
+                    game.log(f'   → {result.get("nickname")}: Rank #{result.get("rank")}, Score: {result.get("cumulativeScore")} (socket: {target_sid})')
+                else:
+                    game.log(f'   ⚠️ No socket found for {result.get("nickname")} (uid: {user_id}), skipping')
             
             game.log(f'✅ Results sent to {len(results)} player(s)')
             
@@ -277,10 +289,12 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'message': 'Invalid game PIN length'
                 }), 400
             
-            # Check if session exists and is active
-            if game_pin in game_sessions and game_sessions[game_pin].get('active', False):
+            # Check if session exists
+            # Returns active=true if session exists (admin needs this to connect)
+            # The gameStarted field tells whether players can join
+            if game_pin in game_sessions:
                 session = game_sessions[game_pin]
-                game.log(f'✅ Active game found for PIN {game_pin}')
+                game.log(f'✅ Game session found for PIN {game_pin} (started: {session.get("gameStarted", False)})')
                 
                 return jsonify({
                     'status': 'success',
@@ -404,7 +418,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
         """Create a room with a game PIN.
 
         This is called from the Add-in when "Activate Game" is clicked.
-        Participants can join as soon as the room is created.
+        Room is created but NOT active yet - players cannot join until Admin starts the game.
         """
         try:
             game_pin = request.args.get('game_pin')
@@ -438,11 +452,12 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             language = request.args.get('language', 'en')
 
             # Create room with gamePin as the key
+            # Room is NOT active until admin clicks "Start Game"
             game_sessions[game_pin] = {
                 'gamePin': game_pin,
                 'timestamp': time.time(),
-                'active': True,
-                'gameStarted': False,  # Game not started until admin clicks "Start Game"
+                'active': False,
+                'gameStarted': False,
                 'language': language
             }
             
@@ -512,11 +527,12 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'gamePin': game_pin
                 })
             
-            # Mark game as started
+            # Mark game as started AND active (players can now join)
             session['gameStarted'] = True
+            session['active'] = True
             session['startedAt'] = time.time()
             
-            game.log(f'✅ Game started: PIN={game_pin}')
+            game.log(f'✅ Game started and activated: PIN={game_pin}')
             
             # Emit event to Add-in to initialize game state
             emit_to_room(socketio, client_rooms, game.logger, 'game_started', {

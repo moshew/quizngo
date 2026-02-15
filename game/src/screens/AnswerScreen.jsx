@@ -1,6 +1,6 @@
 import { t } from '../i18n'
 
-function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer, language }) {
+function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer, language, timeRemaining }) {
   if (hasAnswered) {
     const colors = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71']
     return (
@@ -12,6 +12,9 @@ function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer, language }) {
           {selectedAnswer === 4 && <span>&#9632;</span>}
         </div>
         <div className="answered-text">{t(language, 'answerSent')}</div>
+        {timeRemaining != null && timeRemaining > 0 && (
+          <div className="answer-timer">{timeRemaining}</div>
+        )}
         <div className="spinner"></div>
       </div>
     )
@@ -19,6 +22,13 @@ function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer, language }) {
 
   return (
     <div className="answer-grid fullscreen">
+      {timeRemaining != null && (
+        <div className="answer-timer-overlay">
+          <div className={`answer-timer-badge${timeRemaining <= 5 ? ' urgent' : ''}`}>
+            {timeRemaining}
+          </div>
+        </div>
+      )}
       <button className="answer-btn red" onClick={() => onAnswer(1)}>
         <div className="shape"><div className="shape-triangle"></div></div>
       </button>

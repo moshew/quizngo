@@ -153,6 +153,16 @@ function App() {
         setConnectedPlayers(prev => new Set([...prev, player.id]))
         console.log(`💾 Stored UID for ${player.name}: ${data.uid}, socket registered to room ${data.gamePin}`)
 
+        // Handle mid-game join: check game state from response
+        const gameState = data.gameState || 'waiting'
+        if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
+          console.log(`⏱️ Mid-question join for ${player.name}: ${data.remainingTime}s remaining`)
+          setIsAnswerTime(true)
+          setCurrentQuestionTimestamp(data.syncData?.timestamp || null)
+        } else if (gameState === 'results') {
+          console.log(`📊 ${player.name} joined between questions, waiting for next question`)
+        }
+
         // Setup socket event handlers (socket was already created and connected above)
         playerSocket.on('disconnect', () => {
           console.log(`❌ WebSocket disconnected for ${player.name}`)
@@ -417,8 +427,8 @@ function App() {
         console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.gamePin}`)
         
         // Handle sync data if player reconnected during answer time
-        if (data.syncData) {
-          console.log(`🔄 Received sync data for ${player.name}:`, data.syncData)
+        if (data.syncData && data.remainingTime > 0) {
+          console.log(`🔄 Received sync data for ${player.name}: ${data.remainingTime}s remaining`, data.syncData)
           setIsAnswerTime(true)
           setCurrentQuestionTimestamp(data.syncData.timestamp)
         }
@@ -442,14 +452,14 @@ function App() {
           
           // Only reset answers/results if this is a NEW question (different timestamp)
           setCurrentQuestionTimestamp(prev => {
-            if (prev !== data.timestamp) {
+            if (prev !== answerData.timestamp) {
               console.log(`🆕 New question detected, resetting state`)
               setPlayerAnswers({}) // Reset answers for new question
               setPlayerResults({}) // Reset results for new question
             } else {
               console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
             }
-            return data.timestamp
+            return answerData.timestamp
           })
         })
 

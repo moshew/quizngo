@@ -45,7 +45,7 @@ export async function startPresentationMode() {
 
         console.log('✅ Generated Game PIN:', gamePin);
 
-        // Create room on server (does NOT start accepting participants yet)
+        // Create room on server (NOT active yet - players can't join until Admin starts)
         const createResult = await createRoom(gamePin);
         if (createResult.status !== 'success') {
             showError('⚠️ שגיאה ביצירת חדר: ' + createResult.message);
@@ -63,13 +63,31 @@ export async function startPresentationMode() {
 
         console.log('✅ WebSocket connected for game:', gamePin);
 
-        // Navigate to opening slide (first slide with type "opening")
+        // Reset all textboxes in the presentation (but DON'T navigate to any slide)
+        // PIN and QR will be updated only after Admin starts the game
         try {
-            const { goToOpeningSlide } = await import('./navigation.js');
-            await goToOpeningSlide();
-            console.log('✅ Navigated to opening slide');
-        } catch (navError) {
-            console.error('❌ Error navigating to opening slide:', navError);
+            const { 
+                resetAnswersDistribution,
+                resetLeaderboard
+            } = await import('../elements/answers_analysis.js');
+            const { 
+                updateAllQuestionTimeElements,
+                updateAllRespondentsCountElements
+            } = await import('../elements/question_timer.js');
+            const { 
+                resetParticipantsNumInSlides
+            } = await import('../elements/participants_management.js');
+
+            const settings = getPresentationSettings();
+            const initialTime = settings?.questionWaitTime || 30;
+            await updateAllQuestionTimeElements(initialTime);
+            await updateAllRespondentsCountElements(0);
+            await resetParticipantsNumInSlides();
+            await resetAnswersDistribution();
+            await resetLeaderboard();
+            console.log('✅ All textboxes reset');
+        } catch (resetError) {
+            console.error('❌ Error resetting textboxes:', resetError);
         }
 
         // Show admin connection overlay (does NOT replace the UI)
@@ -95,7 +113,6 @@ export async function startPresentationMode() {
 async function connectWebSocketForGame(gamePin) {
     const { connectWebSocket } = await import('../core/websocket.js');
     const { registerRoom } = await import('../core/api.js');
-    const { resetParticipantsList } = await import('../core/websocket.js');
     const { 
         goToFirstSlideInPowerPoint,
         goToNextSlideInPowerPoint,
@@ -133,16 +150,8 @@ async function connectWebSocketForGame(gamePin) {
             // Register to room using gamePin
             await registerRoom(socket.id, pin);
             
-            // === UPDATE GAME ID & QR CODE IN SLIDES (only this, no initialization) ===
-            try {
-                await updateGameIdInSlides(pin);
-                await updateQrCodeInSlides(pin);
-            } catch (updateError) {
-                console.error('❌ Error updating Game ID/QR Code:', updateError);
-            }
-            
-            // NOTE: Game initialization happens when Admin clicks "Start Game"
-            // and we receive the game_started event
+            // NOTE: Game ID & QR code in slides are NOT updated here.
+            // They will be updated only when Admin starts the game (onGameStarted).
             console.log('🕐 Room ready, waiting for Admin to start game...');
         },
         
@@ -229,8 +238,9 @@ async function connectWebSocketForGame(gamePin) {
             if (btnStartGame) btnStartGame.disabled = false;
 
             // Initialize all add-in state for the game
+            // NOTE: Do NOT call resetParticipantsList() here - players join BEFORE
+            // game_started, so resetting would discard all lobby participants.
             try {
-                resetParticipantsList();
                 resetAnimationState();
 
                 const settings = getPresentationSettings();
@@ -247,7 +257,29 @@ async function connectWebSocketForGame(gamePin) {
                 console.error('❌ Error initializing game state:', error);
             }
 
-            // Navigate to first slide when game starts
+            // Step 1: Navigate to opening slide (shows PIN/QR to audience)
+            try {
+                const { goToOpeningSlide } = await import('./navigation.js');
+                console.log('📄 Navigating to opening slide...');
+                await goToOpeningSlide();
+                console.log('✅ On opening slide');
+            } catch (error) {
+                console.error('❌ Error navigating to opening slide:', error);
+            }
+
+            // Step 2: Update Game ID & QR code in slides (now that game is active)
+            const currentPin = getGamePIN();
+            if (currentPin) {
+                try {
+                    await updateGameIdInSlides(currentPin);
+                    await updateQrCodeInSlides(currentPin);
+                    console.log('✅ Game ID & QR code updated in slides');
+                } catch (updateError) {
+                    console.error('❌ Error updating Game ID/QR Code:', updateError);
+                }
+            }
+
+            // Step 3: Navigate to first slide after a brief delay (so audience sees PIN/QR)
             try {
                 console.log('📄 Navigating to first slide...');
                 await goToFirstSlideInPowerPoint();

@@ -41,14 +41,40 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [checkingPin, setCheckingPin] = useState(false)
   const [language, setLanguage] = useState(urlLang || 'en')
+  const [answerTimeRemaining, setAnswerTimeRemaining] = useState(null)
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
+  const timerRef = useRef(null)
+  const uidRef = useRef(null)
 
   // Apply direction when language changes
   useEffect(() => {
     applyDirection(language)
   }, [language])
+
+  // Start countdown timer for answer time
+  const startAnswerTimer = useCallback((seconds) => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+
+    let remaining = Math.ceil(seconds)
+    setAnswerTimeRemaining(remaining)
+
+    timerRef.current = setInterval(() => {
+      remaining--
+      if (remaining <= 0) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+        setAnswerTimeRemaining(0)
+      } else {
+        setAnswerTimeRemaining(remaining)
+      }
+    }, 1000)
+  }, [])
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket) => {
@@ -59,10 +85,24 @@ function App() {
       setSelectedAnswer(null)
       setResults(null)
       setScreen(SCREENS.ANSWER)
+      // Start timer from full question wait time
+      const questionWaitTime = data.questionWaitTime || 30
+      startAnswerTimer(questionWaitTime)
     })
 
     socket.on('player_results', (data) => {
       console.log('📊 Results received!', data)
+      // Only process results meant for this player
+      if (data.userId && uidRef.current && data.userId !== uidRef.current) {
+        console.log('⚠️ Ignoring results for different user:', data.userId)
+        return
+      }
+      // Clear answer timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setAnswerTimeRemaining(null)
       setResults({
         questionScore: data.questionScore,
         cumulativeScore: data.cumulativeScore,
@@ -76,6 +116,12 @@ function App() {
 
     socket.on('game_closed', (data) => {
       console.log('🚫 Game closed!', data)
+      // Clear answer timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setAnswerTimeRemaining(null)
       setScreen(SCREENS.GAME_OVER)
       socket.disconnect()
       socketRef.current = null
@@ -84,7 +130,7 @@ function App() {
     socket.on('disconnect', () => {
       console.log('❌ Socket disconnected')
     })
-  }, [])
+  }, [startAnswerTimer])
 
   // Join game
   const joinGame = async (name, icon) => {
@@ -109,28 +155,58 @@ function App() {
 
       console.log(`✅ Socket connected: ${socket.id}`)
 
-      // Join via REST
+      // Join via REST — include stored UID for reconnection
+      const storedUid = sessionStorage.getItem(`kahoot_uid_${cleanPin}`)
+      const joinBody = {
+        game_pin: cleanPin,
+        name: name,
+        icon: icon,
+        socketId: socket.id
+      }
+      if (storedUid) {
+        joinBody.uid = storedUid
+      }
       const response = await fetch(`${SERVER_URL}/?join_player`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          game_pin: cleanPin,
-          name: name,
-          icon: icon,
-          socketId: socket.id
-        })
+        body: JSON.stringify(joinBody)
       })
 
       const data = await response.json()
 
       if (response.ok && data.uid) {
         setUid(data.uid)
+        uidRef.current = data.uid
+        // Persist UID for reconnection
+        sessionStorage.setItem(`kahoot_uid_${cleanPin}`, data.uid)
         setPlayerName(name)
         setPlayerIcon(icon)
         socketRef.current = socket
         setupSocketListeners(socket)
-        setScreen(SCREENS.LOBBY)
-        console.log(`✅ Joined game! UID: ${data.uid}`)
+
+        // Determine which screen to show based on current game state
+        const gameState = data.gameState || 'waiting'
+        const gameStarted = data.gameStarted || false
+
+        if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
+          // Mid-question join: show answer screen with remaining time
+          console.log(`⏱️ Mid-question join: ${data.remainingTime}s remaining`)
+          setIsAnswerTime(true)
+          setHasAnswered(false)
+          setSelectedAnswer(null)
+          setResults(null)
+          setScreen(SCREENS.ANSWER)
+          startAnswerTimer(data.remainingTime)
+        } else if (gameState === 'results') {
+          // Between questions: wait in lobby for next question
+          console.log('📊 Joined between questions, waiting in lobby')
+          setScreen(SCREENS.LOBBY)
+        } else {
+          // Default: lobby (waiting for game to start or next question)
+          setScreen(SCREENS.LOBBY)
+        }
+
+        console.log(`✅ Joined game! UID: ${data.uid}, state: ${gameState}`)
       } else {
         socket.disconnect()
         setError(data.message || data.error || 'Failed to join game')
@@ -166,12 +242,17 @@ function App() {
       const data = await response.json()
 
       if (response.ok && data.status === 'success' && data.active) {
-        setError('')
-        // Set language from server if available
-        if (data.language) {
-          setLanguage(data.language)
+        // Check if game has been started by admin (players can only join after start)
+        if (!data.gameStarted) {
+          showPinError(language === 'he' ? 'המשחק עדיין לא התחיל, נסו שוב בעוד רגע' : 'Game has not started yet, try again in a moment')
+        } else {
+          setError('')
+          // Set language from server if available
+          if (data.language) {
+            setLanguage(data.language)
+          }
+          setScreen(SCREENS.NAME)
         }
-        setScreen(SCREENS.NAME)
       } else {
         showPinError(language === 'he' ? 'לא נמצא חדר עם PIN זה' : 'No room found with this PIN')
       }
@@ -212,15 +293,26 @@ function App() {
 
   // Play again (reset to PIN screen)
   const playAgain = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    // Clear stored UID for old game
+    if (gamePin) {
+      const cleanPin = gamePin.replace(/-/g, '')
+      sessionStorage.removeItem(`kahoot_uid_${cleanPin}`)
+    }
     setScreen(SCREENS.PIN)
     setGamePin('')
     setPlayerName('')
     setPlayerIcon('')
     setUid(null)
+    uidRef.current = null
     setResults(null)
     setHasAnswered(false)
     setSelectedAnswer(null)
     setIsAnswerTime(false)
+    setAnswerTimeRemaining(null)
     setError('')
     setPinError('')
     setCheckingPin(false)
@@ -231,6 +323,9 @@ function App() {
     return () => {
       if (pinErrorTimeoutRef.current) {
         clearTimeout(pinErrorTimeoutRef.current)
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
       }
       if (socketRef.current) {
         socketRef.current.disconnect()
@@ -280,6 +375,7 @@ function App() {
           hasAnswered={hasAnswered}
           selectedAnswer={selectedAnswer}
           language={language}
+          timeRemaining={answerTimeRemaining}
         />
       )}
 

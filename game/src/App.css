@@ -382,6 +382,49 @@ body {
   text-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
 }
 
+/* Answer Timer */
+.answer-timer {
+  font-size: 48px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.answer-timer-overlay {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 210;
+  pointer-events: none;
+}
+
+.answer-timer-badge {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 800;
+  padding: 6px 20px;
+  border-radius: 24px;
+  min-width: 60px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(4px);
+  transition: color 0.3s, background 0.3s;
+}
+
+.answer-timer-badge.urgent {
+  background: rgba(200, 0, 0, 0.7);
+  color: #fff;
+  animation: timerPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
 /* ====== RESULT SCREEN ====== */
 
 .result-card {
