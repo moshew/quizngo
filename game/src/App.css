@@ -233,16 +233,13 @@ body {
   font-size: 18px;
   color: #00ff88;
   text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 .dots::after {
-  content: '';
+  content: '...';
+  display: inline-block;
+  width: 1.5em;
+  text-align: left;
   animation: dots 1.5s steps(4, end) infinite;
 }
 
@@ -427,25 +424,14 @@ body {
 
 /* ====== RESULT SCREEN ====== */
 
-.result-card {
-  width: 100%;
-  padding: 40px 24px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 0;
-  text-align: center;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-}
-
 .result-icon {
   font-size: 72px;
-  margin-bottom: 16px;
   animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .result-label {
   font-size: 28px;
   font-weight: 700;
-  margin-bottom: 24px;
 }
 
 .result-label.correct {
@@ -464,34 +450,34 @@ body {
 }
 
 .result-score {
-  font-size: 48px;
+  font-size: 52px;
   font-weight: 700;
   color: #ff8c00;
   text-shadow: 0 0 25px rgba(255, 140, 0, 0.5);
-  margin-bottom: 8px;
+  unicode-bidi: isolate;
 }
 
 .result-score-label {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 24px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
 }
 
 .result-rank {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: #00ff88;
   text-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
-  padding: 12px 24px;
+  padding: 10px 28px;
   background: rgba(0, 255, 136, 0.1);
-  border-radius: 0;
-  display: inline-block;
+  border-radius: 24px;
+  unicode-bidi: isolate;
 }
 
 .result-cumulative {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 16px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.4);
+  unicode-bidi: isolate;
 }
 
 /* ====== GAME OVER SCREEN ====== */

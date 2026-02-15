@@ -29,20 +29,18 @@ function ResultScreen({ results, selectedAnswer, language }) {
 
   return (
     <div className="screen">
-      <div className="result-card">
-        <div className="result-icon">{icon}</div>
-        <div className={`result-label ${labelClass}`}>{label}</div>
+      <div className="result-icon">{icon}</div>
+      <div className={`result-label ${labelClass}`}>{label}</div>
 
-        <div className="result-score">+{questionScore || 0}</div>
-        <div className="result-score-label">{t(language, 'points')}</div>
+      <div className="result-score" dir="ltr">+{questionScore || 0}</div>
+      <div className="result-score-label">{t(language, 'points')}</div>
 
-        {rank && (
-          <div className="result-rank">{t(language, 'rank', { rank })}</div>
-        )}
+      {rank && (
+        <div className="result-rank" dir="ltr">{t(language, 'rank', { rank })}</div>
+      )}
 
-        <div className="result-cumulative">
-          {t(language, 'total', { score: cumulativeScore || 0 })}
-        </div>
+      <div className="result-cumulative" dir="ltr">
+        {t(language, 'total', { score: cumulativeScore || 0 })}
       </div>
     </div>
   )

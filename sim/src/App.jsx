@@ -48,7 +48,6 @@ function App() {
   const [playerUIDs, setPlayerUIDs] = useState({}) // Store UID for each player
   const [playerSockets, setPlayerSockets] = useState({}) // Store WebSocket for each player
   const [gamePin, setGamePin] = useState('') // Changed from gameId to gamePin
-  const [totalUsers, setTotalUsers] = useState(0)
   const [loading, setLoading] = useState({})
   const [loadingGamePin, setLoadingGamePin] = useState(false)
   
@@ -79,7 +78,6 @@ function App() {
     setConnectedPlayers(new Set())
     setPlayerUIDs({})
     setPlayerSockets({})
-    setTotalUsers(0)
     setLoading({})
     setIsAnswerTime(false)
     setPlayerAnswers({})
@@ -159,8 +157,12 @@ function App() {
           console.log(`⏱️ Mid-question join for ${player.name}: ${data.remainingTime}s remaining`)
           setIsAnswerTime(true)
           setCurrentQuestionTimestamp(data.syncData?.timestamp || null)
-        } else if (gameState === 'results') {
-          console.log(`📊 ${player.name} joined between questions, waiting for next question`)
+        } else {
+          // waiting / results / any other state — ensure answer mode is off
+          setIsAnswerTime(false)
+          if (gameState === 'results') {
+            console.log(`📊 ${player.name} joined between questions, waiting for next question`)
+          }
         }
 
         // Setup socket event handlers (socket was already created and connected above)
@@ -168,12 +170,6 @@ function App() {
           console.log(`❌ WebSocket disconnected for ${player.name}`)
         })
 
-        // קבלת עדכוני משתתפים (כל socket יעדכן את המספר הכולל)
-        playerSocket.on('user_count', (countData) => {
-          console.log(`📊 User count update from ${player.name}:`, countData)
-          setTotalUsers(countData.count || 0)
-        })
-        
         // Answer time events
         playerSocket.on('answer_time_started', (answerData) => {
           console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
@@ -427,21 +423,19 @@ function App() {
         console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.gamePin}`)
         
         // Handle sync data if player reconnected during answer time
-        if (data.syncData && data.remainingTime > 0) {
+        const gameState = data.gameState || 'waiting'
+        if (gameState === 'answering' && data.syncData && data.remainingTime > 0) {
           console.log(`🔄 Received sync data for ${player.name}: ${data.remainingTime}s remaining`, data.syncData)
           setIsAnswerTime(true)
           setCurrentQuestionTimestamp(data.syncData.timestamp)
+        } else {
+          // waiting / results / any other state — ensure answer mode is off
+          setIsAnswerTime(false)
         }
 
         // Setup socket event handlers
         playerSocket.on('disconnect', () => {
           console.log(`❌ WebSocket disconnected for ${player.name}`)
-        })
-
-        // Listen for participant updates
-        playerSocket.on('participant_update', (updateData) => {
-          console.log(`👥 Participant update for ${player.name}:`, updateData)
-          setTotalUsers(updateData.total || 0)
         })
 
         // Listen for answer_time_started to restore game state
@@ -472,6 +466,9 @@ function App() {
             ...prev,
             [resultsData.userId]: resultsData
           }))
+          
+          // When we receive results, it means answer time has ended
+          setIsAnswerTime(false)
         })
 
         // Game closed event - reset player to "join" state
@@ -718,10 +715,6 @@ function App() {
               {loadingGamePin ? '⏳ טוען...' : '📥 טען משחק'}
             </button>
           </div>
-        </div>
-        <div className="info-card">
-          <div className="info-label">משתתפים פעילים:</div>
-          <div className="info-value">{totalUsers}</div>
         </div>
         <div className="info-card">
           <div className="info-label">מחוברים מהסימולטור:</div>

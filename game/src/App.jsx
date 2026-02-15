@@ -42,6 +42,7 @@ function App() {
   const [checkingPin, setCheckingPin] = useState(false)
   const [language, setLanguage] = useState(urlLang || 'en')
   const [answerTimeRemaining, setAnswerTimeRemaining] = useState(null)
+  const [gameStarted, setGameStarted] = useState(false)
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
@@ -186,7 +187,8 @@ function App() {
 
         // Determine which screen to show based on current game state
         const gameState = data.gameState || 'waiting'
-        const gameStarted = data.gameStarted || false
+        const isGameStarted = data.gameStarted || false
+        setGameStarted(isGameStarted)
 
         if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
           // Mid-question join: show answer screen with remaining time
@@ -366,6 +368,7 @@ function App() {
           playerName={playerName}
           playerIcon={playerIcon}
           language={language}
+          gameStarted={gameStarted}
         />
       )}
 

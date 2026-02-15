@@ -79,11 +79,8 @@ def register_websocket_handlers(socketio, game, connected_clients, client_rooms,
                         'user_id': user_id,
                         'timestamp': time.time()
                     }, game_pin)
-
-                    # Remove from registry so they must join anew
-                    if user_id in player_registry:
-                        del player_registry[user_id]
-                        game.log(f'🗑️ Removed player {player_name} from registry')
+                    # Player stays in registry as disconnected so they can rejoin
+                    game.log(f'📝 Player {player_name} kept in registry for potential rejoin')
             
             # Remove socket->player mapping
             del socket_to_player[request.sid]
