@@ -1,9 +1,11 @@
-function ResultScreen({ results, selectedAnswer }) {
+import { t } from '../i18n'
+
+function ResultScreen({ results, selectedAnswer, language }) {
   if (!results) {
     return (
       <div className="screen">
         <div className="spinner"></div>
-        <div className="subtitle">Loading results...</div>
+        <div className="subtitle">{t(language, 'loadingResults')}</div>
       </div>
     )
   }
@@ -13,15 +15,15 @@ function ResultScreen({ results, selectedAnswer }) {
   let icon, label, labelClass
   if (!answered) {
     icon = '⏰'
-    label = 'Time\'s up!'
+    label = t(language, 'timesUp')
     labelClass = 'timeout'
   } else if (isCorrect) {
     icon = '✅'
-    label = 'Correct!'
+    label = t(language, 'correct')
     labelClass = 'correct'
   } else {
     icon = '❌'
-    label = 'Incorrect'
+    label = t(language, 'incorrect')
     labelClass = 'incorrect'
   }
 
@@ -32,14 +34,14 @@ function ResultScreen({ results, selectedAnswer }) {
         <div className={`result-label ${labelClass}`}>{label}</div>
 
         <div className="result-score">+{questionScore || 0}</div>
-        <div className="result-score-label">points</div>
+        <div className="result-score-label">{t(language, 'points')}</div>
 
         {rank && (
-          <div className="result-rank">Rank #{rank}</div>
+          <div className="result-rank">{t(language, 'rank', { rank })}</div>
         )}
 
         <div className="result-cumulative">
-          Total: {cumulativeScore || 0} points
+          {t(language, 'total', { score: cumulativeScore || 0 })}
         </div>
       </div>
     </div>

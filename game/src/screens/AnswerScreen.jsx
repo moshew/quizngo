@@ -1,7 +1,8 @@
-function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer }) {
+import { t } from '../i18n'
+
+function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer, language }) {
   if (hasAnswered) {
     const colors = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71']
-    const shapes = ['triangle', 'diamond', 'circle', 'square']
     return (
       <div className="answered-overlay">
         <div className="answered-check" style={{ color: colors[selectedAnswer - 1] }}>
@@ -10,7 +11,7 @@ function AnswerScreen({ onAnswer, hasAnswered, selectedAnswer }) {
           {selectedAnswer === 3 && <span>&#9679;</span>}
           {selectedAnswer === 4 && <span>&#9632;</span>}
         </div>
-        <div className="answered-text">Answer sent!</div>
+        <div className="answered-text">{t(language, 'answerSent')}</div>
         <div className="spinner"></div>
       </div>
     )

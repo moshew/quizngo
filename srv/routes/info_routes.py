@@ -388,17 +388,7 @@ def create_info_routes(game):
             </div>
             
             <h3>👥 ניהול משתתפים</h3>
-            
-            <div class="endpoint">
-                <h3>🚪 התחל קבלת משתתפים</h3>
-                <div class="url">GET /?start_accepting_participants&amp;game_pin=PIN</div>
-            </div>
-            
-            <div class="endpoint">
-                <h3>🚫 הפסק קבלת משתתפים</h3>
-                <div class="url">GET /?stop_accepting_participants&amp;game_pin=PIN</div>
-            </div>
-            
+
             <div class="endpoint">
                 <h3>➕ הצטרפות משתתף</h3>
                 <div class="url">POST /?join_player</div>

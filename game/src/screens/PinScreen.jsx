@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { t } from '../i18n'
 
-function PinScreen({ gamePin, setGamePin, onSubmit, error }) {
+function PinScreen({ gamePin, setGamePin, onSubmit, error, loading, language }) {
   const isValid = gamePin.replace(/-/g, '').length === 6
 
   const handleChange = (e) => {
@@ -28,18 +28,18 @@ function PinScreen({ gamePin, setGamePin, onSubmit, error }) {
         inputMode="numeric"
         value={gamePin}
         onChange={handleChange}
-        placeholder="Game PIN"
+        placeholder={t(language, 'gamePin')}
         maxLength="7"
         autoFocus
       />
-      {error && <div className="error-msg">{error}</div>}
       <button
         className="btn-primary"
         type="submit"
-        disabled={!isValid}
+        disabled={!isValid || loading}
       >
-        Enter
+        {loading ? t(language, 'checking') : t(language, 'enter')}
       </button>
+      {error && <div className="pin-error-strip">{error}</div>}
     </form>
   )
 }

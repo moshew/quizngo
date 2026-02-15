@@ -114,10 +114,6 @@ def api_handler():
             action = 'leave_player'
         elif 'register_session' in request.args:
             action = 'register_session'
-        elif 'start_accepting_participants' in request.args:
-            action = 'start_accepting_participants'
-        elif 'stop_accepting_participants' in request.args:
-            action = 'stop_accepting_participants'
         elif 'check_active_game' in request.args:
             action = 'check_active_game'
         elif 'create_room' in request.args:
@@ -151,12 +147,6 @@ def api_handler():
         
         elif action == 'register_session':
             return game_bp.handle_register_session()
-        
-        elif action == 'start_accepting_participants':
-            return game_bp.handle_start_accepting_participants()
-        
-        elif action == 'stop_accepting_participants':
-            return game_bp.handle_stop_accepting_participants()
         
         elif action == 'check_active_game':
             return game_bp.handle_check_active_game()

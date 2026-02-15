@@ -95,10 +95,6 @@ export async function startPresentationMode() {
 async function connectWebSocketForGame(gamePin) {
     const { connectWebSocket } = await import('../core/websocket.js');
     const { registerRoom } = await import('../core/api.js');
-    const { 
-        resetParticipantAcceptanceState,
-        setParticipantAcceptanceState
-    } = await import('./events.js');
     const { resetParticipantsList } = await import('../core/websocket.js');
     const { 
         goToFirstSlideInPowerPoint,
@@ -234,11 +230,8 @@ async function connectWebSocketForGame(gamePin) {
 
             // Initialize all add-in state for the game
             try {
-                resetParticipantAcceptanceState();
                 resetParticipantsList();
                 resetAnimationState();
-
-                // Note: acceptingParticipants will be set to true when reaching opening slide
 
                 const settings = getPresentationSettings();
                 const initialTime = settings?.questionWaitTime || 30;

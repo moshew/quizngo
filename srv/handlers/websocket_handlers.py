@@ -71,32 +71,19 @@ def register_websocket_handlers(socketio, game, connected_clients, client_rooms,
                 game.log(f'👋 Player WebSocket disconnected: {player_name} (UID: {user_id})')
                 game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
                 
-                # Logic for sending participant_update on disconnect:
-                # - If in Lobby (Opening slide/acceptingParticipants=True): Send 'remove' update so UI updates
-                # - If in Game (answering/results): Do NOT send update, allow reconnection without disrupting game state
-                should_send_remove = False
-                
+                # Send remove update so UI updates
                 if game_pin in game_sessions:
-                    if game_sessions[game_pin].get('acceptingParticipants', False):
-                        # We are in the lobby, user should be removed from screen
-                        should_send_remove = True
-                        game.log(f'📢 Lobby active - sending remove update for {player_name}')
-                        
-                        # Also remove from registry so they must join anew (not reconnect)
-                        if user_id in player_registry:
-                            del player_registry[user_id]
-                            game.log(f'🗑️ Removed player {player_name} from registry (Lobby disconnect)')
-                    else:
-                        # We are in game, user might reconnect
-                        game.log(f'🤫 Game active - NOT sending remove update (allow reconnect) for {player_name}')
-                
-                if should_send_remove:
                     emit_to_room(socketio, client_rooms, game.logger, 'participant_update', {
                         'nick': player_name,
                         'type': 'remove',
                         'user_id': user_id,
                         'timestamp': time.time()
                     }, game_pin)
+
+                    # Remove from registry so they must join anew
+                    if user_id in player_registry:
+                        del player_registry[user_id]
+                        game.log(f'🗑️ Removed player {player_name} from registry')
             
             # Remove socket->player mapping
             del socket_to_player[request.sid]

@@ -99,10 +99,7 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'timestamp': time.time()
             }, game_pin)
             
-            if session.get('acceptingParticipants', False):
-                game.log(f'📢 Lobby active - sent add update for reconnected player {player_name}')
-            else:
-                game.log(f'📢 Game active - sent add update for reconnected player {player_name} (restoring if removed)')
+            game.log(f'📢 Sent add update for reconnected player {player_name}')
             
             # Check current game state and send appropriate status
             game_state = session.get('currentState', 'waiting')
@@ -306,15 +303,6 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'game_closed': True
                 }), 403
             
-            # Check if session is accepting participants
-            session = game_sessions[game_pin]
-            if not session.get('acceptingParticipants', False):
-                game.log(f'🚫 Rejected join attempt - session {game_pin} not accepting participants')
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Game is not accepting participants yet. Please wait for the game to start.'
-                }), 403
-            
             # Generate unique user ID (uid)
             uid = str(uuid.uuid4())
             
@@ -392,41 +380,24 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             
             game.log(f'👋 Player disconnecting: {player_name} (UID: {uid})')
             
-            # Check if we are in Lobby (acceptingParticipants=True)
-            should_remove_permanently = False
-            if game_pin in game_sessions and game_sessions[game_pin].get('acceptingParticipants', False):
-                should_remove_permanently = True
-            
-            if should_remove_permanently:
-                # Remove from registry
-                del player_registry[uid]
-                game.log(f'🗑️ Removed player {player_name} from registry (Lobby disconnect)')
-                
-                # Notify add-in to remove from screen
+            # Remove from registry
+            del player_registry[uid]
+            game.log(f'🗑️ Removed player {player_name} from registry')
+
+            # Notify add-in to remove from screen
+            if game_pin in game_sessions:
                 emit_to_room(socketio, client_rooms, game.logger, 'participant_update', {
                     'nick': player_name,
                     'type': 'remove',
                     'user_id': uid,
                     'timestamp': time.time()
                 }, game_pin)
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Player removed permanently (Lobby)',
-                    'removed': True
-                })
-            else:
-                # Mark as disconnected (but keep in registry)
-                player_registry[uid]['connected'] = False
-                player_registry[uid]['disconnectedAt'] = time.time()
-                
-                game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Player disconnected (can reconnect)',
-                    'removed': False
-                })
+
+            return jsonify({
+                'status': 'success',
+                'message': 'Player removed',
+                'removed': True
+            })
             
         except Exception as e:
             game.log(f'❌ Error in leave_player: {str(e)}')

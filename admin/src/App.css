@@ -1,18 +1,3 @@
-:root {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-  
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 * {
   box-sizing: border-box;
   margin: 0;
@@ -20,119 +5,46 @@
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  background: #1a1a2e;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  overflow-x: hidden;
+  color: #fff;
 }
 
 #root {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+  min-height: 100vh;
 }
 
-.admin-container {
-  text-align: center;
-}
-
-header {
-  margin-bottom: 3rem;
-}
-
-header h1 {
-  font-size: 3rem;
-  color: white;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-  margin-bottom: 0.5rem;
-}
-
-.subtitle {
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.9);
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
-}
-
-main {
+.admin-app {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(40, 40, 80, 0.8) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(60, 40, 80, 0.6) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(30, 50, 70, 0.5) 0%, transparent 50%),
+    linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+  background-attachment: fixed;
 }
 
-.control-panel {
-  background: white;
-  color: #333;
-  border-radius: 16px;
-  padding: 2.5rem;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+.screen {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  animation: fadeIn 0.4s ease;
 }
 
-.control-panel h2 {
-  font-size: 2rem;
-  margin-bottom: 2rem;
-  color: #667eea;
-}
-
-.btn {
-  font-family: inherit;
-  font-size: 1.2rem;
-  font-weight: 600;
-  padding: 1rem 2.5rem;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.status-message {
-  margin-top: 1.5rem;
-  padding: 1rem;
-  border-radius: 8px;
-  font-weight: 500;
-  animation: slideDown 0.3s ease;
-}
-
-.status-message.success {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.status-message.error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-
-@keyframes slideDown {
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -140,58 +52,170 @@ main {
   }
 }
 
-.info-panel {
+.title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #ff8c00;
+  text-shadow: 0 0 20px rgba(255, 140, 0, 0.4);
+  text-align: center;
+}
+
+.subtitle {
+  font-size: 18px;
+  color: #00ff88;
+  text-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+  text-align: center;
+}
+
+.pin-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pin-input {
+  width: 100%;
+  padding: 20px;
+  font-size: 36px;
+  text-align: center;
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  color: white;
-  border-radius: 16px;
-  padding: 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 140, 0, 0.4);
+  border-radius: 0;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 6px;
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
-.info-panel h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
+.pin-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 4px;
 }
 
-.info-panel ul {
-  list-style: none;
-  text-align: right;
+.pin-input:focus {
+  border-color: #ff8c00;
+  box-shadow: 0 0 20px rgba(255, 140, 0, 0.3);
 }
 
-.info-panel li {
-  padding: 0.5rem 0;
-  font-size: 1rem;
-  line-height: 1.6;
+.pin-input.error {
+  border-color: #e74c3c;
 }
 
-.info-panel li::before {
-  content: '• ';
-  color: rgba(255, 255, 255, 0.6);
-  margin-left: 0.5rem;
+.btn-primary {
+  width: 100%;
+  padding: 18px;
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ff8c00 0%, #ffa500 100%);
+  color: #1a1a2e;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  text-shadow: none;
 }
 
-@media (max-width: 768px) {
-  header h1 {
-    font-size: 2rem;
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 140, 0, 0.4);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.error-msg {
+  background: rgba(231, 76, 60, 0.2);
+  border: 1px solid #e74c3c;
+  color: #ff6b6b;
+  padding: 12px 20px;
+  border-radius: 0;
+  font-size: 14px;
+  text-align: center;
+  width: 100%;
+}
+
+.admin-card {
+  width: 100%;
+  padding: 28px 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pin-chip {
+  width: 100%;
+  background: rgba(0, 255, 136, 0.1);
+  border: 2px solid rgba(0, 255, 136, 0.5);
+  border-radius: 0;
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.pin-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 4px;
+}
+
+.pin-value {
+  font-size: 30px;
+  font-weight: 800;
+  color: #00ff88;
+  letter-spacing: 4px;
+  text-shadow: 0 0 12px rgba(0, 255, 136, 0.35);
+}
+
+.admin-card-title {
+  font-size: 22px;
+  color: #ff8c00;
+  text-shadow: 0 0 12px rgba(255, 140, 0, 0.35);
+  text-align: center;
+}
+
+.admin-note {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top: 4px solid #ff8c00;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
-  
-  .subtitle {
-    font-size: 1rem;
-  }
-  
-  .control-panel {
-    padding: 1.5rem;
-  }
-  
-  .btn {
-    font-size: 1rem;
-    padding: 0.8rem 2rem;
-  }
 }
 
+@media (max-width: 400px) {
+  .title {
+    font-size: 26px;
+  }
 
+  .pin-input {
+    font-size: 28px;
+    padding: 16px;
+  }
 
-
-
-
+  .pin-value {
+    font-size: 24px;
+  }
+}

@@ -176,7 +176,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     active_pins.append({
                         'gamePin': game_pin,
                         'timestamp': session.get('timestamp'),
-                        'acceptingParticipants': session.get('acceptingParticipants', False)
+                        'active': session.get('active', False)
                     })
             
             game.log(f'📋 Retrieved {len(active_pins)} active game PINs for simulator')
@@ -233,7 +233,7 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 'gamePin': game_pin,
                 'timestamp': time.time(),
                 'active': True,
-                'acceptingParticipants': False
+                'gameStarted': False
             }
             
             # Schedule auto-close after 1 hour
@@ -252,76 +252,6 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             
         except Exception as e:
             game.log(f'❌ Error in register_session: {str(e)}')
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
-
-    def handle_start_accepting_participants():
-        """Handle start accepting participants - called from main API handler"""
-        try:
-            game_pin = request.args.get('game_pin')
-            
-            if not game_pin:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Missing game_pin'
-                }), 400
-            
-            if not check_game_active(game_sessions, game_pin):
-                return jsonify({
-                    'status': 'no_game',
-                    'message': 'No active game session - waiting for game to start',
-                    'game_closed': True
-                }), 200  # Return 200 to avoid browser console error
-            
-            # Enable participant acceptance
-            game_sessions[game_pin]['acceptingParticipants'] = True
-            game.log(f'✅ Started accepting participants for game {game_pin}')
-            
-            return jsonify({
-                'status': 'success',
-                'message': 'Now accepting participants',
-                'gamePin': game_pin
-            })
-            
-        except Exception as e:
-            game.log(f'❌ Error in start_accepting_participants: {str(e)}')
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
-
-    def handle_stop_accepting_participants():
-        """Handle stop accepting participants - called from main API handler"""
-        try:
-            game_pin = request.args.get('game_pin')
-            
-            if not game_pin:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Missing game_pin'
-                }), 400
-            
-            if not check_game_active(game_sessions, game_pin):
-                return jsonify({
-                    'status': 'warning',
-                    'message': 'Game session is not active or does not exist',
-                    'game_closed': True
-                }), 403
-            
-            # Disable participant acceptance
-            game_sessions[game_pin]['acceptingParticipants'] = False
-            game.log(f'🛑 Stopped accepting participants for game {game_pin}')
-            
-            return jsonify({
-                'status': 'success',
-                'message': 'Stopped accepting participants',
-                'gamePin': game_pin
-            })
-            
-        except Exception as e:
-            game.log(f'❌ Error in stop_accepting_participants: {str(e)}')
             return jsonify({
                 'status': 'error',
                 'message': str(e)
@@ -357,7 +287,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'active': True,
                     'gamePin': game_pin,
                     'timestamp': session.get('timestamp'),
-                    'gameStarted': session.get('gameStarted', False)
+                    'gameStarted': session.get('gameStarted', False),
+                    'language': session.get('language', 'en')
                 })
             else:
                 game.log(f'ℹ️ No active game for PIN {game_pin}')
@@ -470,11 +401,10 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             }), 500
 
     def handle_create_room():
-        """Create a room with a game PIN but don't start accepting participants yet.
-        
+        """Create a room with a game PIN.
+
         This is called from the Add-in when "Activate Game" is clicked.
-        The room is created but register_session and start_accepting_participants
-        are NOT called - they will be called when Admin clicks "Start Game".
+        Participants can join as soon as the room is created.
         """
         try:
             game_pin = request.args.get('game_pin')
@@ -504,13 +434,16 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     socketio, game_pin, game.logger, reason='new_session'
                 )
             
-            # Create room with gamePin as the key (but NOT accepting participants yet)
+            # Get optional language parameter
+            language = request.args.get('language', 'en')
+
+            # Create room with gamePin as the key
             game_sessions[game_pin] = {
                 'gamePin': game_pin,
                 'timestamp': time.time(),
                 'active': True,
-                'acceptingParticipants': False,  # NOT accepting until admin starts game
-                'gameStarted': False  # Game not started until admin clicks "Start Game"
+                'gameStarted': False,  # Game not started until admin clicks "Start Game"
+                'language': language
             }
             
             # Schedule auto-close after 1 hour
@@ -537,11 +470,10 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
 
     def handle_start_game():
         """Start the game - called from Admin when "Start Game" button is clicked.
-        
+
         This performs:
         1. Marks the game as started
-        2. Starts accepting participants
-        3. Sends WebSocket event to Add-in to initialize game state
+        2. Sends WebSocket event to Add-in to initialize game state
         """
         try:
             game_pin = request.args.get('game_pin')
@@ -580,10 +512,9 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                     'gamePin': game_pin
                 })
             
-            # Mark game as started (but NOT accepting participants yet - that happens on opening slide)
+            # Mark game as started
             session['gameStarted'] = True
             session['startedAt'] = time.time()
-            # Note: acceptingParticipants stays False until Add-in reaches opening slide
             
             game.log(f'✅ Game started: PIN={game_pin}')
             
@@ -608,8 +539,6 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
 
     # Attach handlers to blueprint for access from main API handler
     game_bp.handle_register_session = handle_register_session
-    game_bp.handle_start_accepting_participants = handle_start_accepting_participants
-    game_bp.handle_stop_accepting_participants = handle_stop_accepting_participants
     game_bp.handle_check_active_game = handle_check_active_game
     game_bp.handle_close_game = handle_close_game
     game_bp.handle_create_room = handle_create_room

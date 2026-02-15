@@ -99,10 +99,11 @@ export default {
 
     // Admin connection overlay
     adminConnection: {
-        title: 'חיבור שלט Admin',
+        title: 'חיבור לממשק ניהול',
+        subtitle: 'סרוק את הקוד או היכנס לכתובת',
         scanAdmin: 'סרוק את הקוד כדי לפתוח את ממשק הניהול',
         orEnterUrl: 'או היכנס לכתובת:',
-        waitingForAdmin: 'ממתין ל-Admin להתחיל את המשחק...',
+        waitingForAdmin: 'ממתין למנהל להתחיל את המשחק...',
         close: 'סגור'
     },
 

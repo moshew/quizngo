@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { USER_ICONS } from '../icons'
+import { t } from '../i18n'
 
-function NameScreen({ onJoin, error, loading }) {
+function NameScreen({ onJoin, error, loading, language }) {
   const [name, setName] = useState('')
   const [selectedIcon, setSelectedIcon] = useState(USER_ICONS[0])
 
@@ -14,7 +15,7 @@ function NameScreen({ onJoin, error, loading }) {
 
   return (
     <form className="screen" onSubmit={handleSubmit}>
-      <div className="title">Choose a name</div>
+      <div className="title">{t(language, 'chooseName')}</div>
 
       <div style={{ fontSize: '64px', marginBottom: '8px' }}>{selectedIcon}</div>
 
@@ -23,12 +24,12 @@ function NameScreen({ onJoin, error, loading }) {
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Your nickname"
+        placeholder={t(language, 'yourNickname')}
         maxLength={20}
         autoFocus
       />
 
-      <div className="subtitle">Choose an icon</div>
+      <div className="subtitle">{t(language, 'chooseIcon')}</div>
 
       <div className="icon-grid">
         {USER_ICONS.map((icon) => (
@@ -50,7 +51,7 @@ function NameScreen({ onJoin, error, loading }) {
         type="submit"
         disabled={!name.trim() || loading}
       >
-        {loading ? 'Joining...' : "OK, let's go!"}
+        {loading ? t(language, 'joining') : t(language, 'letsGo')}
       </button>
     </form>
   )

@@ -5,76 +5,106 @@ import { useState, useEffect, useRef } from 'react'
 // For network access, set VITE_SERVER_URL to your machine's IP, e.g., http://192.168.1.100:5000
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://192.168.31.22:5000'
 
+const formatPin = (pin = '') => (pin.length === 6 ? `${pin.slice(0, 3)}-${pin.slice(3)}` : pin)
+const sanitizePin = (value = '') => value.replace(/[^0-9]/g, '').slice(0, 6)
+
 function App() {
   const [gamePin, setGamePin] = useState(null)
-  const [error, setError] = useState(null)
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
   const [gameActive, setGameActive] = useState(true)
-  const [gameStarted, setGameStarted] = useState(false) // Track if admin clicked "Start Game"
-  const [isStartingGame, setIsStartingGame] = useState(false) // Loading state for start button
+  const [gameStarted, setGameStarted] = useState(false)
+  const [isStartingGame, setIsStartingGame] = useState(false)
+  const [isCheckingPin, setIsCheckingPin] = useState(false)
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
   const hasInitialized = useRef(false)
+
+  // Check if an active game exists and if it's already started
+  const checkActiveGame = async (pin, { updateUrl = false } = {}) => {
+    setIsCheckingPin(true)
+    setPinError('')
+
+    try {
+      console.log('Checking for active game with PIN:', pin)
+      const url = `${SERVER_URL}/?check_active_game&game_pin=${pin}`
+      const response = await fetch(url)
+      const data = await response.json()
+
+      if (data.status === 'success' && data.active) {
+        console.log('Active game found! Game PIN:', pin)
+        setGamePin(pin)
+        setPinInput(formatPin(pin))
+        setGameActive(true)
+        setGameStarted(Boolean(data.gameStarted))
+
+        if (updateUrl) {
+          window.history.replaceState(null, '', '/' + pin)
+        }
+
+        return true
+      }
+
+      console.log('No active game found for PIN:', pin)
+      setGamePin(null)
+      setGameActive(true)
+      setGameStarted(false)
+      setPinError('')
+      return false
+    } catch (err) {
+      console.error('Error checking active game:', err)
+      setGamePin(null)
+      setGameActive(true)
+      setGameStarted(false)
+      setPinError('שגיאה בבדיקת PIN: ' + err.message)
+      return false
+    } finally {
+      setIsCheckingPin(false)
+    }
+  }
 
   // Extract game PIN from URL on mount
   useEffect(() => {
     // Prevent double execution in React.StrictMode (development)
     if (hasInitialized.current) {
-      console.log('⚠️ useEffect already ran, skipping...')
+      console.log('useEffect already ran, skipping...')
       return
     }
     hasInitialized.current = true
-    
+
     // Get game PIN from URL path (e.g., /123456)
     const pathParts = window.location.pathname.split('/').filter(Boolean)
-    const urlGamePin = pathParts[0] // First part after domain
-    
-    console.log('🔍 Checking for game PIN in URL:', window.location.pathname)
-    console.log('📋 Extracted game PIN:', urlGamePin)
-    
-    if (!urlGamePin || urlGamePin.length !== 6) {
-      console.error('❌ No valid game PIN found in URL')
-      setError('❌ לא נמצא PIN משחק בכתובת URL')
+    const urlGamePin = pathParts[0]
+
+    console.log('Checking for game PIN in URL:', window.location.pathname)
+    console.log('Extracted game PIN:', urlGamePin)
+
+    if (!urlGamePin) {
+      setIsBootstrapping(false)
       return
     }
-    
-    // Validate game PIN (digits only)
-    if (!/^[0-9]+$/.test(urlGamePin)) {
-      console.error('❌ Invalid game PIN format')
-      setError('❌ PIN משחק לא תקין')
+
+    if (urlGamePin.length !== 6 || !/^[0-9]+$/.test(urlGamePin)) {
+      console.error('Invalid game PIN format')
+      setPinError('PIN בכתובת לא תקין, הזן PIN ידני')
+      setIsBootstrapping(false)
       return
     }
-    
-    console.log('✅ Valid game PIN found:', urlGamePin)
-    setGamePin(urlGamePin)
-    
-    // Check if an active game exists for this PIN
-    checkActiveGame(urlGamePin)
-  }, []) // Empty dependency array = run only once on mount
-  
-  // Check if an active game exists and if it's already started
-  const checkActiveGame = async (gamePin) => {
-    try {
-      console.log('🔍 Checking for active game with PIN:', gamePin)
-      const url = `${SERVER_URL}/?check_active_game&game_pin=${gamePin}`
-      const response = await fetch(url)
-      const data = await response.json()
-      
-      if (data.status === 'success' && data.active) {
-        console.log('✅ Active game found! Game PIN:', gamePin)
-        setGameActive(true)
-        // Check if game is already started (has gameStarted flag)
-        if (data.gameStarted) {
-          console.log('✅ Game already started, showing next slide button')
-          setGameStarted(true)
-        }
-      } else {
-        console.log('⚠️ No active game found for PIN:', gamePin)
-        setError('❌ המשחק לא נמצא או לא פעיל')
-        setGameActive(false)
-      }
-    } catch (error) {
-      console.error('❌ Error checking active game:', error)
-      setError('❌ שגיאה בבדיקת משחק: ' + error.message)
-      setGameActive(false)
+
+    checkActiveGame(urlGamePin).finally(() => {
+      setIsBootstrapping(false)
+    })
+  }, [])
+
+  const handlePinSubmit = async (event) => {
+    event.preventDefault()
+
+    const cleanedPin = sanitizePin(pinInput)
+    if (cleanedPin.length !== 6) {
+      setPinError('PIN חייב להכיל 6 ספרות')
+      return
     }
+
+    await checkActiveGame(cleanedPin, { updateUrl: true })
   }
 
   // Handle Start Game button click - calls server to start accepting participants
@@ -85,26 +115,26 @@ function App() {
 
     try {
       setIsStartingGame(true)
-      console.log('🎮 Starting game with PIN:', gamePin)
-      
+      console.log('Starting game with PIN:', gamePin)
+
       const url = `${SERVER_URL}/?start_game&game_pin=${gamePin}`
-      console.log('📤 Sending to:', url)
+      console.log('Sending to:', url)
       const response = await fetch(url)
       const data = await response.json()
-      
+
       if (data.status === 'success') {
-        console.log('✅ Game started successfully!')
+        console.log('Game started successfully!')
         setGameStarted(true)
       } else if (data.status === 'warning') {
         // Game was already started
-        console.log('⚠️ Game was already started')
+        console.log('Game was already started')
         setGameStarted(true)
       } else {
-        alert('❌ שגיאה בהתחלת המשחק: ' + data.message)
+        alert('שגיאה בהתחלת המשחק: ' + data.message)
       }
-    } catch (error) {
-      console.error('❌ Error starting game:', error)
-      alert('❌ שגיאת רשת: ' + error.message)
+    } catch (err) {
+      console.error('Error starting game:', err)
+      alert('שגיאת רשת: ' + err.message)
     } finally {
       setIsStartingGame(false)
     }
@@ -112,150 +142,111 @@ function App() {
 
   const handleNextSlide = async () => {
     if (!gamePin) {
-      alert('❌ אין PIN משחק')
+      alert('אין PIN משחק')
       return
     }
 
     try {
       // Send game PIN with the request
       const url = `${SERVER_URL}/?next_slide&game_pin=${gamePin}`
-      console.log('📤 Sending to:', url)
+      console.log('Sending to:', url)
       const response = await fetch(url)
       const data = await response.json()
-      
+
       if (data.status === 'success') {
         // Success - no message needed
       } else if (data.status === 'warning' && data.game_closed) {
         // Game was closed - disable the button silently (no error message)
-        console.log('⚠️ Game closed - disabling next slide button')
+        console.log('Game closed - disabling next slide button')
         setGameActive(false)
       } else if (data.game_closed) {
         // Game was closed - disable the button
-        console.log('⚠️ Game closed - disabling next slide button')
+        console.log('Game closed - disabling next slide button')
         setGameActive(false)
       } else if (data.status === 'error') {
         // Only show alerts for actual errors, not warnings
-        alert('❌ שגיאה: ' + data.message)
+        alert('שגיאה: ' + data.message)
       }
-    } catch (error) {
-      alert('❌ שגיאת רשת: ' + error.message)
+    } catch (err) {
+      alert('שגיאת רשת: ' + err.message)
     }
   }
 
-  // If there's an error (no game PIN), show forbidden
-  if (error) {
+  if (isBootstrapping && isCheckingPin) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <div style={{
-          textAlign: 'center',
-          padding: '40px',
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ fontSize: '72px', marginBottom: '20px' }}>🚫</div>
-          <h1 style={{ fontSize: '48px', color: '#d13438', marginBottom: '10px' }}>403</h1>
-          <h2 style={{ fontSize: '24px', color: '#666', marginBottom: '20px' }}>Forbidden</h2>
-          <p style={{ fontSize: '16px', color: '#999' }}>{error}</p>
+      <div className="admin-app" dir="rtl">
+        <div className="screen">
+          <h1 className="title">Kahoot Admin</h1>
+          <p className="subtitle">טוען משחק...</p>
+          <div className="spinner" />
         </div>
       </div>
     )
   }
 
-  // Loading state while checking for game PIN
   if (!gamePin) {
     return (
-      <div className="admin-container">
-        <header>
-          <h1>🎮 Kahoot Admin Panel</h1>
-        </header>
-        <main>
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
-            <p>טוען משחק...</p>
-          </div>
-        </main>
+      <div className="admin-app" dir="rtl">
+        <div className="screen">
+          <h1 className="title">Kahoot Admin</h1>
+          <p className="subtitle">הכנס PIN משחק כדי להתחבר</p>
+
+          <form className="pin-form" onSubmit={handlePinSubmit}>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={7}
+              placeholder="123-456"
+              value={pinInput}
+              onChange={(event) => {
+                const cleanedPin = sanitizePin(event.target.value)
+                setPinInput(formatPin(cleanedPin))
+                if (pinError) {
+                  setPinError('')
+                }
+              }}
+              className={`pin-input${pinError ? ' error' : ''}`}
+              autoFocus
+            />
+
+            {pinError && <div className="error-msg">{pinError}</div>}
+
+            <button type="submit" className="btn-primary" disabled={isCheckingPin}>
+              {isCheckingPin ? 'בודק...' : 'התחבר'}
+            </button>
+          </form>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="admin-container">
-      <header>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <h1>🎮 Kahoot Admin Panel</h1>
-            <p className="subtitle">לוח בקרה לניהול המשחק</p>
-          </div>
-        </div>
-        
-        <div style={{ 
-          fontSize: '14px', 
-          color: '#333', 
-          marginTop: '15px',
-          display: 'flex',
-          gap: '15px',
-          justifyContent: 'center',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{
-            backgroundColor: '#e8f5e9',
-            padding: '10px 15px',
-            borderRadius: '6px',
-            border: '2px solid #4caf50'
-          }}>
-            <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>Game PIN</div>
-            <code style={{ 
-              fontFamily: 'monospace', 
-              fontSize: '20px',
-              fontWeight: 'bold',
-              color: '#2e7d32',
-              letterSpacing: '2px'
-            }}>{gamePin.slice(0, 3) + '-' + gamePin.slice(3)}</code>
-          </div>
-        </div>
-      </header>
+    <div className="admin-app" dir="rtl">
+      <div className="screen">
+        <h1 className="title">Kahoot Admin</h1>
+        <p className="subtitle">לוח בקרה לניהול המשחק</p>
 
-      <main>
-        <div className="control-panel">
-          <h2>בקרת שקפים</h2>
-          
-          {/* Show "Start Game" button before game starts, then "Next Slide" */}
+        <div className="pin-chip">
+          <div className="pin-label">Game PIN</div>
+          <div className="pin-value">{formatPin(gamePin)}</div>
+        </div>
+
+        <div className="admin-card">
+          <h2 className="admin-card-title">בקרת שקפים</h2>
+
           {!gameStarted ? (
-            <button 
-              className="btn btn-primary"
-              onClick={handleStartGame}
-              disabled={!gameActive || isStartingGame}
-              style={{
-                opacity: (gameActive && !isStartingGame) ? 1 : 0.5,
-                cursor: (gameActive && !isStartingGame) ? 'pointer' : 'not-allowed',
-                backgroundColor: '#4caf50'
-              }}
-            >
-              {isStartingGame ? '⏳ מתחיל...' : '🚀 התחל משחק'}
+            <button className="btn-primary" onClick={handleStartGame} disabled={!gameActive || isStartingGame}>
+              {isStartingGame ? 'מתחיל...' : 'התחל משחק'}
             </button>
           ) : (
-            <button 
-              className="btn btn-primary"
-              onClick={handleNextSlide}
-              disabled={!gameActive}
-              style={{
-                opacity: gameActive ? 1 : 0.5,
-                cursor: gameActive ? 'pointer' : 'not-allowed'
-              }}
-            >
-              ➡️ עבור לשקף הבא
+            <button className="btn-primary" onClick={handleNextSlide} disabled={!gameActive}>
+              עבור לשקף הבא
             </button>
           )}
+
+          {!gameActive && <p className="admin-note">המשחק נסגר ואי אפשר להמשיך שקפים.</p>}
         </div>
-      </main>
+      </div>
     </div>
   )
 }

@@ -1,13 +1,15 @@
-function LobbyScreen({ playerName, playerIcon }) {
+import { t } from '../i18n'
+
+function LobbyScreen({ playerName, playerIcon, language }) {
   return (
     <div className="screen">
       <div className="lobby-avatar">{playerIcon}</div>
       <div className="lobby-name">{playerName}</div>
       <div className="waiting-text">
-        Waiting for game to start<span className="dots"></span>
+        {t(language, 'waiting')}<span className="dots"></span>
       </div>
       <div className="subtitle" style={{ fontSize: '14px', opacity: 0.5, marginTop: '20px' }}>
-        You're in! Look at the screen.
+        {t(language, 'youreIn')}
       </div>
     </div>
   )

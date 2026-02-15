@@ -11,7 +11,6 @@
 import { getCurrentSlideNumber } from './navigation.js';
 import { loadSlideType } from './slides.js';
 import { startTimer, stopTimer } from './actions.js';
-import { startAcceptingParticipants, stopAcceptingParticipants } from '../core/api.js';
 import { 
     getCurrentSlideNumber as getSlideNumber,
     getCurrentSlideId,
@@ -27,7 +26,6 @@ let slideChangeDebounceTimer = null;
 let isNavigatingViaWebSocket = false;
 
 // Track current participant acceptance state to avoid redundant API calls
-let isAcceptingParticipants = false;
 
 /**
  * Setup slide change listener
@@ -122,35 +120,6 @@ export async function processSlideChange(fromWebSocket = false) {
         console.log('🔄 Refreshing slide list...');
         triggerRefreshSlideList().catch(e => console.error('Error refreshing list:', e));
         
-        // Control participant acceptance based on slide type
-        const gamePin = getGamePIN();
-        
-        if (slideType === 'opening') {
-            // On "opening" slide - start accepting participants (only if not already accepting)
-            if (gamePin && !isAcceptingParticipants) {
-                console.log('🟢 Opening slide detected - starting to accept participants...');
-                const success = await startAcceptingParticipants(gamePin);
-                if (success) {
-                    isAcceptingParticipants = true;
-                }
-            } else if (isAcceptingParticipants) {
-                console.log('ℹ️ Already accepting participants - no action needed');
-            } else {
-                console.warn('⚠️ Cannot start accepting participants - gamePin not available');
-            }
-        } else if (slideType !== 'opening') {
-            // Not on "opening" slide - stop accepting participants (only if currently accepting)
-            if (gamePin && isAcceptingParticipants) {
-                console.log('🔴 Left opening slide - stopping participant acceptance...');
-                const success = await stopAcceptingParticipants(gamePin);
-                if (success) {
-                    isAcceptingParticipants = false;
-                }
-            } else if (!isAcceptingParticipants) {
-                console.log('ℹ️ Not accepting participants - no action needed');
-            }
-        }
-        
         // Auto-start timer ONLY if:
         // 1. This is from WebSocket navigation (not manual editing)
         // 2. Slide is a question
@@ -191,20 +160,3 @@ export function setWebSocketNavigationFlag(value) {
     }
 }
 
-/**
- * Reset participant acceptance state
- * Called when a new game starts (game_pin_registered)
- */
-export function resetParticipantAcceptanceState() {
-    isAcceptingParticipants = false;
-    console.log('🔄 Reset participant acceptance state to: false');
-}
-
-/**
- * Set participant acceptance state
- * Called when Admin clicks "Start Game" (game_started event)
- */
-export function setParticipantAcceptanceState(accepting) {
-    isAcceptingParticipants = accepting;
-    console.log(`🔄 Set participant acceptance state to: ${accepting}`);
-}

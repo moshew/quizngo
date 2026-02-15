@@ -99,10 +99,11 @@ export default {
 
     // Admin connection overlay
     adminConnection: {
-        title: 'Admin Remote Connection',
+        title: 'Connect to Admin',
+        subtitle: 'Scan the code or enter the URL',
         scanAdmin: 'Scan the code to open the admin panel',
         orEnterUrl: 'Or go to:',
-        waitingForAdmin: 'Waiting for Admin to start the game...',
+        waitingForAdmin: 'Waiting for admin to start the game...',
         close: 'Close'
     },
 

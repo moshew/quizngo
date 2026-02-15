@@ -6,6 +6,8 @@ import LobbyScreen from './screens/LobbyScreen'
 import AnswerScreen from './screens/AnswerScreen'
 import ResultScreen from './screens/ResultScreen'
 import GameOverScreen from './screens/GameOverScreen'
+import LanguageSwitcher from './components/LanguageSwitcher'
+import { applyDirection } from './i18n'
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'
 
@@ -23,6 +25,7 @@ function App() {
   // Check URL for pin parameter
   const urlParams = new URLSearchParams(window.location.search)
   const urlPin = urlParams.get('pin')
+  const urlLang = urlParams.get('lang')
 
   const [screen, setScreen] = useState(urlPin ? SCREENS.NAME : SCREENS.PIN)
   const [gamePin, setGamePin] = useState(urlPin || '')
@@ -34,9 +37,18 @@ function App() {
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
+  const [pinError, setPinError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkingPin, setCheckingPin] = useState(false)
+  const [language, setLanguage] = useState(urlLang || 'en')
 
   const socketRef = useRef(null)
+  const pinErrorTimeoutRef = useRef(null)
+
+  // Apply direction when language changes
+  useEffect(() => {
+    applyDirection(language)
+  }, [language])
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket) => {
@@ -131,6 +143,46 @@ function App() {
     }
   }
 
+  const showPinError = useCallback((message) => {
+    setPinError(message)
+    if (pinErrorTimeoutRef.current) {
+      clearTimeout(pinErrorTimeoutRef.current)
+    }
+    pinErrorTimeoutRef.current = setTimeout(() => {
+      setPinError('')
+      pinErrorTimeoutRef.current = null
+    }, 3000)
+  }, [])
+
+  const validatePinAndContinue = async () => {
+    if (checkingPin) return
+
+    setCheckingPin(true)
+    setPinError('')
+
+    try {
+      const cleanPin = gamePin.replace(/-/g, '')
+      const response = await fetch(`${SERVER_URL}/?check_active_game&game_pin=${cleanPin}`)
+      const data = await response.json()
+
+      if (response.ok && data.status === 'success' && data.active) {
+        setError('')
+        // Set language from server if available
+        if (data.language) {
+          setLanguage(data.language)
+        }
+        setScreen(SCREENS.NAME)
+      } else {
+        showPinError(language === 'he' ? 'לא נמצא חדר עם PIN זה' : 'No room found with this PIN')
+      }
+    } catch (err) {
+      console.error('❌ PIN validation error:', err)
+      showPinError(language === 'he' ? 'שגיאה בבדיקת החדר, נסו שוב' : 'Error checking room, try again')
+    } finally {
+      setCheckingPin(false)
+    }
+  }
+
   // Submit answer
   const submitAnswer = async (answerIndex) => {
     if (!uid || hasAnswered) return
@@ -170,25 +222,38 @@ function App() {
     setSelectedAnswer(null)
     setIsAnswerTime(false)
     setError('')
+    setPinError('')
+    setCheckingPin(false)
   }
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (pinErrorTimeoutRef.current) {
+        clearTimeout(pinErrorTimeoutRef.current)
+      }
       if (socketRef.current) {
         socketRef.current.disconnect()
       }
     }
   }, [])
 
+  const showLanguageSwitcher = screen !== SCREENS.PIN
+
   return (
     <div className="game-app">
+      {showLanguageSwitcher && (
+        <LanguageSwitcher language={language} setLanguage={setLanguage} />
+      )}
+
       {screen === SCREENS.PIN && (
         <PinScreen
           gamePin={gamePin}
           setGamePin={setGamePin}
-          onSubmit={() => setScreen(SCREENS.NAME)}
-          error={error}
+          onSubmit={validatePinAndContinue}
+          error={pinError}
+          loading={checkingPin}
+          language={language}
         />
       )}
 
@@ -197,6 +262,7 @@ function App() {
           onJoin={joinGame}
           error={error}
           loading={loading}
+          language={language}
         />
       )}
 
@@ -204,6 +270,7 @@ function App() {
         <LobbyScreen
           playerName={playerName}
           playerIcon={playerIcon}
+          language={language}
         />
       )}
 
@@ -212,6 +279,7 @@ function App() {
           onAnswer={submitAnswer}
           hasAnswered={hasAnswered}
           selectedAnswer={selectedAnswer}
+          language={language}
         />
       )}
 
@@ -219,6 +287,7 @@ function App() {
         <ResultScreen
           results={results}
           selectedAnswer={selectedAnswer}
+          language={language}
         />
       )}
 
@@ -226,6 +295,7 @@ function App() {
         <GameOverScreen
           results={results}
           onPlayAgain={playAgain}
+          language={language}
         />
       )}
     </div>
