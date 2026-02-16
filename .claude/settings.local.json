@@ -4,7 +4,8 @@
       "Bash(npx office-addin-dev-certs install:*)",
       "Bash(npm install)",
       "Bash(npx vite:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(chmod:*)"
     ]
   }
 }

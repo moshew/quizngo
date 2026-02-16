@@ -291,4 +291,4 @@ if __name__ == '__main__':
     if LB_URL:
         eventlet.spawn_after(2, register_with_lb)
 
-    socketio.run(app, debug=True, host='0.0.0.0', port=PORT)
+    socketio.run(app, debug=False, host='0.0.0.0', port=PORT)

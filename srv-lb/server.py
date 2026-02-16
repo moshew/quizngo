@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """Kahoot Load Balancer Server"""
 
-import eventlet
-eventlet.monkey_patch()
-
 import sys
 import logging
 from pathlib import Path
@@ -33,6 +30,17 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+
+class IgnoreHeartbeatAccessLog(logging.Filter):
+    """Suppress noisy werkzeug access logs for internal heartbeat endpoint."""
+
+    def filter(self, record):
+        message = record.getMessage()
+        return not ('/api/servers/' in message and '/heartbeat HTTP/' in message)
+
+
+logging.getLogger('werkzeug').addFilter(IgnoreHeartbeatAccessLog())
 logger = logging.getLogger(__name__)
 
 # --- Flask App ---
@@ -77,4 +85,4 @@ if __name__ == '__main__':
     start_stale_cleanup(server_registry, pin_registry, interval=600)
 
     logger.info(f"Starting Kahoot Load Balancer on port {PORT}")
-    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', PORT)), app, log=logger)
+    app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)

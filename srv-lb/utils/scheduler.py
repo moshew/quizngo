@@ -1,5 +1,6 @@
 import logging
-import eventlet
+import time
+import threading
 import requests
 
 logger = logging.getLogger(__name__)
@@ -9,7 +10,7 @@ def start_health_checker(server_registry, interval=60):
     """Background task: check server health every `interval` seconds."""
     def _worker():
         while True:
-            eventlet.sleep(interval)
+            time.sleep(interval)
             try:
                 downed = server_registry.check_health()
                 for sid in downed:
@@ -17,7 +18,8 @@ def start_health_checker(server_registry, interval=60):
             except Exception as e:
                 logger.error(f"Health checker error: {e}")
 
-    eventlet.spawn(_worker)
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
     logger.info(f"Health checker started (interval={interval}s)")
 
 
@@ -26,13 +28,14 @@ def start_stale_cleanup(server_registry, pin_registry, interval=600):
     Removes stale PIN mappings that no longer exist on the server."""
     def _worker():
         while True:
-            eventlet.sleep(interval)
+            time.sleep(interval)
             try:
                 _cleanup_stale_pins(server_registry, pin_registry)
             except Exception as e:
                 logger.error(f"Stale cleanup error: {e}")
 
-    eventlet.spawn(_worker)
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
     logger.info(f"Stale PIN cleanup started (interval={interval}s)")
 
 
