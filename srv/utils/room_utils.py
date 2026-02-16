@@ -115,10 +115,10 @@ def close_game_and_cleanup(game_sessions, player_registry, client_rooms, socket_
 
     # Notify load balancer that this PIN is done
     try:
-        from server import notify_lb_game_ended
-        notify_lb_game_ended(game_pin)
-    except Exception:
-        pass  # Best effort
+        from utils.lb_client import notify_game_ended
+        notify_game_ended(game_pin)
+    except Exception as e:
+        logger.debug(f'Could not notify LB (may not be enabled): {e}')  # Best effort
 
 
 def emit_to_room(socketio, client_rooms, logger, event, data, game_pin, skip_sid=None):

@@ -159,8 +159,9 @@ export async function showAdminConnectionScreen(gamePin) {
     const pinEl = document.getElementById('adminOverlayPin');
     if (pinEl) pinEl.textContent = formattedPin;
 
-    // Set admin URL
-    const adminUrl = `http://192.168.31.22:3002/${gamePin}`;
+    // Set admin URL (configurable via window.KAHOOT_ADMIN_HOST)
+    const adminHost = (typeof window !== 'undefined' && window.KAHOOT_ADMIN_HOST) || 'http://192.168.31.22:3002';
+    const adminUrl = `${adminHost}/${gamePin}`;
     const urlEl = document.getElementById('adminOverlayUrl');
     if (urlEl) urlEl.value = adminUrl;
 

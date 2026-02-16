@@ -157,6 +157,14 @@ function App() {
     try {
       const cleanPin = gamePin.replace(/-/g, '')
 
+      // Guard: ensure serverUrl is resolved before connecting
+      if (!serverUrl) {
+        console.error('❌ Cannot join: serverUrl not resolved yet')
+        setError(t('error_server_not_ready'))
+        setLoading(false)
+        return
+      }
+
       // Create WebSocket to the resolved game server
       const socket = io(serverUrl, {
         transports: ['websocket', 'polling'],
@@ -387,7 +395,7 @@ function App() {
         <NameScreen
           onJoin={joinGame}
           error={error}
-          loading={loading}
+          loading={loading || (urlPin && !serverUrl)}
           language={language}
         />
       )}

@@ -199,21 +199,36 @@ def register_with_lb():
     global lb_server_id
     if not LB_URL:
         return
+
+    logger = logging.getLogger(__name__)
     try:
+        logger.info(f'Attempting to register with Load Balancer at {LB_URL}...')
         resp = http_requests.post(f'{LB_URL}/api/servers/register', json={
             'address': SERVER_ADDRESS
         }, timeout=5)
         data = resp.json()
         if data.get('status') == 'success':
             lb_server_id = data['server_id']
-            logging.getLogger(__name__).info(f'Registered with LB as {lb_server_id}')
+            logger.info(f'✅ Successfully registered with LB as {lb_server_id}')
+
+            # Initialize lb_client module with LB info
+            from utils.lb_client import init_lb
+            init_lb(LB_URL, lb_server_id)
+
             start_heartbeat()
         else:
-            logging.getLogger(__name__).warning(f'LB registration failed: {data}')
-            eventlet.spawn_after(10, register_with_lb)
+            logger.error(f'❌ LB registration failed: {data}')
+            logger.error(f'Load Balancer is not accepting registration. Shutting down.')
+            sys.exit(1)
     except Exception as e:
-        logging.getLogger(__name__).warning(f'Failed to register with LB: {e}. Retrying in 10s...')
-        eventlet.spawn_after(10, register_with_lb)
+        logger.error(f'❌ Failed to connect to Load Balancer: {e}')
+        logger.error(f'Cannot reach Load Balancer at {LB_URL}. Please ensure:')
+        logger.error(f'  1. Load Balancer is running: cd srv-lb && python server.py')
+        logger.error(f'  2. URL is correct: {LB_URL}')
+        logger.error(f'  3. Network/firewall allows connection')
+        logger.error(f'')
+        logger.error(f'Shutting down server.')
+        sys.exit(1)
 
 
 def start_heartbeat():
@@ -261,6 +276,13 @@ if __name__ == '__main__':
     if LB_URL:
         print(f"Load Balancer: {LB_URL}")
         print(f"Server Address: {SERVER_ADDRESS}")
+        print("")
+        print("⚠️  Load Balancer mode enabled")
+        print("   Server will register with LB in 2 seconds...")
+        print("   If LB is not available, server will shut down.")
+    else:
+        print("")
+        print("✅ Standalone mode (no Load Balancer)")
     print("")
     print("Press Ctrl+C to stop the server")
     print("=" * 40)

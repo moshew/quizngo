@@ -35,5 +35,15 @@ echo "Press Ctrl+C to stop the server"
 echo "================================"
 echo ""
 
-python3 server.py --port 5001 --lb-url http://localhost:5000 --address http://localhost:5001
+# Configure via environment variables or use defaults
+: ${KAHOOT_PORT:=5001}
+: ${KAHOOT_LB_URL:=http://localhost:5000}
+: ${KAHOOT_ADDRESS:=http://localhost:5001}
+
+# Start server (use --lb-url only if not set to 'none')
+if [ "$KAHOOT_LB_URL" = "none" ]; then
+    python3 server.py --port $KAHOOT_PORT
+else
+    python3 server.py --port $KAHOOT_PORT --lb-url $KAHOOT_LB_URL --address $KAHOOT_ADDRESS
+fi
 

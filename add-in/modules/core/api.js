@@ -1,7 +1,15 @@
 // API Configuration and Utilities
 
 // Load Balancer URL - entry point for PIN assignment and resolution
-export const LB_URL = 'http://localhost:5000/';
+// Configure this via window.KAHOOT_LB_URL or change for production deployment
+export const LB_URL = (() => {
+    // Try to get from window/global config first (can be set by manifest or build)
+    if (typeof window !== 'undefined' && window.KAHOOT_LB_URL) {
+        return window.KAHOOT_LB_URL;
+    }
+    // Default for local development
+    return 'http://localhost:5000/';
+})();
 
 // Dynamic server URL - set after LB assigns a server for the current game
 let currentServerUrl = null;

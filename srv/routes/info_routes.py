@@ -124,11 +124,8 @@ def create_info_routes(game):
             if len(game_pin_clean) != 6:
                 return "Invalid game PIN - must be 6 digits", 400
             
-            # Format as XXX-XXX
-            formatted_pin = f'{game_pin_clean[:3]}-{game_pin_clean[3:]}'
-            
-            # Build player URL (port 8080)
-            player_url = f'http://192.168.31.22:8080/{formatted_pin}'
+            # Build player URL with pin as query parameter (game client expects this format)
+            player_url = f'http://192.168.31.22:8080/?pin={game_pin_clean}'
             
             # Generate QR code
             qr = qrcode.QRCode(

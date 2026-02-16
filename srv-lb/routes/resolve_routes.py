@@ -56,6 +56,14 @@ def create_resolve_routes(server_registry, pin_registry):
         if not mapping:
             return jsonify({'status': 'error', 'message': 'Game PIN not found'}), 404
 
+        # Check if the server is still active/healthy
+        server = server_registry.get(mapping['server_id'])
+        if not server or server['status'] != 'active':
+            # Server is down - remove the stale PIN mapping
+            logger.warning(f"Server {mapping['server_id']} for PIN {game_pin} is {server['status'] if server else 'not found'} - removing mapping")
+            pin_registry.remove(game_pin)
+            return jsonify({'status': 'error', 'message': 'Game server is unavailable'}), 503
+
         return jsonify({
             'status': 'success',
             'game_pin': game_pin,

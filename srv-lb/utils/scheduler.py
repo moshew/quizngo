@@ -47,7 +47,10 @@ def _cleanup_stale_pins(server_registry, pin_registry):
             if resp.status_code != 200:
                 continue
             data = resp.json()
-            active_pins_on_server = set(data.get('gamePins', []))
+            # srv returns 'games' field with list of game objects
+            games = data.get('games', [])
+            # Extract just the gamePins from each game object
+            active_pins_on_server = set(game.get('gamePin') for game in games if game.get('gamePin'))
         except Exception as e:
             logger.warning(f"Failed to poll games from {srv['server_id']}: {e}")
             continue
