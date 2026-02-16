@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Kahoot Quiz Server - Python Flask Implementation
+QuizNGO Quiz Server - Python Flask Implementation
 
-Server-side component for the PowerPoint Kahoot Add-in
+Server-side component for the PowerPoint QuizNGO Add-in
 Run locally for testing: python server.py
 Deploy to server: see deployment instructions
 """
@@ -26,7 +26,7 @@ import psutil
 sys.path.insert(0, str(Path(__file__).parent))
 
 # --- CLI Arguments ---
-parser = argparse.ArgumentParser(description='Kahoot Quiz Server')
+parser = argparse.ArgumentParser(description='QuizNGO Quiz Server')
 parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
 parser.add_argument('--lb-url', type=str, default=None, help='Load balancer URL (e.g., http://localhost:5000)')
 parser.add_argument('--address', type=str, default=None, help='This server\'s public address (e.g., http://192.168.31.22:5001)')
@@ -45,7 +45,7 @@ from routes.info_routes import create_info_routes
 
 # Configuration
 LOG_DIR = Path(__file__).parent / 'logs'
-LOG_FILE = LOG_DIR / 'kahoot.log'
+LOG_FILE = LOG_DIR / 'quizngo.log'
 
 # Create log directory if it doesn't exist
 LOG_DIR.mkdir(exist_ok=True)
@@ -71,7 +71,7 @@ class GameLogger:
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'kahoot_quiz_secret_key_2024'
+app.config['SECRET_KEY'] = 'quizngo_quiz_secret_key_2024'
 
 # Initialize SocketIO
 socketio = SocketIO(app, 
@@ -269,7 +269,7 @@ def notify_lb_game_ended(game_pin):
 
 
 if __name__ == '__main__':
-    print("Starting Kahoot Quiz Server (Python)")
+    print("Starting QuizNGO Quiz Server (Python)")
     print("=" * 40)
     print(f"Server will run on: http://localhost:{PORT}")
     print(f"API Documentation: http://localhost:{PORT}/docs")

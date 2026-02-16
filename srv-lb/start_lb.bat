@@ -1,5 +1,5 @@
 @echo off
-echo Starting Kahoot Load Balancer
+echo Starting QuizNGO Load Balancer
 echo =======================================
 
 REM Check if virtual environment exists

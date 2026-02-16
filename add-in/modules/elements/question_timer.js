@@ -33,7 +33,7 @@ export async function addQuestionTime() {
                 await context.sync();
                 
                 // Add tag for identification
-                textBox.tags.add('kahoot-question-time', 'true');
+                textBox.tags.add('quizngo-question-time', 'true');
                 
                 const textRange = textBox.textFrame.textRange;
                 textRange.load(['font', 'paragraphFormat']);
@@ -87,7 +87,7 @@ export async function addRespondentsCount() {
                 await context.sync();
                 
                 // Add tag for identification
-                textBox.tags.add('kahoot-respondents-count', 'true');
+                textBox.tags.add('quizngo-respondents-count', 'true');
                 
                 const textRange = textBox.textFrame.textRange;
                 textRange.load(['font', 'paragraphFormat']);
@@ -116,7 +116,7 @@ export async function addRespondentsCount() {
 }
 
 /**
- * Update all kahoot-question-time elements to initial value (ALL slides)
+ * Update all quizngo-question-time elements to initial value (ALL slides)
  * Used for initialization/reset
  * OPTIMIZED: Batch loading with minimal context.sync() calls
  * @param {number} timeValue - Initial time value to set
@@ -149,7 +149,7 @@ export async function updateAllQuestionTimeElements(timeValue) {
                 for (const shape of slide.shapes.items) {
                     if (shape.tags && shape.tags.items) {
                         for (const tag of shape.tags.items) {
-                            if (tag.key.toLowerCase() === 'kahoot-question-time' && tag.value === 'true') {
+                            if (tag.key.toLowerCase() === 'quizngo-question-time' && tag.value === 'true') {
                                 shapesToUpdate.push(shape);
                                 break;
                             }
@@ -175,7 +175,7 @@ export async function updateAllQuestionTimeElements(timeValue) {
 }
 
 /**
- * Update ALL kahoot-respondents-count elements across all slides
+ * Update ALL quizngo-respondents-count elements across all slides
  * Similar to updateAllQuestionTimeElements but for respondents count
  * OPTIMIZED: Batch loading with minimal context.sync() calls
  * @param {number} count - Number of respondents who answered
@@ -208,7 +208,7 @@ export async function updateAllRespondentsCountElements(count) {
                 for (const shape of slide.shapes.items) {
                     if (shape.tags && shape.tags.items) {
                         for (const tag of shape.tags.items) {
-                            if (tag.key.toLowerCase() === 'kahoot-respondents-count' && tag.value === 'true') {
+                            if (tag.key.toLowerCase() === 'quizngo-respondents-count' && tag.value === 'true') {
                                 shapesToUpdate.push(shape);
                                 break;
                             }
@@ -234,7 +234,7 @@ export async function updateAllRespondentsCountElements(count) {
 }
 
 /**
- * Update kahoot-question-time in CURRENT slide only
+ * Update quizngo-question-time in CURRENT slide only
  * Used during timer countdown
  * @param {number} timeValue - Time value to display
  * @param {number} [slideNumber] - Optional: specific slide number to update (1-based). If not provided, uses selected slide.
@@ -278,21 +278,21 @@ export async function updateCurrentSlideQuestionTime(timeValue, slideNumber = nu
             
             let updatedCount = 0;
             
-            // Search only current slide for kahoot-question-time tags
+            // Search only current slide for quizngo-question-time tags
             for (let j = 0; j < shapes.items.length; j++) {
                 const shape = shapes.items[j];
                 const tags = shape.tags;
                 tags.load(['items']);
                 await context.sync();
                 
-                // Check if this shape has kahoot-question-time tag
+                // Check if this shape has quizngo-question-time tag
                 let hasQuestionTimeTag = false;
                 for (let k = 0; k < tags.items.length; k++) {
                     const tag = tags.items[k];
                     tag.load(['key', 'value']);
                     await context.sync();
                     
-                    if (tag.key.toLowerCase() === 'kahoot-question-time' && tag.value === 'true') {
+                    if (tag.key.toLowerCase() === 'quizngo-question-time' && tag.value === 'true') {
                         hasQuestionTimeTag = true;
                         break;
                     }
@@ -319,7 +319,7 @@ export async function updateCurrentSlideQuestionTime(timeValue, slideNumber = nu
 
 /**
  * Update "מספר עונים" (respondents count) in current slide
- * Similar to updateCurrentSlideQuestionTime but for kahoot-respondents-count tag
+ * Similar to updateCurrentSlideQuestionTime but for quizngo-respondents-count tag
  * @param {number} count - Number of respondents who answered
  * @param {number} slideNumber - Optional slide number (for presentation mode)
  */
@@ -362,21 +362,21 @@ export async function updateCurrentSlideRespondentsCount(count, slideNumber = nu
             
             let updatedCount = 0;
             
-            // Search only current slide for kahoot-respondents-count tags
+            // Search only current slide for quizngo-respondents-count tags
             for (let j = 0; j < shapes.items.length; j++) {
                 const shape = shapes.items[j];
                 const tags = shape.tags;
                 tags.load(['items']);
                 await context.sync();
                 
-                // Check if this shape has kahoot-respondents-count tag
+                // Check if this shape has quizngo-respondents-count tag
                 let hasRespondentsTag = false;
                 for (let k = 0; k < tags.items.length; k++) {
                     const tag = tags.items[k];
                     tag.load(['key', 'value']);
                     await context.sync();
                     
-                    if (tag.key.toLowerCase() === 'kahoot-respondents-count' && tag.value === 'true') {
+                    if (tag.key.toLowerCase() === 'quizngo-respondents-count' && tag.value === 'true') {
                         hasRespondentsTag = true;
                         break;
                     }

@@ -112,7 +112,7 @@ export async function addAnswersDistribution() {
                 await context.sync();
                 
                 // Add tags for dynamic updates
-                bar.tags.add('kahoot-answer-bar', 'true');
+                bar.tags.add('quizngo-answer-bar', 'true');
                 bar.tags.add('answer-number', answer.number.toString());
                 
                 await context.sync();
@@ -184,7 +184,7 @@ export async function addAnswersDistribution() {
                 await context.sync();
                 
                 // Add tags for dynamic updates
-                valueLabel.tags.add('kahoot-answer-value', 'true');
+                valueLabel.tags.add('quizngo-answer-value', 'true');
                 valueLabel.tags.add('answer-number', answer.number.toString());
                 
                 await context.sync();
@@ -310,9 +310,9 @@ export async function updateAnswersDistribution(answersData) {
                             const tag = shape.tags.items[k];
                             const key = tag.key.toLowerCase();
                             
-                            if (key === 'kahoot-answer-bar') {
+                            if (key === 'quizngo-answer-bar') {
                                 isAnswerBar = true;
-                            } else if (key === 'kahoot-answer-value') {
+                            } else if (key === 'quizngo-answer-value') {
                                 isAnswerValue = true;
                             } else if (key === 'answer-number') {
                                 answerNumber = parseInt(tag.value);
@@ -467,10 +467,10 @@ export async function addLeaderboardElements() {
                 nameBox.textFrame.marginRight = 0;
                 
                 // Add Tags
-                nameBox.tags.add('kahoot-leaderboard-name', 'true');
+                nameBox.tags.add('quizngo-leaderboard-name', 'true');
                 nameBox.tags.add('leaderboard-rank', item.rank.toString());
                 
-                scoreBox.tags.add('kahoot-leaderboard-score', 'true');
+                scoreBox.tags.add('quizngo-leaderboard-score', 'true');
                 scoreBox.tags.add('leaderboard-rank', item.rank.toString());
                 
                 await context.sync();
@@ -617,9 +617,9 @@ export async function updateLeaderboard(leaderboardData) {
                         for (const tag of shape.tags.items) {
                             const key = tag.key.toLowerCase();
                             
-                            if (key === 'kahoot-leaderboard-name') {
+                            if (key === 'quizngo-leaderboard-name') {
                                 isLeaderboardName = true;
-                            } else if (key === 'kahoot-leaderboard-score') {
+                            } else if (key === 'quizngo-leaderboard-score') {
                                 isLeaderboardScore = true;
                             } else if (key === 'leaderboard-rank') {
                                 rank = parseInt(tag.value);

@@ -1,4 +1,4 @@
-# Kahoot Quiz Server - Python Requirements
+# QuizNGO Quiz Server - Python Requirements
 
 Flask==2.3.3
 Flask-CORS==4.0.0

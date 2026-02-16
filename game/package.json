@@ -1,7 +1,7 @@
 {
-  "name": "kahoot-game",
+  "name": "quizngo-game",
   "version": "1.0.0",
-  "description": "Kahoot player game client",
+  "description": "QuizNGO player game client",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",

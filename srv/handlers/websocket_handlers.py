@@ -1,5 +1,5 @@
 """
-WebSocket event handlers for Kahoot Quiz Server.
+WebSocket event handlers for QuizNGO Quiz Server.
 Handles Socket.IO events: connect, disconnect.
 Room registration is handled via REST API.
 

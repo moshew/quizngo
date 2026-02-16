@@ -1,8 +1,8 @@
 @echo off
-title Kahoot Admin Panel
+title QuizNGO Admin Panel
 echo.
 echo ========================================
-echo    Kahoot Admin Panel
+echo    QuizNGO Admin Panel
 echo ========================================
 echo.
 echo Starting admin panel on port 3002...

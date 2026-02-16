@@ -41,7 +41,7 @@ export async function resetParticipantsNumInSlides() {
                 for (const shape of slide.shapes.items) {
                     if (shape.tags && shape.tags.items) {
                         for (const tag of shape.tags.items) {
-                            if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
+                            if (tag.key.toLowerCase() === 'quizngo-participants-num' && tag.value === 'true') {
                                 shapesToUpdate.push(shape);
                                 break;
                             }
@@ -83,7 +83,7 @@ export async function updateParticipantsNumInSlides(count) {
             slides.load('items');
             await context.sync();
             
-            console.log(`🔍 Searching for kahoot-participants-num tags in ${slides.items.length} slides...`);
+            console.log(`🔍 Searching for quizngo-participants-num tags in ${slides.items.length} slides...`);
             
             let foundElements = 0;
             
@@ -116,7 +116,7 @@ export async function updateParticipantsNumInSlides(count) {
                         for (let k = 0; k < shape.tags.items.length; k++) {
                             const tag = shape.tags.items[k];
                             // Case-insensitive comparison
-                            if (tag.key.toLowerCase() === 'kahoot-participants-num' && tag.value === 'true') {
+                            if (tag.key.toLowerCase() === 'quizngo-participants-num' && tag.value === 'true') {
                                 hasParticipantsNumTag = true;
                                 break;
                             }
@@ -191,7 +191,7 @@ export async function insertParticipantsNumButton() {
                 await context.sync();
                 
                 // Add tag for dynamic updates
-                textBox.tags.add('kahoot-participants-num', 'true');
+                textBox.tags.add('quizngo-participants-num', 'true');
                 
                 const textRange = textBox.textFrame.textRange;
                 textRange.load(['font']);
@@ -256,7 +256,7 @@ export async function createParticipantPillShapes(context, slide, participants) 
             }
             
             // תג לזיהוי
-            pillBg.tags.add('kahoot-participant-pill', 'true');
+            pillBg.tags.add('quizngo-participant-pill', 'true');
             pillBg.tags.add('participant-name', participant);
             
             // צור טקסט לבן על הרקע
@@ -287,7 +287,7 @@ export async function createParticipantPillShapes(context, slide, participants) 
             }
             
             // תג לטקסט
-            pillText.tags.add('kahoot-participant-pill', 'true');
+            pillText.tags.add('quizngo-participant-pill', 'true');
             pillText.tags.add('participant-name', participant);
             
             await context.sync();
@@ -367,7 +367,7 @@ export async function insertLiveParticipantsArea() {
         textRange.font.bold = true;
         
         // הוסף תג לעדכונים דינמיים
-        containerArea.tags.add('kahoot-participants-area', 'true');
+        containerArea.tags.add('quizngo-participants-area', 'true');
         await context.sync();
         
         // עכשיו צור pills בודדים אם יש משתתפים
@@ -418,7 +418,7 @@ export async function updateLiveParticipantsInSlide(participantsList) {
                         tag.load(['key', 'value']);
                         await context.sync();
                         
-                        if (tag.key.toLowerCase() === 'kahoot-participants-area' && tag.value === 'true') {
+                        if (tag.key.toLowerCase() === 'quizngo-participants-area' && tag.value === 'true') {
                             hasParticipantsTag = true;
                             break;
                         }
@@ -480,7 +480,7 @@ async function updateParticipantsAreaContent(context, slide, participantsArea, p
                 tag.load(['key', 'value']);
                 await context.sync();
                 
-                if (tag.key.toLowerCase() === 'kahoot-participant-pill') {
+                if (tag.key.toLowerCase() === 'quizngo-participant-pill') {
                     shape.delete();
                     await context.sync();
                     break;
@@ -522,7 +522,7 @@ export async function insertParticipantsListButton() {
             });
             
             // Add tags so we can find it later
-            textBox.tags.add('kahoot-content-type', 'participants-list');
+            textBox.tags.add('quizngo-content-type', 'participants-list');
             
             // Load line property before using it
             textBox.load(['line', 'lineFormat', 'fill', 'textFrame']);
@@ -615,10 +615,10 @@ export async function updateParticipantsListInSlides() {
                          for(let t=0; t<shape.tags.items.length; t++) {
                              const tagKey = shape.tags.items[t].key.toLowerCase();
                              const tagValue = shape.tags.items[t].value;
-                             if(tagKey === 'kahoot-content-type' && tagValue.toLowerCase() === 'participants-list') {
+                             if(tagKey === 'quizngo-content-type' && tagValue.toLowerCase() === 'participants-list') {
                                  isParticipantsList = true;
                              }
-                             if(tagKey === 'kahoot-participant-item' && tagValue === 'true') {
+                             if(tagKey === 'quizngo-participant-item' && tagValue === 'true') {
                                  isParticipantItem = true;
                              }
                              if(tagKey === 'participant-id' && tagValue) {
@@ -811,7 +811,7 @@ export async function updateParticipantsListInSlides() {
                                  iconBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
                                  iconBox.textFrame.textRange.font.size = 65; 
                                  
-                                 iconBox.tags.add('kahoot-participant-item', 'true');
+                                 iconBox.tags.add('quizngo-participant-item', 'true');
                                  iconBox.tags.add('participant-id', pId || '');
                                  
                                  // Name
@@ -825,7 +825,7 @@ export async function updateParticipantsListInSlides() {
                                  nameBox.textFrame.textRange.font.bold = true;
                                  nameBox.textFrame.textRange.font.color = '#FFFFFF'; // White text
                                  
-                                 nameBox.tags.add('kahoot-participant-item', 'true');
+                                 nameBox.tags.add('quizngo-participant-item', 'true');
                                  nameBox.tags.add('participant-id', pId || '');
                              }
                         }

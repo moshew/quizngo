@@ -1,5 +1,5 @@
 {
-  "name": "kahoot-powerpoint-addon",
+  "name": "quizngo-powerpoint-addon",
   "version": "1.0.0",
   "description": "Office Add-in לניהול חידון טריוויה ב-PowerPoint עם שרת מרכזי",
   "main": "taskpane.html",
@@ -18,11 +18,11 @@
   "keywords": [
     "office-add-in",
     "powerpoint",
-    "kahoot",
+    "quizngo",
     "quiz",
     "trivia"
   ],
-  "author": "Kahoot Quiz Manager",
+  "author": "QuizNGO Quiz Manager",
   "license": "MIT",
   "devDependencies": {
     "http-server": "^14.1.1",

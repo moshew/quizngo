@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Kahoot Quiz Server (Python) Installation Script
+# QuizNGO Quiz Server (Python) Installation Script
 
-echo "🐍 Kahoot Quiz Server (Python) Installer"
+echo "🐍 QuizNGO Quiz Server (Python) Installer"
 echo "========================================="
 
 # Check Python version

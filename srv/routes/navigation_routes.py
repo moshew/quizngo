@@ -1,5 +1,5 @@
 """
-Navigation routes for Kahoot Quiz Server.
+Navigation routes for QuizNGO Quiz Server.
 Handles slide navigation, click actions, and animation reset.
 
 NEW ARCHITECTURE:

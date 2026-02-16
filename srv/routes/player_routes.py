@@ -1,5 +1,5 @@
 """
-Player routes for Kahoot Quiz Server.
+Player routes for QuizNGO Quiz Server.
 Handles player join, leave, rejoin, and answer submission.
 Uses gamePin as primary identifier for all room operations.
 """

@@ -181,7 +181,7 @@ function App() {
       console.log(`✅ Socket connected: ${socket.id}`)
 
       // Join via REST — include stored UID for reconnection
-      const storedUid = sessionStorage.getItem(`kahoot_uid_${cleanPin}`)
+      const storedUid = sessionStorage.getItem(`quizngo_uid_${cleanPin}`)
       const joinBody = {
         game_pin: cleanPin,
         name: name,
@@ -203,7 +203,7 @@ function App() {
         setUid(data.uid)
         uidRef.current = data.uid
         // Persist UID for reconnection
-        sessionStorage.setItem(`kahoot_uid_${cleanPin}`, data.uid)
+        sessionStorage.setItem(`quizngo_uid_${cleanPin}`, data.uid)
         setPlayerName(name)
         setPlayerIcon(icon)
         socketRef.current = socket
@@ -338,7 +338,7 @@ function App() {
     // Clear stored UID for old game
     if (gamePin) {
       const cleanPin = gamePin.replace(/-/g, '')
-      sessionStorage.removeItem(`kahoot_uid_${cleanPin}`)
+      sessionStorage.removeItem(`quizngo_uid_${cleanPin}`)
     }
     setScreen(SCREENS.PIN)
     setGamePin('')

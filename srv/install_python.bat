@@ -1,5 +1,5 @@
 @echo off
-echo 🐍 Kahoot Quiz Server (Python) Installer - Windows
+echo 🐍 QuizNGO Quiz Server (Python) Installer - Windows
 echo ===================================================
 
 REM Check Python

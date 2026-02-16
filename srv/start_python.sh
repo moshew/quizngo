@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Start Kahoot Quiz Server (Python)
+# Start QuizNGO Quiz Server (Python)
 
-echo "🐍 Starting Kahoot Quiz Server (Python)"
+echo "🐍 Starting QuizNGO Quiz Server (Python)"
 echo "======================================="
 
 # Check if virtual environment exists
@@ -36,14 +36,14 @@ echo "================================"
 echo ""
 
 # Configure via environment variables or use defaults
-: ${KAHOOT_PORT:=5001}
-: ${KAHOOT_LB_URL:=http://localhost:5000}
-: ${KAHOOT_ADDRESS:=http://localhost:5001}
+: ${QUIZNGO_PORT:=5001}
+: ${QUIZNGO_LB_URL:=http://localhost:5000}
+: ${QUIZNGO_ADDRESS:=http://localhost:5001}
 
 # Start server (use --lb-url only if not set to 'none')
-if [ "$KAHOOT_LB_URL" = "none" ]; then
-    python3 server.py --port $KAHOOT_PORT
+if [ "$QUIZNGO_LB_URL" = "none" ]; then
+    python3 server.py --port $QUIZNGO_PORT
 else
-    python3 server.py --port $KAHOOT_PORT --lb-url $KAHOOT_LB_URL --address $KAHOOT_ADDRESS
+    python3 server.py --port $QUIZNGO_PORT --lb-url $QUIZNGO_LB_URL --address $QUIZNGO_ADDRESS
 fi
 

@@ -8,9 +8,9 @@
   <!-- Begin Basic Settings: Add-in metadata, used for all versions of Office unless override provided. -->
   <Id>f8d6c3a1-9e4b-4f7a-8c2d-5b3a9f6e1c8b</Id>
   <Version>1.0.0.3</Version>
-  <ProviderName>Kahoot Quiz Add-in</ProviderName>
+  <ProviderName>QuizNGO Quiz Add-in</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Kahoot Quiz Manager" />
+  <DisplayName DefaultValue="QuizNGO Quiz Manager" />
   <Description DefaultValue="Quiz trivia add-in with central server management" />
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
 <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png"/>
@@ -92,8 +92,8 @@
         <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="Get Started with Kahoot Quiz Manager"/>
-        <bt:String id="CommandsGroup.Label" DefaultValue="Kahoot Controls"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Get Started with QuizNGO Quiz Manager"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="QuizNGO Controls"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Control Panel"/>
       </bt:ShortStrings>
       <bt:LongStrings>

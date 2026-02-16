@@ -193,7 +193,7 @@ function App() {
     return (
       <div className="admin-app" dir="rtl">
         <div className="screen">
-          <h1 className="title">Kahoot Admin</h1>
+          <h1 className="title">QuizNGO Admin</h1>
           <p className="subtitle">טוען משחק...</p>
           <div className="spinner" />
         </div>
@@ -205,7 +205,7 @@ function App() {
     return (
       <div className="admin-app" dir="rtl">
         <div className="screen">
-          <h1 className="title">Kahoot Admin</h1>
+          <h1 className="title">QuizNGO Admin</h1>
           <p className="subtitle">הכנס PIN משחק כדי להתחבר</p>
 
           <form className="pin-form" onSubmit={handlePinSubmit}>
@@ -240,7 +240,7 @@ function App() {
   return (
     <div className="admin-app" dir="rtl">
       <div className="screen">
-        <h1 className="title">Kahoot Admin</h1>
+        <h1 className="title">QuizNGO Admin</h1>
         <p className="subtitle">לוח בקרה לניהול המשחק</p>
 
         <div className="pin-chip">

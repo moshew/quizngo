@@ -1,5 +1,5 @@
 """
-Game management routes for Kahoot Quiz Server.
+Game management routes for QuizNGO Quiz Server.
 Handles session registration, game lifecycle, and participant acceptance.
 
 NEW ARCHITECTURE:

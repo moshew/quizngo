@@ -1,5 +1,5 @@
 @echo off
-echo 🎯 Kahoot Load Balancer Installer - Windows
+echo 🎯 QuizNGO Load Balancer Installer - Windows
 echo ============================================
 
 REM Check Python

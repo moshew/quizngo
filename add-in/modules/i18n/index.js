@@ -71,7 +71,7 @@ export async function initI18n(lang = null) {
  */
 function getSavedLanguage() {
     try {
-        return localStorage.getItem('kahoot_language');
+        return localStorage.getItem('quizngo_language');
     } catch {
         return null;
     }
@@ -82,7 +82,7 @@ function getSavedLanguage() {
  */
 function saveLanguage(lang) {
     try {
-        localStorage.setItem('kahoot_language', lang);
+        localStorage.setItem('quizngo_language', lang);
     } catch (error) {
         console.warn('Could not save language preference:', error);
     }

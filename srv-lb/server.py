@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kahoot Load Balancer Server"""
+"""QuizNGO Load Balancer Server"""
 
 import sys
 import logging
@@ -63,7 +63,7 @@ def index():
     active = sum(1 for s in servers if s['status'] == 'active')
     return {
         'status': 'ok',
-        'service': 'kahoot-lb',
+        'service': 'quizngo-lb',
         'servers_total': len(servers),
         'servers_active': active,
         'active_pins': len(pin_registry.get_all())
@@ -75,7 +75,7 @@ PORT = 5000
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Kahoot Load Balancer')
+    parser = argparse.ArgumentParser(description='QuizNGO Load Balancer')
     parser.add_argument('--port', type=int, default=PORT, help='Port to run on (default: 5000)')
     args = parser.parse_args()
     PORT = args.port
@@ -84,5 +84,5 @@ if __name__ == '__main__':
     start_health_checker(server_registry, interval=60)
     start_stale_cleanup(server_registry, pin_registry, interval=600)
 
-    logger.info(f"Starting Kahoot Load Balancer on port {PORT}")
+    logger.info(f"Starting QuizNGO Load Balancer on port {PORT}")
     app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Starting Kahoot Load Balancer"
+echo "Starting QuizNGO Load Balancer"
 echo "======================================="
 
 # Check if virtual environment exists

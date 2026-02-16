@@ -1,5 +1,5 @@
 """
-Info routes for Kahoot Quiz Server.
+Info routes for QuizNGO Quiz Server.
 Handles game info, QR codes, documentation, status, and widgets.
 
 NEW ARCHITECTURE:
@@ -331,7 +331,7 @@ def create_info_routes(game):
         <html dir="rtl" lang="he">
         <head>
             <meta charset="UTF-8">
-            <title>Kahoot Quiz Server API</title>
+            <title>QuizNGO Quiz Server API</title>
             <style>
                 body {{ font-family: Arial, sans-serif; margin: 40px; direction: rtl; }}
                 .endpoint {{ background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }}
@@ -341,7 +341,7 @@ def create_info_routes(game):
             </style>
         </head>
         <body>
-            <h1>🎯 Kahoot Quiz Server API (Python)</h1>
+            <h1>🎯 QuizNGO Quiz Server API (Python)</h1>
             
             <div class="python-note">
                 <strong>🐍 Python Server</strong><br>
@@ -400,7 +400,7 @@ def create_info_routes(game):
             </div>
             
             <hr>
-            <p><small>Kahoot Quiz Server API v2.0 (Python) - gamePin-based architecture - תוכנן לעבודה עם PowerPoint Add-in</small></p>
+            <p><small>QuizNGO Quiz Server API v2.0 (Python) - gamePin-based architecture - תוכנן לעבודה עם PowerPoint Add-in</small></p>
         </body>
         </html>
         """

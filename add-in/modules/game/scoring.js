@@ -1,6 +1,6 @@
 /**
  * Scoring Module
- * Handles answer validation and score calculation for Kahoot game
+ * Handles answer validation and score calculation for QuizNGO game
  */
 
 import { getParticipantsData, getCurrentQuestionAnswers } from '../core/websocket.js';

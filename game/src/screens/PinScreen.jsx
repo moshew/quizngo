@@ -21,7 +21,7 @@ function PinScreen({ gamePin, setGamePin, onSubmit, error, loading, language }) 
 
   return (
     <form className="screen" onSubmit={handleSubmit}>
-      <div className="title">Kahoot!</div>
+      <div className="title">QuizNGO!</div>
       <input
         className="pin-input"
         type="text"

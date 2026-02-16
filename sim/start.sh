@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "========================================"
-echo "   Kahoot Simulator - Starting..."
+echo "   QuizNGO Simulator - Starting..."
 echo "========================================"
 echo ""
 

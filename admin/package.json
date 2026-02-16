@@ -1,7 +1,7 @@
 {
-  "name": "kahoot-admin",
+  "name": "quizngo-admin",
   "version": "1.0.0",
-  "description": "Kahoot game admin panel",
+  "description": "QuizNGO game admin panel",
   "private": true,
   "type": "module",
   "dependencies": {

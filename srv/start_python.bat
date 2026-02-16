@@ -1,5 +1,5 @@
 @echo off
-echo 🐍 Starting Kahoot Quiz Server (Python)
+echo 🐍 Starting QuizNGO Quiz Server (Python)
 echo =======================================
 
 REM Check if virtual environment exists
@@ -34,14 +34,14 @@ echo ================================
 echo.
 
 REM Configure via environment variables or use defaults
-if "%KAHOOT_PORT%"=="" set KAHOOT_PORT=5001
-if "%KAHOOT_LB_URL%"=="" set KAHOOT_LB_URL=http://localhost:5000
-if "%KAHOOT_ADDRESS%"=="" set KAHOOT_ADDRESS=http://localhost:5001
+if "%QUIZNGO_PORT%"=="" set QUIZNGO_PORT=5001
+if "%QUIZNGO_LB_URL%"=="" set QUIZNGO_LB_URL=http://localhost:5000
+if "%QUIZNGO_ADDRESS%"=="" set QUIZNGO_ADDRESS=http://localhost:5001
 
 REM Start server (use --lb-url only if LB_URL is set)
-if "%KAHOOT_LB_URL%"=="none" (
-    python server.py --port %KAHOOT_PORT%
+if "%QUIZNGO_LB_URL%"=="none" (
+    python server.py --port %QUIZNGO_PORT%
 ) else (
-    python server.py --port %KAHOOT_PORT% --lb-url %KAHOOT_LB_URL% --address %KAHOOT_ADDRESS%
+    python server.py --port %QUIZNGO_PORT% --lb-url %QUIZNGO_LB_URL% --address %QUIZNGO_ADDRESS%
 )
 

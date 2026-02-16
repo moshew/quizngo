@@ -330,7 +330,7 @@ let questionStartTime = null; // Track when the question timer started (for scor
  * Implements the flow:
  * 1. Wait for clockActivationDelay seconds
  * 2. Start countdown from questionWaitTime
- * 3. Update kahoot-question-time elements in real-time
+ * 3. Update quizngo-question-time elements in real-time
  * 4. Send WebSocket messages to server at key points
  */
 export async function startTimer() { 
@@ -553,7 +553,7 @@ function sendAnswerTimeStarted() {
 }
 
 /**
- * Update kahoot-question-time elements in current slide
+ * Update quizngo-question-time elements in current slide
  * @param {number} timeValue - Time in seconds to display
  */
 async function updateQuestionTimeDisplay(timeValue) {

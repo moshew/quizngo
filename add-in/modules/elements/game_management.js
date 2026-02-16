@@ -45,7 +45,7 @@ export async function updateGameIdInSlides(gamePin) {
                         await context.sync();
                         
                         // Case-insensitive comparison
-                        if (tag.key.toLowerCase() === 'kahoot-game-id' && tag.value === 'true') {
+                        if (tag.key.toLowerCase() === 'quizngo-game-id' && tag.value === 'true') {
                             hasGameIdTag = true;
                             break;
                         }
@@ -106,7 +106,7 @@ export async function insertGameIdButton() {
                 await context.sync();
                 
                 // Add tag for dynamic updates
-                textBox.tags.add('kahoot-game-id', 'true');
+                textBox.tags.add('quizngo-game-id', 'true');
                 
                 const textRange = textBox.textFrame.textRange;
                 textRange.load(['font']);
@@ -170,7 +170,7 @@ export async function updateQrCodeInSlides(gamePin) {
                         await context.sync();
                         
                         // Case-insensitive comparison
-                        if (tag.key.toLowerCase() === 'kahoot-qr-code' && tag.value === 'true') {
+                        if (tag.key.toLowerCase() === 'quizngo-qr-code' && tag.value === 'true') {
                             hasQrCodeTag = true;
                             break;
                         }
@@ -273,7 +273,7 @@ export async function updateQrCodeInSlides(gamePin) {
                                 await context.sync();
                                 
                                 // Check if it's at the same position as our old placeholder
-                                // AND doesn't already have the kahoot-qr-code tag (to avoid retagging)
+                                // AND doesn't already have the quizngo-qr-code tag (to avoid retagging)
                                 if (Math.abs(potentialImage.left - left) < 1 && 
                                     Math.abs(potentialImage.top - top) < 1) {
                                     
@@ -288,7 +288,7 @@ export async function updateQrCodeInSlides(gamePin) {
                                         existingTag.load(['key', 'value']);
                                         await context.sync();
                                         
-                                        if (existingTag.key.toLowerCase() === 'kahoot-qr-code' && existingTag.value === 'true') {
+                                        if (existingTag.key.toLowerCase() === 'quizngo-qr-code' && existingTag.value === 'true') {
                                             alreadyTagged = true;
                                             break;
                                         }
@@ -296,9 +296,9 @@ export async function updateQrCodeInSlides(gamePin) {
                                     
                                     if (!alreadyTagged) {
                                         // Tag it as the QR code placeholder for next update
-                                        potentialImage.tags.add('kahoot-qr-code', 'true');
-                                        potentialImage.tags.add('kahoot-qr-url', qrCodeUrl);
-                                        potentialImage.tags.add('kahoot-qr-gamepin', gamePin);
+                                        potentialImage.tags.add('quizngo-qr-code', 'true');
+                                        potentialImage.tags.add('quizngo-qr-url', qrCodeUrl);
+                                        potentialImage.tags.add('quizngo-qr-gamepin', gamePin);
                                         await context.sync();
                                         imageTagged = true;
                                         break;
@@ -353,7 +353,7 @@ export async function insertQrCodeButton() {
             await context.sync();
             
             // Add tag for dynamic updates
-            placeholder.tags.add('kahoot-qr-code', 'true');
+            placeholder.tags.add('quizngo-qr-code', 'true');
             await context.sync();
             
             // Style the text

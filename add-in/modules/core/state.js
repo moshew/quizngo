@@ -388,22 +388,22 @@ function generateUniqueId() {
 }
 
 /**
- * Get or create a persistent Kahoot ID stored in presentation tags
+ * Get or create a persistent QuizNGO ID stored in presentation tags
  * This ID is saved inside the .pptx file and persists across file moves/renames
  */
 export async function getGameHashId() {
     try {
-        console.log('🔑 Getting/creating Kahoot ID from presentation tags...');
+        console.log('🔑 Getting/creating QuizNGO ID from presentation tags...');
         
         return await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
             presentation.tags.load("items");
             await context.sync();
             
-            // Check if kahoot_id already exists
+            // Check if quizngo_id already exists
             for (const tag of presentation.tags.items) {
-                if (tag.key.toLowerCase() === 'kahoot_id') {
-                    console.log('✅ Found existing Kahoot ID:', tag.value);
+                if (tag.key.toLowerCase() === 'quizngo_id') {
+                    console.log('✅ Found existing QuizNGO ID:', tag.value);
                     setHashId(tag.value);
                     return tag.value;
                 }
@@ -411,12 +411,12 @@ export async function getGameHashId() {
             
             // Create new unique ID
             const newId = generateUniqueId();
-            console.log('🆕 Creating new Kahoot ID:', newId);
+            console.log('🆕 Creating new QuizNGO ID:', newId);
             
-            presentation.tags.add('kahoot_id', newId);
+            presentation.tags.add('quizngo_id', newId);
             await context.sync();
             
-            console.log('✅ Kahoot ID created and saved to presentation tags');
+            console.log('✅ QuizNGO ID created and saved to presentation tags');
             console.log('💾 Remember to save the presentation to persist the ID!');
             
             setHashId(newId);
@@ -424,7 +424,7 @@ export async function getGameHashId() {
         });
         
     } catch (error) {
-        console.error('❌ Error getting/creating Kahoot ID:', error);
+        console.error('❌ Error getting/creating QuizNGO ID:', error);
         return null;
     }
 }
@@ -481,7 +481,7 @@ export async function saveGameData() {
                 slideTypeData: _slideTypeData,
                 presentationSettings: _presentationSettings
             };
-            presentation.tags.add('kahoot_game_data', JSON.stringify(gameState));
+            presentation.tags.add('quizngo_game_data', JSON.stringify(gameState));
             await context.sync();
         });
         console.log('✅ Game data saved to presentation');
@@ -501,7 +501,7 @@ export async function loadGameData() {
             await context.sync();
             
             for (const tag of presentation.tags.items) {
-                if (tag.key.toLowerCase() === 'kahoot_game_data') {
+                if (tag.key.toLowerCase() === 'quizngo_game_data') {
                     const gameState = JSON.parse(tag.value);
                     _slideTypeData = gameState.slideTypeData || {};
                     _presentationSettings = gameState.presentationSettings || {

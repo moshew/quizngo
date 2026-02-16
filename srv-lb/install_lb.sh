@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Kahoot Load Balancer Installation Script
+# QuizNGO Load Balancer Installation Script
 
-echo "🎯 Kahoot Load Balancer Installer"
+echo "🎯 QuizNGO Load Balancer Installer"
 echo "=================================="
 
 # Check Python version

@@ -1,7 +1,7 @@
 {
-  "name": "kahoot-simulator",
+  "name": "quizngo-simulator",
   "version": "1.0.0",
-  "description": "Kahoot participants simulator",
+  "description": "QuizNGO participants simulator",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",

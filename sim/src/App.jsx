@@ -660,8 +660,8 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🎮 Kahoot Simulator</h1>
-        <p>סימולטור משתתפים למשחק Kahoot</p>
+        <h1>🎮 QuizNGO Simulator</h1>
+        <p>סימולטור משתתפים למשחק QuizNGO</p>
       </header>
 
       <div className="game-info">
