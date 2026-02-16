@@ -14,13 +14,28 @@ eventlet.monkey_patch()
 import sys
 import random
 import logging
+import argparse
 from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import requests as http_requests
+import psutil
 
 # Add srv directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
+
+# --- CLI Arguments ---
+parser = argparse.ArgumentParser(description='Kahoot Quiz Server')
+parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
+parser.add_argument('--lb-url', type=str, default=None, help='Load balancer URL (e.g., http://localhost:5000)')
+parser.add_argument('--address', type=str, default=None, help='This server\'s public address (e.g., http://192.168.31.22:5001)')
+cli_args = parser.parse_args()
+
+PORT = cli_args.port
+LB_URL = cli_args.lb_url
+SERVER_ADDRESS = cli_args.address or f'http://localhost:{PORT}'
+lb_server_id = None  # Set after registration with LB
 
 from handlers.websocket_handlers import register_websocket_handlers
 from routes.player_routes import create_player_routes
@@ -177,26 +192,81 @@ def api_handler():
         }), 500
 
 
+# --- Load Balancer Integration ---
+
+def register_with_lb():
+    """Register this server with the load balancer."""
+    global lb_server_id
+    if not LB_URL:
+        return
+    try:
+        resp = http_requests.post(f'{LB_URL}/api/servers/register', json={
+            'address': SERVER_ADDRESS
+        }, timeout=5)
+        data = resp.json()
+        if data.get('status') == 'success':
+            lb_server_id = data['server_id']
+            logging.getLogger(__name__).info(f'Registered with LB as {lb_server_id}')
+            start_heartbeat()
+        else:
+            logging.getLogger(__name__).warning(f'LB registration failed: {data}')
+            eventlet.spawn_after(10, register_with_lb)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f'Failed to register with LB: {e}. Retrying in 10s...')
+        eventlet.spawn_after(10, register_with_lb)
+
+
+def start_heartbeat():
+    """Push stats to LB every 30 seconds."""
+    def heartbeat_worker():
+        while True:
+            eventlet.sleep(30)
+            if not LB_URL or not lb_server_id:
+                break
+            try:
+                stats = {
+                    'active_ws_connections': len(connected_clients),
+                    'cpu_percent': psutil.cpu_percent(),
+                    'memory_mb': round(psutil.Process().memory_info().rss / (1024 * 1024), 1),
+                    'active_games_count': len(game_sessions)
+                }
+                http_requests.post(
+                    f'{LB_URL}/api/servers/{lb_server_id}/heartbeat',
+                    json=stats, timeout=5
+                )
+            except Exception as e:
+                logging.getLogger(__name__).warning(f'Heartbeat failed: {e}')
+    eventlet.spawn(heartbeat_worker)
+
+
+def notify_lb_game_ended(game_pin):
+    """Notify LB that a game PIN is no longer active. Best-effort."""
+    if not LB_URL or not lb_server_id:
+        return
+    try:
+        http_requests.post(
+            f'{LB_URL}/api/servers/{lb_server_id}/game-ended',
+            json={'game_pin': game_pin},
+            timeout=5
+        )
+    except Exception:
+        pass  # Best effort - stale cleanup will handle it
+
+
 if __name__ == '__main__':
-    print("🎯 Starting Kahoot Quiz Server (Python)")
+    print("Starting Kahoot Quiz Server (Python)")
     print("=" * 40)
-    print("Server will run on: http://localhost:5000")
-    print("API Documentation: http://localhost:5000/docs")
-    print("WebSocket URL: ws://localhost:5000")
-    print("")
-    print("Available endpoints:")
-    print("  /?init          - Initialize game")
-    print("  /?next_slide    - Next slide")
-    print("  /?click_action  - Simulate spacebar press")
-    print("")
-    print("WebSocket Events:")
-    print("  participant_update - Participant add/remove")
-    print("  player_answer      - Player answer submission")
-    print("  player_results     - Question results")
-    print("  slide_navigation   - Navigation commands")
-    print("  game_closed        - Game closed notification")
+    print(f"Server will run on: http://localhost:{PORT}")
+    print(f"API Documentation: http://localhost:{PORT}/docs")
+    if LB_URL:
+        print(f"Load Balancer: {LB_URL}")
+        print(f"Server Address: {SERVER_ADDRESS}")
     print("")
     print("Press Ctrl+C to stop the server")
     print("=" * 40)
-    
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+
+    # Register with LB after a short delay (let server start first)
+    if LB_URL:
+        eventlet.spawn_after(2, register_with_lb)
+
+    socketio.run(app, debug=True, host='0.0.0.0', port=PORT)

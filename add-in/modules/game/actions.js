@@ -9,7 +9,7 @@
 
 /* global PowerPoint */
 
-import { API_BASE, registerRoom, createRoom } from '../core/api.js';
+import { API_BASE, getApiBase, registerRoom, createRoom, resolveServerForNewGame, resetServerUrl } from '../core/api.js';
 import { 
     getSlideData,
     getPresentationSettings,
@@ -45,7 +45,11 @@ export async function startPresentationMode() {
 
         console.log('✅ Generated Game PIN:', gamePin);
 
-        // Create room on server (NOT active yet - players can't join until Admin starts)
+        // Step 1: Resolve server via Load Balancer
+        const serverUrl = await resolveServerForNewGame(gamePin);
+        console.log('✅ Server assigned by LB:', serverUrl);
+
+        // Step 2: Create room on the assigned server (NOT active yet - players can't join until Admin starts)
         const createResult = await createRoom(gamePin);
         if (createResult.status !== 'success') {
             showError('⚠️ שגיאה ביצירת חדר: ' + createResult.message);
@@ -311,7 +315,8 @@ export async function endGame() {
     
     disconnectWebSocket();
     setGamePIN(null);
-    
+    resetServerUrl();
+
     console.log('✅ Game ended');
 }
 
@@ -524,7 +529,7 @@ function sendAnswerTimeStarted() {
         };
         
         // Send via REST API instead of WebSocket
-        const url = `${API_BASE}answer_time_started`;
+        const url = `${getApiBase()}answer_time_started`;
         console.log(`📡 Sending to: ${url}`);
         
         fetch(url, {

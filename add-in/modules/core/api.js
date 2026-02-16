@@ -1,10 +1,61 @@
 // API Configuration and Utilities
-export const API_BASE = 'http://localhost:5000/';
 
-// Generic API call function
+// Load Balancer URL - entry point for PIN assignment and resolution
+export const LB_URL = 'http://localhost:5000/';
+
+// Dynamic server URL - set after LB assigns a server for the current game
+let currentServerUrl = null;
+
+/**
+ * Get the current API base URL.
+ * Returns the assigned game server URL if set, otherwise falls back to LB_URL.
+ */
+export function getApiBase() {
+    return currentServerUrl || LB_URL;
+}
+
+/**
+ * Get the current server URL (without trailing slash) for WebSocket connections.
+ */
+export function getServerUrl() {
+    return currentServerUrl ? currentServerUrl.replace(/\/$/, '') : LB_URL.replace(/\/$/, '');
+}
+
+/**
+ * Reset the server URL (e.g., when game ends).
+ */
+export function resetServerUrl() {
+    currentServerUrl = null;
+}
+
+/**
+ * Resolve a server for a new game via the Load Balancer.
+ * Called by the add-in when creating a new game.
+ * @param {string} gamePin - The 6-digit game PIN
+ * @returns {Promise<string>} The assigned server URL
+ */
+export async function resolveServerForNewGame(gamePin) {
+    const response = await fetch(`${LB_URL}api/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game_pin: gamePin })
+    });
+    const data = await response.json();
+    if (data.status === 'success') {
+        currentServerUrl = data.server_url.replace(/\/$/, '') + '/';
+        console.log('Server assigned by LB:', currentServerUrl);
+        return data.server_url;
+    }
+    throw new Error(data.message || 'Failed to resolve server from LB');
+}
+
+// Legacy constant for backward compatibility (now dynamic)
+export const API_BASE = LB_URL;
+
+// Generic API call function (uses dynamic server URL)
 export async function makeApiCall(endpoint, options = {}) {
     try {
-        const url = `${API_BASE}${endpoint}`;
+        const url = `${getApiBase()}${endpoint}`;
         const response = await fetch(url, {
             mode: 'cors',
             ...options

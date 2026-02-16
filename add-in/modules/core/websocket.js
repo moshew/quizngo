@@ -10,9 +10,11 @@
  */
 
 import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './state.js';
+import { getServerUrl } from './api.js';
 
-// WebSocket URL
-export const WEBSOCKET_URL = 'http://localhost:5000';
+// WebSocket URL - now dynamic, resolved via LB
+// Use getServerUrl() instead of this constant
+export const WEBSOCKET_URL = 'http://localhost:5000'; // Legacy fallback
 
 // WebSocket instance
 let socket = null;
@@ -90,13 +92,15 @@ export function connectWebSocket(gamePin, config = {}) {
             throw new Error('Socket.io לא נטען');
         }
         
-        socket = io(WEBSOCKET_URL, {
+        const wsUrl = getServerUrl();
+        console.log('WebSocket connecting to:', wsUrl);
+        socket = io(wsUrl, {
             transports: ['websocket', 'polling'],
             forceNew: true,
             timeout: 5000,
             reconnection: false // We handle reconnection ourselves
         });
-        
+
         // Setup event handlers
         setupSocketEventHandlers(config, gamePin);
         
@@ -182,7 +186,7 @@ function handleReconnection() {
         if (!socket || !socket.connected) {
             // Try to reconnect
             try {
-                socket = io(WEBSOCKET_URL, {
+                socket = io(getServerUrl(), {
                     transports: ['websocket', 'polling'],
                     forceNew: true,
                     timeout: 5000,

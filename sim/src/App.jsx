@@ -37,11 +37,8 @@ const FAKE_PLAYERS = [
   { id: 'p30', name: 'רינה מצליח' }
 ]
 
-// Get server URL from environment or use default
-// For network access, set VITE_SERVER_URL to your machine's IP, e.g., http://192.168.1.100:5000
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'
-const API_BASE = SERVER_URL
-const SOCKET_URL = SERVER_URL
+// Load Balancer URL - used to resolve game PIN to server
+const LB_URL = import.meta.env.VITE_LB_URL || 'http://localhost:5000'
 
 function App() {
   const [connectedPlayers, setConnectedPlayers] = useState(new Set())
@@ -50,6 +47,7 @@ function App() {
   const [gamePin, setGamePin] = useState('') // Changed from gameId to gamePin
   const [loading, setLoading] = useState({})
   const [loadingGamePin, setLoadingGamePin] = useState(false)
+  const [serverUrl, setServerUrl] = useState(null) // Resolved game server URL
   
   // Answer time state
   const [isAnswerTime, setIsAnswerTime] = useState(false) // Are we in answer time?
@@ -60,13 +58,33 @@ function App() {
   // Use ref to track current sockets without causing re-renders
   const playerSocketsRef = useRef({})
 
+  // Resolve server URL via LB when game PIN changes
+  useEffect(() => {
+    if (!gamePin) {
+      setServerUrl(null)
+      return
+    }
+    const cleanPin = gamePin.replace(/-/g, '')
+    if (cleanPin.length !== 6) return
+
+    fetch(`${LB_URL}/api/resolve/${cleanPin}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          setServerUrl(data.server_url)
+          console.log('Server resolved via LB:', data.server_url)
+        }
+      })
+      .catch(err => console.error('Failed to resolve PIN via LB:', err))
+  }, [gamePin])
+
   // Reset simulator when game PIN changes
   useEffect(() => {
     // Only reset if gamePin actually has a value and changes
     // Don't reset on initial mount
     if (!gamePin) return;
-    
-    console.log('🔄 Game PIN changed, resetting simulator')
+
+    console.log('Game PIN changed, resetting simulator')
     
     Object.values(playerSocketsRef.current).forEach(socket => {
       if (socket) socket.disconnect()
@@ -112,7 +130,7 @@ function App() {
       
       // 1. Create WebSocket FIRST to get socketId
       console.log(`🔌 Creating WebSocket for player: ${player.name}`)
-      const playerSocket = io(SOCKET_URL, {
+      const playerSocket = io(serverUrl, {
         transports: ['websocket', 'polling'],
         reconnection: false,
         forceNew: true
@@ -129,7 +147,7 @@ function App() {
       console.log(`✅ WebSocket connected for ${player.name}, socketId: ${playerSocket.id}`)
 
       // 2. Send single REST request with socketId to join AND register to room
-      const response = await fetch(`${API_BASE}/?join_player`, {
+      const response = await fetch(`${serverUrl}/?join_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -306,7 +324,7 @@ function App() {
       let shouldRemoveUID = false;
       
       try {
-        const response = await fetch(`${API_BASE}/?leave_player&uid=${uid}`, {
+        const response = await fetch(`${serverUrl}/?leave_player&uid=${uid}`, {
           method: 'POST'
         });
         
@@ -388,7 +406,7 @@ function App() {
       
       // 1. Create WebSocket FIRST to get socketId
       console.log(`🔌 Creating WebSocket for reconnected player: ${player.name}`)
-      const playerSocket = io(SOCKET_URL, {
+      const playerSocket = io(serverUrl, {
         transports: ['websocket', 'polling'],
         reconnection: false,
         forceNew: true
@@ -404,7 +422,7 @@ function App() {
       console.log(`✅ WebSocket connected for ${player.name}, socketId: ${playerSocket.id}`)
 
       // 2. Send single REST request with socketId to rejoin AND register to room
-      const response = await fetch(`${API_BASE}/rejoin_player`, {
+      const response = await fetch(`${serverUrl}/rejoin_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -559,8 +577,8 @@ function App() {
   const loadGamePin = async () => {
     setLoadingGamePin(true)
     try {
-      console.log('🔄 Loading active games...')
-      const response = await fetch(`${API_BASE}/sim_gamePIN`)
+      console.log('Loading active games from LB...')
+      const response = await fetch(`${LB_URL}/api/admin/pins`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch active games')
@@ -569,10 +587,10 @@ function App() {
       const data = await response.json()
       console.log('📥 Received games:', data)
       
-      if (data.status === 'success' && data.games && data.games.length > 0) {
+      if (data.status === 'success' && data.pins && data.pins.length > 0) {
         // קח את ה-PIN הראשון
-        const firstGame = data.games[0]
-        const pin = firstGame.gamePin
+        const firstGame = data.pins[0]
+        const pin = firstGame.game_pin
         
         // עיצוב עם קו מפריד
         const formattedPin = `${pin.slice(0, 3)}-${pin.slice(3)}`
@@ -612,7 +630,7 @@ function App() {
     console.log(`   Using userId: ${uid}`)
     
     // Send answer to server via REST API (only userId needed, gamePin already stored in server)
-    fetch(`${SERVER_URL}/submit_answer`, {
+    fetch(`${serverUrl}/submit_answer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -726,7 +744,7 @@ function App() {
         {FAKE_PLAYERS.map(player => {
           const isConnected = connectedPlayers.has(player.id)
           const isLoading = loading[player.id]
-          const isDisabled = !gamePin || gamePin.replace(/-/g, '').length !== 6
+          const isDisabled = !gamePin || gamePin.replace(/-/g, '').length !== 6 || !serverUrl
           const playerAnswer = playerAnswers[player.id]
           
           // Get results by userId (not playerId)
@@ -936,12 +954,7 @@ function App() {
 
       <footer className="footer">
         <p>WebSockets פעילים: {Object.keys(playerSockets).length}</p>
-        <p>Server: {SERVER_URL}</p>
-        {SERVER_URL.includes('localhost') && (
-          <p style={{ color: '#fbbf24', marginTop: '10px' }}>
-            ⚠️ שרת מקומי - לגישה ממחשבים אחרים, עדכן את VITE_SERVER_URL בקובץ .env
-          </p>
-        )}
+        <p>LB: {LB_URL} {serverUrl && `| Server: ${serverUrl}`}</p>
       </footer>
     </div>
   )

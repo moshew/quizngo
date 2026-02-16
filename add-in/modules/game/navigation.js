@@ -579,9 +579,8 @@ async function notifyGameComplete() {
         
         console.log(`📤 Notifying server: game complete for PIN ${gamePin}`);
         
-        // Import API_BASE if needed
-        const API_BASE = 'http://localhost:5000/';
-        const url = `${API_BASE}?close_game&game_pin=${gamePin}`;
+        const { getApiBase } = await import('../core/api.js');
+        const url = `${getApiBase()}?close_game&game_pin=${gamePin}`;
         
         console.log(`📡 Sending request to: ${url}`);
         

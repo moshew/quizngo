@@ -9,7 +9,7 @@ import GameOverScreen from './screens/GameOverScreen'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import { applyDirection } from './i18n'
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'
+const LB_URL = import.meta.env.VITE_LB_URL || 'http://localhost:5000'
 
 // Screens: pin -> name -> lobby -> answer -> result -> (answer again) -> gameOver
 const SCREENS = {
@@ -43,11 +43,27 @@ function App() {
   const [language, setLanguage] = useState(urlLang || 'en')
   const [answerTimeRemaining, setAnswerTimeRemaining] = useState(null)
   const [gameStarted, setGameStarted] = useState(false)
+  const [serverUrl, setServerUrl] = useState(null)
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
   const timerRef = useRef(null)
   const uidRef = useRef(null)
+
+  // Resolve server URL via LB when PIN comes from URL
+  useEffect(() => {
+    if (urlPin && !serverUrl) {
+      const cleanPin = urlPin.replace(/-/g, '')
+      fetch(`${LB_URL}/api/resolve/${cleanPin}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            setServerUrl(data.server_url)
+          }
+        })
+        .catch(err => console.error('Failed to resolve PIN from URL:', err))
+    }
+  }, [urlPin, serverUrl])
 
   // Apply direction when language changes
   useEffect(() => {
@@ -141,8 +157,8 @@ function App() {
     try {
       const cleanPin = gamePin.replace(/-/g, '')
 
-      // Create WebSocket first
-      const socket = io(SERVER_URL, {
+      // Create WebSocket to the resolved game server
+      const socket = io(serverUrl, {
         transports: ['websocket', 'polling'],
         reconnection: false,
         forceNew: true
@@ -167,7 +183,7 @@ function App() {
       if (storedUid) {
         joinBody.uid = storedUid
       }
-      const response = await fetch(`${SERVER_URL}/?join_player`, {
+      const response = await fetch(`${serverUrl}/?join_player`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(joinBody)
@@ -240,16 +256,28 @@ function App() {
 
     try {
       const cleanPin = gamePin.replace(/-/g, '')
-      const response = await fetch(`${SERVER_URL}/?check_active_game&game_pin=${cleanPin}`)
+
+      // Step 1: Resolve PIN via Load Balancer to get the game server URL
+      const lbResponse = await fetch(`${LB_URL}/api/resolve/${cleanPin}`)
+      const lbData = await lbResponse.json()
+
+      if (!lbResponse.ok || lbData.status !== 'success') {
+        showPinError(language === 'he' ? 'לא נמצא חדר עם PIN זה' : 'No room found with this PIN')
+        return
+      }
+
+      const resolvedServerUrl = lbData.server_url
+      setServerUrl(resolvedServerUrl)
+
+      // Step 2: Check game status on the actual game server
+      const response = await fetch(`${resolvedServerUrl}/?check_active_game&game_pin=${cleanPin}`)
       const data = await response.json()
 
       if (response.ok && data.status === 'success' && data.active) {
-        // Check if game has been started by admin (players can only join after start)
         if (!data.gameStarted) {
           showPinError(language === 'he' ? 'המשחק עדיין לא התחיל, נסו שוב בעוד רגע' : 'Game has not started yet, try again in a moment')
         } else {
           setError('')
-          // Set language from server if available
           if (data.language) {
             setLanguage(data.language)
           }
@@ -259,7 +287,7 @@ function App() {
         showPinError(language === 'he' ? 'לא נמצא חדר עם PIN זה' : 'No room found with this PIN')
       }
     } catch (err) {
-      console.error('❌ PIN validation error:', err)
+      console.error('PIN validation error:', err)
       showPinError(language === 'he' ? 'שגיאה בבדיקת החדר, נסו שוב' : 'Error checking room, try again')
     } finally {
       setCheckingPin(false)
@@ -274,7 +302,7 @@ function App() {
     setSelectedAnswer(answerIndex)
 
     try {
-      const response = await fetch(`${SERVER_URL}/submit_answer`, {
+      const response = await fetch(`${serverUrl}/submit_answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -306,6 +334,7 @@ function App() {
     }
     setScreen(SCREENS.PIN)
     setGamePin('')
+    setServerUrl(null)
     setPlayerName('')
     setPlayerIcon('')
     setUid(null)

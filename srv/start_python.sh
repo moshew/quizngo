@@ -28,12 +28,12 @@ fi
 # Start the server
 echo ""
 echo "🚀 Starting server..."
-echo "📍 Server will be available at: http://localhost:5000"
-echo "📖 API Documentation: http://localhost:5000"
+echo "Server will be available at: http://localhost:5001"
+echo "API Documentation: http://localhost:5001"
 echo ""
 echo "Press Ctrl+C to stop the server"
 echo "================================"
 echo ""
 
-python3 server.py
+python3 server.py --port 5001 --lb-url http://localhost:5000 --address http://localhost:5001
 

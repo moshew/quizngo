@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 
-// Server configuration
-// Get server URL from environment or use default
-// For network access, set VITE_SERVER_URL to your machine's IP, e.g., http://192.168.1.100:5000
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://192.168.31.22:5000'
+// Load Balancer URL - used to resolve game PIN to server
+const LB_URL = import.meta.env.VITE_LB_URL || 'http://localhost:5000'
 
 const formatPin = (pin = '') => (pin.length === 6 ? `${pin.slice(0, 3)}-${pin.slice(3)}` : pin)
 const sanitizePin = (value = '') => value.replace(/[^0-9]/g, '').slice(0, 6)
@@ -17,6 +15,7 @@ function App() {
   const [isStartingGame, setIsStartingGame] = useState(false)
   const [isCheckingPin, setIsCheckingPin] = useState(false)
   const [isBootstrapping, setIsBootstrapping] = useState(true)
+  const [serverUrl, setServerUrl] = useState(null)
   const hasInitialized = useRef(false)
 
   // Check if an active game exists and if it's already started
@@ -26,7 +25,25 @@ function App() {
 
     try {
       console.log('Checking for active game with PIN:', pin)
-      const url = `${SERVER_URL}/?check_active_game&game_pin=${pin}`
+
+      // Step 1: Resolve PIN via Load Balancer
+      const lbResponse = await fetch(`${LB_URL}/api/resolve/${pin}`)
+      const lbData = await lbResponse.json()
+
+      if (!lbResponse.ok || lbData.status !== 'success') {
+        console.log('No active game found for PIN:', pin)
+        setGamePin(null)
+        setGameActive(true)
+        setGameStarted(false)
+        setPinError('')
+        return false
+      }
+
+      const resolvedServerUrl = lbData.server_url
+      setServerUrl(resolvedServerUrl)
+
+      // Step 2: Check game status on the actual game server
+      const url = `${resolvedServerUrl}/?check_active_game&game_pin=${pin}`
       const response = await fetch(url)
       const data = await response.json()
 
@@ -117,7 +134,7 @@ function App() {
       setIsStartingGame(true)
       console.log('Starting game with PIN:', gamePin)
 
-      const url = `${SERVER_URL}/?start_game&game_pin=${gamePin}`
+      const url = `${serverUrl}/?start_game&game_pin=${gamePin}`
       console.log('Sending to:', url)
       const response = await fetch(url)
       const data = await response.json()
@@ -148,7 +165,7 @@ function App() {
 
     try {
       // Send game PIN with the request
-      const url = `${SERVER_URL}/?next_slide&game_pin=${gamePin}`
+      const url = `${serverUrl}/?next_slide&game_pin=${gamePin}`
       console.log('Sending to:', url)
       const response = await fetch(url)
       const data = await response.json()

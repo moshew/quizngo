@@ -5,7 +5,7 @@
 
 /* global PowerPoint, Office */
 
-import { API_BASE } from '../core/api.js';
+import { getApiBase } from '../core/api.js';
 import { showError } from '../ui/manager.js';
 
 /**
@@ -140,7 +140,7 @@ export async function updateQrCodeInSlides(gamePin) {
         // Build QR code URL for PLAYERS (port 8080)
         // Remove any dashes from game PIN for URL
         const cleanPin = gamePin.replace(/-/g, '');
-        const qrCodeUrl = `${API_BASE}qr-code-player/${cleanPin}`;
+        const qrCodeUrl = `${getApiBase()}qr-code-player/${cleanPin}`;
         
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;

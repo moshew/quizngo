@@ -7,7 +7,7 @@
  * - Admin accesses via /:gamePin URL
  */
 
-import { API_BASE } from '../core/api.js';
+import { getApiBase } from '../core/api.js';
 import { 
     getGamePIN,
     getCurrentSlideNumber
@@ -187,7 +187,7 @@ export async function showAdminConnectionScreen(gamePin) {
     }
 
     // Load QR code from server
-    const qrCodeUrl = `${API_BASE}qr-code/${gamePin}?type=admin`;
+    const qrCodeUrl = `${getApiBase()}qr-code/${gamePin}?type=admin`;
     const errorLoadingQR = t('startScreen.errorLoadingQR', 'שגיאה בטעינת QR code');
 
     const qrArea = document.getElementById('adminOverlayQrArea');
