@@ -160,7 +160,7 @@ export async function showAdminConnectionScreen(gamePin) {
     if (pinEl) pinEl.textContent = formattedPin;
 
     // Set admin URL (configurable via window.QUIZNGO_ADMIN_HOST)
-    const adminHost = (typeof window !== 'undefined' && window.QUIZNGO_ADMIN_HOST) || 'http://192.168.31.22:3002';
+    const adminHost = (typeof window !== 'undefined' && window.QUIZNGO_ADMIN_HOST) || 'http://localhost:3002';
     const adminUrl = `${adminHost}/${gamePin}`;
     const urlEl = document.getElementById('adminOverlayUrl');
     if (urlEl) urlEl.value = adminUrl;

@@ -62,14 +62,14 @@ function App() {
           } else {
             // Failed to resolve - show error and go back to PIN screen
             console.error('Failed to resolve PIN:', data.message)
-            setError(language === 'he' ? 'לא נמצא משחק עם PIN זה' : 'Game not found with this PIN')
+            setPinError(language === 'he' ? 'לא נמצא משחק עם PIN זה' : 'Game not found with this PIN')
             setScreen(SCREENS.PIN)
           }
         })
         .catch(err => {
           // Network error - show error and go back to PIN screen
           console.error('Failed to resolve PIN from URL:', err)
-          setError(language === 'he' ? 'שגיאת רשת - לא ניתן למצוא את המשחק' : 'Network error - cannot find game')
+          setPinError(language === 'he' ? 'שגיאת רשת - לא ניתן למצוא את המשחק' : 'Network error - cannot find game')
           setScreen(SCREENS.PIN)
         })
     }
@@ -170,7 +170,7 @@ function App() {
       // Guard: ensure serverUrl is resolved before connecting
       if (!serverUrl) {
         console.error('❌ Cannot join: serverUrl not resolved yet')
-        setError(t('error_server_not_ready'))
+        setError(language === 'he' ? 'השרת עדיין לא מוכן, נסו שוב' : 'Server not ready, please try again')
         setLoading(false)
         return
       }

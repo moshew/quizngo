@@ -10,6 +10,83 @@ import { getVisibleParticipantsData } from '../core/websocket.js';
 import { hideParticipants, getHiddenParticipantIds } from '../core/state.js';
 
 /**
+ * Reset all participant-related shapes in slides:
+ * - Deletes quizngo-participant-item shapes (icons/names from previous game)
+ * - Deletes quizngo-participant-pill shapes (pills from previous game)
+ * - Resets quizngo-participants-area text to waiting state
+ * - Resets quizngo-content-type=participants-list container text
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
+ */
+export async function resetParticipantShapesInSlides() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
+
+            // Batch 2: Load all tags for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                }
+            }
+            await context.sync();
+
+            // Process: Find shapes to delete or reset
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    if (shape.tags && shape.tags.items) {
+                        for (const tag of shape.tags.items) {
+                            const key = tag.key.toLowerCase();
+
+                            // Delete participant items (icons/names)
+                            if (key === 'quizngo-participant-item' && tag.value === 'true') {
+                                try { shape.delete(); } catch (e) { /* ignore */ }
+                                break;
+                            }
+
+                            // Delete participant pills
+                            if (key === 'quizngo-participant-pill' && tag.value === 'true') {
+                                try { shape.delete(); } catch (e) { /* ignore */ }
+                                break;
+                            }
+
+                            // Reset participants area text
+                            if (key === 'quizngo-participants-area' && tag.value === 'true') {
+                                try {
+                                    shape.textFrame.textRange.text = 'מחכים למשתתפים...';
+                                } catch (e) { /* ignore */ }
+                                break;
+                            }
+
+                            // Reset participants list container text
+                            if (key === 'quizngo-content-type' && tag.value.toLowerCase() === 'participants-list') {
+                                try {
+                                    shape.textFrame.textRange.text = 'מחכים למשתתפים...';
+                                } catch (e) { /* ignore */ }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Single sync for all updates/deletions
+            await context.sync();
+        });
+    } catch (error) {
+        console.error('❌ Error resetting participant shapes in slides:', error);
+    }
+}
+
+/**
  * Reset participants number in all slides with the tag
  * OPTIMIZED: Batch loading with minimal context.sync() calls
  */

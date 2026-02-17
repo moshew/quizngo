@@ -980,24 +980,8 @@
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <!-- Load config.js if it exists (optional user configuration) -->
-    <script>
-        // Try to load config.js if it exists
-        fetch('config.js')
-            .then(response => {
-                if (response.ok) {
-                    // config.js exists, load it
-                    const script = document.createElement('script');
-                    script.src = 'config.js';
-                    script.type = 'module';
-                    document.head.appendChild(script);
-                }
-            })
-            .catch(() => {
-                // config.js doesn't exist or failed to load - that's fine, we'll use defaults
-                console.log('config.js not found - using default configuration');
-            });
-    </script>
+    <!-- Load config.js synchronously before taskpane.js so window.* config is available at import time -->
+    <script src="config.js" onerror="console.log('config.js not found - using default configuration')"></script>
     <script src="taskpane.js" type="module"></script>
 </body>
 </html>

@@ -9,6 +9,56 @@ import { getApiBase } from '../core/api.js';
 import { showError } from '../ui/manager.js';
 
 /**
+ * Reset Game ID in all slides to placeholder
+ * OPTIMIZED: Batch loading with minimal context.sync() calls
+ */
+export async function resetGameIdInSlides() {
+    try {
+        await PowerPoint.run(async (context) => {
+            const presentation = context.presentation;
+            const slides = presentation.slides;
+            slides.load('items');
+            await context.sync();
+
+            // Batch 1: Load all shapes for all slides
+            for (const slide of slides.items) {
+                slide.shapes.load('items');
+            }
+            await context.sync();
+
+            // Batch 2: Load all tags for all shapes
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    shape.tags.load('items/key, items/value');
+                }
+            }
+            await context.sync();
+
+            // Process: Find shapes with the tag and update them
+            for (const slide of slides.items) {
+                for (const shape of slide.shapes.items) {
+                    if (shape.tags && shape.tags.items) {
+                        for (const tag of shape.tags.items) {
+                            if (tag.key.toLowerCase() === 'quizngo-game-id' && tag.value === 'true') {
+                                try {
+                                    shape.textFrame.textRange.text = '---';
+                                } catch (e) { /* ignore shapes without textFrame */ }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Single sync for all updates
+            await context.sync();
+        });
+    } catch (error) {
+        console.error('❌ Error resetting game ID in slides:', error);
+    }
+}
+
+/**
  * Update Game ID in all slides with the tag
  */
 export async function updateGameIdInSlides(gamePin) {

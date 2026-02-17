@@ -70,25 +70,35 @@ export async function startPresentationMode() {
         // Reset all textboxes in the presentation (but DON'T navigate to any slide)
         // PIN and QR will be updated only after Admin starts the game
         try {
-            const { 
+            const {
                 resetAnswersDistribution,
                 resetLeaderboard
             } = await import('../elements/answers_analysis.js');
-            const { 
+            const {
                 updateAllQuestionTimeElements,
                 updateAllRespondentsCountElements
             } = await import('../elements/question_timer.js');
-            const { 
-                resetParticipantsNumInSlides
+            const {
+                resetParticipantsNumInSlides,
+                resetParticipantShapesInSlides
             } = await import('../elements/participants_management.js');
+            const {
+                resetGameIdInSlides
+            } = await import('../elements/game_management.js');
+            const {
+                resetHiddenParticipants
+            } = await import('../core/state.js');
 
             const settings = getPresentationSettings();
             const initialTime = settings?.questionWaitTime || 30;
             await updateAllQuestionTimeElements(initialTime);
             await updateAllRespondentsCountElements(0);
             await resetParticipantsNumInSlides();
+            await resetParticipantShapesInSlides();
+            await resetGameIdInSlides();
             await resetAnswersDistribution();
             await resetLeaderboard();
+            resetHiddenParticipants();
             console.log('✅ All textboxes reset');
         } catch (resetError) {
             console.error('❌ Error resetting textboxes:', resetError);
@@ -123,10 +133,11 @@ async function connectWebSocketForGame(gamePin) {
         simulateClickInPowerPoint,
         resetAnimationState
     } = await import('./navigation.js');
-    const { 
+    const {
         updateParticipantsNumInSlides,
         updateParticipantsListInSlides,
-        resetParticipantsNumInSlides
+        resetParticipantsNumInSlides,
+        resetParticipantShapesInSlides
     } = await import('../elements/participants_management.js');
     const { 
         resetAnswersDistribution,
@@ -136,14 +147,16 @@ async function connectWebSocketForGame(gamePin) {
         updateAllQuestionTimeElements,
         updateAllRespondentsCountElements
     } = await import('../elements/question_timer.js');
-    const { 
+    const {
         updateGameIdInSlides,
-        updateQrCodeInSlides
+        updateQrCodeInSlides,
+        resetGameIdInSlides
     } = await import('../elements/game_management.js');
-    const { 
+    const {
         setCurrentUsers,
         triggerRefreshSlideList,
-        setSocket
+        setSocket,
+        resetHiddenParticipants
     } = await import('../core/state.js');
     const { t } = await import('../i18n/index.js');
     
@@ -246,12 +259,15 @@ async function connectWebSocketForGame(gamePin) {
             // game_started, so resetting would discard all lobby participants.
             try {
                 resetAnimationState();
+                resetHiddenParticipants();
 
                 const settings = getPresentationSettings();
                 const initialTime = settings?.questionWaitTime || 30;
                 await updateAllQuestionTimeElements(initialTime);
                 await updateAllRespondentsCountElements(0);
                 await resetParticipantsNumInSlides();
+                await resetParticipantShapesInSlides();
+                await resetGameIdInSlides();
                 await updateParticipantsListInSlides();
                 await resetAnswersDistribution();
                 await resetLeaderboard();
