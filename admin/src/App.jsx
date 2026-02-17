@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 
 // Load Balancer URL - used to resolve game PIN to server
-const LB_URL = import.meta.env.VITE_LB_URL || 'http://localhost:5000'
+const LB_URL = import.meta.env.VITE_LB_URL || `http://${window.location.hostname}:5000`
 
 const formatPin = (pin = '') => (pin.length === 6 ? `${pin.slice(0, 3)}-${pin.slice(3)}` : pin)
 const sanitizePin = (value = '') => value.replace(/[^0-9]/g, '').slice(0, 6)

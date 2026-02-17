@@ -15,7 +15,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, send_file
 import qrcode
 
 
-def create_info_routes(game, admin_url='http://localhost:3002', game_url='http://localhost:8080'):
+def create_info_routes(game, admin_url=None, game_url=None):
     """
     Create info routes blueprint.
 
@@ -251,7 +251,7 @@ def create_info_routes(game, admin_url='http://localhost:3002', game_url='http:/
                 let participantsList = [];
                 
                 // Initialize Socket.IO connection
-                const socket = io('http://localhost:5000');
+                const socket = io(window.location.origin);
                 
                 socket.on('connect', function() {
                     console.log('🌐 Widget connected to server');
@@ -349,7 +349,7 @@ def create_info_routes(game, admin_url='http://localhost:3002', game_url='http:/
                 <strong>🐍 Python Server</strong><br>
                 זהו שרת פייתון לבדיקה מקומית.<br>
                 הפעל עם: <code>python server.py</code><br>
-                השרת רץ על: <code>http://localhost:5000</code>
+                השרת רץ על: <code>http://{request.host}</code>
             </div>
             
             <div class="status">

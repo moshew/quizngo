@@ -3,6 +3,7 @@
 
 import sys
 import logging
+import ssl
 from pathlib import Path
 
 from flask import Flask
@@ -77,6 +78,9 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='QuizNGO Load Balancer')
     parser.add_argument('--port', type=int, default=PORT, help='Port to run on (default: 5000)')
+    parser.add_argument('--ssl', action='store_true', default=False, help='Enable HTTPS (default: disabled)')
+    parser.add_argument('--no-ssl', dest='ssl', action='store_false', help='Disable HTTPS (default)')
+    parser.add_argument('--cert-dir', type=str, default=None, help='Directory containing localhost.crt and localhost.key (default: ~/.office-addin-dev-certs)')
     args = parser.parse_args()
     PORT = args.port
 
@@ -84,5 +88,16 @@ if __name__ == '__main__':
     start_health_checker(server_registry, interval=60)
     start_stale_cleanup(server_registry, pin_registry, interval=600)
 
-    logger.info(f"Starting QuizNGO Load Balancer on port {PORT}")
-    app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
+    cert_dir = Path(args.cert_dir) if args.cert_dir else Path.home() / '.office-addin-dev-certs'
+    protocol = 'https' if args.ssl else 'http'
+    logger.info(f"Starting QuizNGO Load Balancer on {protocol}://0.0.0.0:{PORT} (SSL: {'enabled' if args.ssl else 'disabled'})")
+
+    if args.ssl:
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_ctx.load_cert_chain(
+            certfile=str(cert_dir / 'localhost.crt'),
+            keyfile=str(cert_dir / 'localhost.key')
+        )
+        app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True, ssl_context=ssl_ctx)
+    else:
+        app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)

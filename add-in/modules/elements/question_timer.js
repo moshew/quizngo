@@ -51,13 +51,13 @@ export async function addQuestionTime() {
                 }
                 
                 await context.sync();
-                console.log('✅ Question time added to slide');
-                showError('✅ זמן שאלה נוסף לשקף!');
+                console.log('âœ… Question time added to slide');
+                showError('âœ… ×–×ž×Ÿ ×©××œ×” × ×•×¡×£ ×œ×©×§×£!');
             }
         });
     } catch (error) {
         console.error('Error adding question time:', error);
-        showError('שגיאה בהוספת זמן שאלה');
+        showError('×©×’×™××” ×‘×”×•×¡×¤×ª ×–×ž×Ÿ ×©××œ×”');
     }
 }
 
@@ -105,13 +105,13 @@ export async function addRespondentsCount() {
                 }
                 
                 await context.sync();
-                console.log('✅ Respondents count added to slide');
-                showError('✅ מספר עונים נוסף לשקף!');
+                console.log('âœ… Respondents count added to slide');
+                showError('âœ… ×ž×¡×¤×¨ ×¢×•× ×™× × ×•×¡×£ ×œ×©×§×£!');
             }
         });
     } catch (error) {
         console.error('Error adding respondents count:', error);
-        showError('שגיאה בהוספת מספר עונים');
+        showError('×©×’×™××” ×‘×”×•×¡×¤×ª ×ž×¡×¤×¨ ×¢×•× ×™×');
     }
 }
 
@@ -169,7 +169,7 @@ export async function updateAllQuestionTimeElements(timeValue) {
             await context.sync();
         });
     } catch (error) {
-        console.error('❌ Error resetting question time elements:', error);
+        console.error('âŒ Error resetting question time elements:', error);
         throw error;
     }
 }
@@ -228,176 +228,25 @@ export async function updateAllRespondentsCountElements(count) {
             await context.sync();
         });
     } catch (error) {
-        console.error('❌ Error resetting respondents count elements:', error);
+        console.error('âŒ Error resetting respondents count elements:', error);
         throw error;
     }
 }
 
 /**
- * Update quizngo-question-time in CURRENT slide only
- * Used during timer countdown
- * @param {number} timeValue - Time value to display
- * @param {number} [slideNumber] - Optional: specific slide number to update (1-based). If not provided, uses selected slide.
+ * Backward-compatible wrapper.
+ * Game runtime updates all quizngo-question-time instances across all slides.
  */
-export async function updateCurrentSlideQuestionTime(timeValue, slideNumber = null) {
-    try {
-        await PowerPoint.run(async (context) => {
-            let currentSlide;
-            
-            if (slideNumber !== null) {
-                // Use specific slide number (for presentation mode)
-                const presentation = context.presentation;
-                const slides = presentation.slides;
-                slides.load('items');
-                await context.sync();
-                
-                const slideIndex = slideNumber - 1; // Convert to 0-based index
-                if (slideIndex >= 0 && slideIndex < slides.items.length) {
-                    currentSlide = slides.items[slideIndex];
-                } else {
-                    console.error(`❌ Invalid slide number: ${slideNumber}`);
-                    return;
-                }
-            } else {
-                // Use selected slide (for edit mode)
-                const slides = context.presentation.getSelectedSlides();
-                slides.load('items');
-                await context.sync();
-                
-                if (slides.items.length === 0) {
-                    console.log('⚠️ No slide selected');
-                    return;
-                }
-                
-                currentSlide = slides.items[0];
-            }
-            
-            const shapes = currentSlide.shapes;
-            shapes.load(['items']);
-            await context.sync();
-            
-            let updatedCount = 0;
-            
-            // Search only current slide for quizngo-question-time tags
-            for (let j = 0; j < shapes.items.length; j++) {
-                const shape = shapes.items[j];
-                const tags = shape.tags;
-                tags.load(['items']);
-                await context.sync();
-                
-                // Check if this shape has quizngo-question-time tag
-                let hasQuestionTimeTag = false;
-                for (let k = 0; k < tags.items.length; k++) {
-                    const tag = tags.items[k];
-                    tag.load(['key', 'value']);
-                    await context.sync();
-                    
-                    if (tag.key.toLowerCase() === 'quizngo-question-time' && tag.value === 'true') {
-                        hasQuestionTimeTag = true;
-                        break;
-                    }
-                }
-                
-                if (hasQuestionTimeTag) {
-                    // Update the text
-                    shape.load(['textFrame']);
-                    await context.sync();
-                    
-                    const textRange = shape.textFrame.textRange;
-                    textRange.text = timeValue.toString();
-                    await context.sync();
-                    
-                    updatedCount++;
-                }
-            }
-        });
-    } catch (error) {
-        console.error('❌ Error updating current slide timer:', error);
-        throw error;
-    }
+export async function updateCurrentSlideQuestionTime(timeValue, _slideNumber = null) {
+    // Keep API for backward compatibility, but update all tagged instances.
+    return updateAllQuestionTimeElements(timeValue);
 }
 
 /**
- * Update "מספר עונים" (respondents count) in current slide
- * Similar to updateCurrentSlideQuestionTime but for quizngo-respondents-count tag
- * @param {number} count - Number of respondents who answered
- * @param {number} slideNumber - Optional slide number (for presentation mode)
+ * Backward-compatible wrapper.
+ * Game runtime updates all quizngo-respondents-count instances across all slides.
  */
-export async function updateCurrentSlideRespondentsCount(count, slideNumber = null) {
-    try {
-        await PowerPoint.run(async (context) => {
-            let currentSlide;
-            
-            if (slideNumber !== null) {
-                // Use specific slide number (for presentation mode)
-                const presentation = context.presentation;
-                const slides = presentation.slides;
-                slides.load('items');
-                await context.sync();
-                
-                const slideIndex = slideNumber - 1; // Convert to 0-based index
-                if (slideIndex >= 0 && slideIndex < slides.items.length) {
-                    currentSlide = slides.items[slideIndex];
-                } else {
-                    console.error(`❌ Invalid slide number: ${slideNumber}`);
-                    return;
-                }
-            } else {
-                // Use selected slide (for edit mode)
-                const slides = context.presentation.getSelectedSlides();
-                slides.load('items');
-                await context.sync();
-                
-                if (slides.items.length === 0) {
-                    console.log('⚠️ No slide selected');
-                    return;
-                }
-                
-                currentSlide = slides.items[0];
-            }
-            
-            const shapes = currentSlide.shapes;
-            shapes.load(['items']);
-            await context.sync();
-            
-            let updatedCount = 0;
-            
-            // Search only current slide for quizngo-respondents-count tags
-            for (let j = 0; j < shapes.items.length; j++) {
-                const shape = shapes.items[j];
-                const tags = shape.tags;
-                tags.load(['items']);
-                await context.sync();
-                
-                // Check if this shape has quizngo-respondents-count tag
-                let hasRespondentsTag = false;
-                for (let k = 0; k < tags.items.length; k++) {
-                    const tag = tags.items[k];
-                    tag.load(['key', 'value']);
-                    await context.sync();
-                    
-                    if (tag.key.toLowerCase() === 'quizngo-respondents-count' && tag.value === 'true') {
-                        hasRespondentsTag = true;
-                        break;
-                    }
-                }
-                
-                if (hasRespondentsTag) {
-                    // Update the text
-                    shape.load(['textFrame']);
-                    await context.sync();
-                    
-                    const textRange = shape.textFrame.textRange;
-                    textRange.text = count.toString();
-                    await context.sync();
-                    
-                    updatedCount++;
-                    console.log(`✅ Updated respondents count to ${count} in current slide`);
-                }
-            }
-        });
-    } catch (error) {
-        console.error('❌ Error updating respondents count:', error);
-        throw error;
-    }
+export async function updateCurrentSlideRespondentsCount(count, _slideNumber = null) {
+    // Keep API for backward compatibility, but update all tagged instances.
+    return updateAllRespondentsCountElements(count);
 }

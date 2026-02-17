@@ -19,27 +19,64 @@ from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import socket
 import requests as http_requests
+import urllib3
 import psutil
+
+# Suppress SSL warnings for self-signed cert (internal srv→LB communication)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Add srv directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
+
+def get_local_ip():
+    """Detect the machine's LAN IP address by connecting to an external target.
+    Falls back to localhost if detection fails."""
+    try:
+        # Connect to a public DNS address (no data is actually sent)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(1)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return 'localhost'
+
+
 # --- CLI Arguments ---
 parser = argparse.ArgumentParser(description='QuizNGO Quiz Server')
 parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
-parser.add_argument('--lb-url', type=str, required=True, help='Load balancer URL (e.g., http://localhost:5000) - REQUIRED')
+parser.add_argument('--lb-url', type=str, default=None, help='Load balancer URL (e.g., http://192.168.31.22:5000). Auto-detects LAN IP if not provided.')
 parser.add_argument('--address', type=str, default=None, help='This server\'s public address (e.g., http://192.168.31.22:5001)')
 parser.add_argument('--admin-url', type=str, default=None, help='Admin client base URL (e.g., http://192.168.31.22:3002)')
 parser.add_argument('--game-url', type=str, default=None, help='Game client base URL (e.g., http://192.168.31.22:8080)')
+parser.add_argument('--ssl', action='store_true', default=False, help='Enable HTTPS (default: disabled)')
+parser.add_argument('--no-ssl', dest='ssl', action='store_false', help='Disable HTTPS (default)')
+parser.add_argument('--cert-dir', type=str, default=None, help='Directory containing localhost.crt and localhost.key (default: ~/.office-addin-dev-certs)')
 cli_args = parser.parse_args()
 
 PORT = cli_args.port
-LB_URL = cli_args.lb_url
-SERVER_ADDRESS = cli_args.address or f'http://localhost:{PORT}'
-ADMIN_URL = cli_args.admin_url or 'http://localhost:3002'
-GAME_URL = cli_args.game_url or 'http://localhost:8080'
+LOCAL_IP = get_local_ip()
+USE_SSL = cli_args.ssl
+CERT_DIR = Path(cli_args.cert_dir) if cli_args.cert_dir else Path.home() / '.office-addin-dev-certs'
+PROTOCOL = 'https' if USE_SSL else 'http'
+LB_URL = cli_args.lb_url or f'{PROTOCOL}://localhost:5000'
+SERVER_ADDRESS = cli_args.address or f'{PROTOCOL}://{LOCAL_IP}:{PORT}'
+ADMIN_URL = cli_args.admin_url or f'http://{LOCAL_IP}:3002'
+GAME_URL = cli_args.game_url or f'http://{LOCAL_IP}:8080'
 lb_server_id = None  # Set after registration with LB
+
+# Prevent protocol mismatch between announced server address and actual listener mode.
+if cli_args.address:
+    if USE_SSL and cli_args.address.startswith('http://'):
+        SERVER_ADDRESS = cli_args.address.replace('http://', 'https://', 1)
+        print(f"WARNING: --address used http:// while SSL is enabled. Using {SERVER_ADDRESS}")
+    elif not USE_SSL and cli_args.address.startswith('https://'):
+        SERVER_ADDRESS = cli_args.address.replace('https://', 'http://', 1)
+        print(f"WARNING: --address used https:// while SSL is disabled. Using {SERVER_ADDRESS}")
 
 from handlers.websocket_handlers import register_websocket_handlers
 from routes.player_routes import create_player_routes
@@ -206,7 +243,7 @@ def register_with_lb():
         logger.info(f'Attempting to register with Load Balancer at {LB_URL}...')
         resp = http_requests.post(f'{LB_URL}/api/servers/register', json={
             'address': SERVER_ADDRESS
-        }, timeout=5)
+        }, timeout=5, verify=False)
         data = resp.json()
         if data.get('status') == 'success':
             lb_server_id = data['server_id']
@@ -248,7 +285,7 @@ def start_heartbeat():
                 }
                 http_requests.post(
                     f'{LB_URL}/api/servers/{lb_server_id}/heartbeat',
-                    json=stats, timeout=5
+                    json=stats, timeout=5, verify=False
                 )
             except Exception as e:
                 logging.getLogger(__name__).warning(f'Heartbeat failed: {e}')
@@ -263,7 +300,7 @@ def notify_lb_game_ended(game_pin):
         http_requests.post(
             f'{LB_URL}/api/servers/{lb_server_id}/game-ended',
             json={'game_pin': game_pin},
-            timeout=5
+            timeout=5, verify=False
         )
     except Exception:
         pass  # Best effort - stale cleanup will handle it
@@ -272,10 +309,11 @@ def notify_lb_game_ended(game_pin):
 if __name__ == '__main__':
     print("Starting QuizNGO Quiz Server (Python)")
     print("=" * 40)
-    print(f"Server will run on: http://localhost:{PORT}")
-    print(f"API Documentation: http://localhost:{PORT}/docs")
+    print(f"Server will run on: {SERVER_ADDRESS}")
+    print(f"API Documentation: {SERVER_ADDRESS}/docs")
     print(f"Load Balancer: {LB_URL}")
     print(f"Server Address: {SERVER_ADDRESS}")
+    print(f"SSL: {'enabled' if USE_SSL else 'disabled'}")
     print("")
     print("⚠️  Server will register with LB in 2 seconds...")
     print("   If LB is not available, server will shut down.")
@@ -286,4 +324,11 @@ if __name__ == '__main__':
     # Register with LB after a short delay (let server start first)
     eventlet.spawn_after(2, register_with_lb)
 
-    socketio.run(app, debug=False, host='0.0.0.0', port=PORT)
+    if USE_SSL:
+        certfile = str(CERT_DIR / 'localhost.crt')
+        keyfile = str(CERT_DIR / 'localhost.key')
+        print(f"SSL enabled - certs from: {CERT_DIR}")
+        socketio.run(app, debug=False, host='0.0.0.0', port=PORT,
+                     certfile=certfile, keyfile=keyfile)
+    else:
+        socketio.run(app, debug=False, host='0.0.0.0', port=PORT)

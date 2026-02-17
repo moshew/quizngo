@@ -46,7 +46,7 @@ def _cleanup_stale_pins(server_registry, pin_registry):
         if srv['status'] == 'down':
             continue
         try:
-            resp = requests.get(f"{srv['address']}/sim_gamePIN", timeout=10)
+            resp = requests.get(f"{srv['address']}/sim_gamePIN", timeout=10, verify=False)
             if resp.status_code != 200:
                 continue
             data = resp.json()

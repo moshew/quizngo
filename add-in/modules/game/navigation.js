@@ -15,6 +15,11 @@ import {
     setCurrentSlideId
 } from '../core/state.js';
 
+function getLastQuestionSlideIndex() {
+    const value = window.lastQuestionSlideIndex;
+    return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 /**
  * Navigate to first slide in PowerPoint
  */
@@ -126,11 +131,13 @@ export async function getAllSlideIds() {
  * Calculate next slide locally based on game logic
  */
 export function calculateNextSlideLocally(currentIndex, currentSlideType, slideIds, slideTypeData, settings, totalSlides) {
+    const lastQuestionSlideIndex = getLastQuestionSlideIndex();
+
     console.log('🧮 Calculating next slide locally...');
     console.log(`   Current: index=${currentIndex}, type=${currentSlideType}`);
     console.log(`   Total slides: ${totalSlides}`);
     console.log(`   Settings:`, settings);
-    console.log(`   💭 lastQuestionSlideIndex at start: ${window.lastQuestionSlideIndex}`);
+    console.log(`   💭 lastQuestionSlideIndex at start: ${lastQuestionSlideIndex}`);
     
     // Validate inputs
     if (currentIndex === undefined || currentIndex === null || totalSlides === 0) {
@@ -163,7 +170,7 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
     if (currentSlideType === 'statistics') {
         const showLeaderboard = settings.afterQuestionLeaderboard || false;
         console.log(`   📊 On statistics slide, showLeaderboard=${showLeaderboard}`);
-        console.log(`   📍 Returning point: ${window.lastQuestionSlideIndex}`);
+        console.log(`   📍 Returning point: ${lastQuestionSlideIndex}`);
         
         if (showLeaderboard) {
             // Look for ANY leaderboard slide in the presentation
@@ -177,8 +184,8 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
         }
         
         // No leaderboard or not showing - return to position after the original question
-        if (window.lastQuestionSlideIndex !== null) {
-            let nextIndex = window.lastQuestionSlideIndex + 1;
+        if (lastQuestionSlideIndex !== null) {
+            let nextIndex = lastQuestionSlideIndex + 1;
             
             // Skip any statistics/leaderboard slides
             while (nextIndex < totalSlides) {
@@ -194,7 +201,7 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
                 nextIndex = totalSlides - 1;
             }
             
-            console.log(`   🔙 Returning to index ${nextIndex} (after question at ${window.lastQuestionSlideIndex})`);
+            console.log(`   🔙 Returning to index ${nextIndex} (after question at ${lastQuestionSlideIndex})`);
             window.lastQuestionSlideIndex = null; // Reset
             return { nextIndex: nextIndex, reason: 'Returning to position after original question' };
         } else {
@@ -218,10 +225,10 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
     if (currentSlideType === 'leaderboard') {
         // After leaderboard, return to position after the original question
         console.log(`   🏆 On leaderboard slide`);
-        console.log(`   📍 Returning point: ${window.lastQuestionSlideIndex}`);
+        console.log(`   📍 Returning point: ${lastQuestionSlideIndex}`);
         
-        if (window.lastQuestionSlideIndex !== null) {
-            let nextIndex = window.lastQuestionSlideIndex + 1;
+        if (lastQuestionSlideIndex !== null) {
+            let nextIndex = lastQuestionSlideIndex + 1;
             
             // Skip any statistics/leaderboard slides
             while (nextIndex < totalSlides) {
@@ -237,7 +244,7 @@ export function calculateNextSlideLocally(currentIndex, currentSlideType, slideI
                 nextIndex = totalSlides - 1;
             }
             
-            console.log(`   🔙 Returning to index ${nextIndex} (after question at ${window.lastQuestionSlideIndex})`);
+            console.log(`   🔙 Returning to index ${nextIndex} (after question at ${lastQuestionSlideIndex})`);
             window.lastQuestionSlideIndex = null; // Reset
             return { nextIndex: nextIndex, reason: 'Returning to position after original question' };
         } else {
@@ -866,10 +873,9 @@ async function simulateSpacebarFallback() {
  * Reset animation state for testing
  */
 export function resetAnimationState() {
-    if (window.slideAnimationState) {
-        console.log('🔄 Resetting animation state for all slides');
-        window.slideAnimationState = {};
-    }
+    console.log('🔄 Resetting animation and navigation transient state');
+    window.slideAnimationState = {};
+    window.lastQuestionSlideIndex = null;
 }
 
 /**

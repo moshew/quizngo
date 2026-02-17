@@ -29,7 +29,7 @@ def notify_game_ended(game_pin):
         http_requests.post(
             f'{_lb_url}/api/servers/{_lb_server_id}/game-ended',
             json={'game_pin': game_pin},
-            timeout=5
+            timeout=5, verify=False
         )
         logger.info(f'Notified LB: game {game_pin} ended')
     except Exception as e:

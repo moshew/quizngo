@@ -23,6 +23,33 @@ function t(key, fallback = '') {
     return fallback;
 }
 
+function normalizeHost(host) {
+    return String(host || '').trim().replace(/\/+$/, '');
+}
+
+async function resolveAdminUrl(gamePin) {
+    // Prefer explicit config if provided.
+    if (typeof window !== 'undefined' && window.QUIZNGO_ADMIN_HOST) {
+        return `${normalizeHost(window.QUIZNGO_ADMIN_HOST)}/${gamePin}`;
+    }
+
+    // Otherwise ask the game server for its admin URL (typically includes LAN IP).
+    try {
+        const response = await fetch(`${getApiBase()}game-info/${gamePin}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.status === 'success' && typeof data.adminUrl === 'string' && data.adminUrl.trim()) {
+                return data.adminUrl.trim();
+            }
+        }
+    } catch (error) {
+        console.warn('Could not resolve admin URL from server:', error);
+    }
+
+    // Last fallback for local-only development.
+    return `http://localhost:3002/${gamePin}`;
+}
+
 /**
  * Show status message (only for warnings and errors)
  */
@@ -159,9 +186,8 @@ export async function showAdminConnectionScreen(gamePin) {
     const pinEl = document.getElementById('adminOverlayPin');
     if (pinEl) pinEl.textContent = formattedPin;
 
-    // Set admin URL (configurable via window.QUIZNGO_ADMIN_HOST)
-    const adminHost = (typeof window !== 'undefined' && window.QUIZNGO_ADMIN_HOST) || 'http://localhost:3002';
-    const adminUrl = `${adminHost}/${gamePin}`;
+    // Resolve admin URL (configurable, otherwise fetched from server).
+    const adminUrl = await resolveAdminUrl(gamePin);
     const urlEl = document.getElementById('adminOverlayUrl');
     if (urlEl) urlEl.value = adminUrl;
 

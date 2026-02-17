@@ -14,7 +14,7 @@ import { getServerUrl } from './api.js';
 
 // WebSocket URL - now dynamic, resolved via LB
 // Use getServerUrl() instead of this constant
-export const WEBSOCKET_URL = 'http://localhost:5000'; // Legacy fallback
+export const WEBSOCKET_URL = null; // Legacy - use getServerUrl() instead
 
 // WebSocket instance
 let socket = null;
@@ -131,6 +131,11 @@ export function disconnectWebSocket() {
         socket = null;
     }
     
+    // Clear game-specific transient state to avoid leaking participants
+    // and answers into the next game session.
+    resetParticipantsList();
+    resetCurrentQuestionAnswers();
+
     currentGamePin = null;
     isConnecting = false;
     
@@ -548,6 +553,10 @@ function handlePlayerAnswer(data, callback) {
 export function resetCurrentQuestionAnswers() {
     console.log('🔄 Resetting current question answers');
     currentQuestionAnswers.clear();
+    // Ensure the "respondents count" visual starts from zero on each question.
+    updateRespondentsCount(0).catch((error) => {
+        console.error('❌ Error resetting respondents count to 0:', error);
+    });
     console.log('✅ Answers cleared');
 }
 
@@ -559,13 +568,13 @@ export function getCurrentQuestionAnswers() {
 }
 
 /**
- * Update "מספר עונים" tag in current slide
+ * Update all "מספר עונים" tag instances across the presentation.
  */
 async function updateRespondentsCount(count) {
     try {
         // Import question timer module dynamically to avoid circular dependency
-        const { updateCurrentSlideRespondentsCount } = await import('../elements/question_timer.js');
-        await updateCurrentSlideRespondentsCount(count);
+        const { updateAllRespondentsCountElements } = await import('../elements/question_timer.js');
+        await updateAllRespondentsCountElements(count);
     } catch (error) {
         console.error('❌ Error updating respondents count:', error);
     }

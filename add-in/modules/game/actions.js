@@ -14,15 +14,15 @@ import {
     getSlideData,
     getPresentationSettings,
     getCurrentSlideId,
-    getCurrentSlideNumber,
     getGamePIN,
+    setCurrentUsers,
     setGamePIN,
     generateGamePin
 } from '../core/state.js';
 import { showStatus, showError, showAdminConnectionScreen, hideAdminConnectionScreen, isAdminConnectionScreenOpen } from '../ui/manager.js';
-import { updateCurrentSlideQuestionTime } from '../elements/question_timer.js';
+import { updateAllQuestionTimeElements } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
-import { connectWebSocket, disconnectWebSocket } from '../core/websocket.js';
+import { connectWebSocket, disconnectWebSocket, resetParticipantsList, resetCurrentQuestionAnswers } from '../core/websocket.js';
 
 /**
  * Start presentation mode (game start screen)
@@ -39,6 +39,11 @@ export async function startPresentationMode() {
     }
 
     try {
+        // Ensure no participant/answer state leaks from previous sessions.
+        resetParticipantsList();
+        resetCurrentQuestionAnswers();
+        setCurrentUsers(0);
+
         // Generate a new gamePin (Add-in is responsible for this)
         const gamePin = generateGamePin();
         setGamePIN(gamePin);
@@ -569,15 +574,12 @@ function sendAnswerTimeStarted() {
 }
 
 /**
- * Update quizngo-question-time elements in current slide
+ * Update quizngo-question-time elements in all slides
  * @param {number} timeValue - Time in seconds to display
  */
 async function updateQuestionTimeDisplay(timeValue) {
     try {
-        // Use the slide number from state (updated by processSlideChange)
-        const slideNumber = getCurrentSlideNumber() || null;
-        
-        await updateCurrentSlideQuestionTime(timeValue, slideNumber);
+        await updateAllQuestionTimeElements(timeValue);
     } catch (error) {
         console.error('❌ Error updating question time display:', error);
     }
