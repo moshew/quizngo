@@ -38,12 +38,10 @@ echo ""
 # Configure via environment variables or use defaults
 : ${QUIZNGO_PORT:=5001}
 : ${QUIZNGO_LB_URL:=http://localhost:5000}
-: ${QUIZNGO_ADDRESS:=http://localhost:5001}
+: ${QUIZNGO_ADDRESS:=http://localhost:${QUIZNGO_PORT}}
+: ${QUIZNGO_ADMIN_URL:=http://localhost:3002}
+: ${QUIZNGO_GAME_URL:=http://localhost:8080}
 
-# Start server (use --lb-url only if not set to 'none')
-if [ "$QUIZNGO_LB_URL" = "none" ]; then
-    python3 server.py --port $QUIZNGO_PORT
-else
-    python3 server.py --port $QUIZNGO_PORT --lb-url $QUIZNGO_LB_URL --address $QUIZNGO_ADDRESS
-fi
+# Start server (always requires Load Balancer)
+python3 server.py --port $QUIZNGO_PORT --lb-url $QUIZNGO_LB_URL --address $QUIZNGO_ADDRESS --admin-url $QUIZNGO_ADMIN_URL --game-url $QUIZNGO_GAME_URL
 

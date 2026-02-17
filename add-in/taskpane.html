@@ -621,11 +621,13 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 8px 10px 16px;
+            /* RTL default: more room for title (right), closer close button (left) */
+            padding: 10px 20px 10px 8px;
             border-bottom: 1px solid #eee;
         }
         body.ltr .admin-overlay__topbar {
-            padding: 10px 16px 10px 8px;
+            /* Mirror spacing for LTR */
+            padding: 10px 10px 10px 12px;
         }
         .admin-overlay__topbar-title {
             font-size: 15px;
@@ -978,6 +980,24 @@
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Load config.js if it exists (optional user configuration) -->
+    <script>
+        // Try to load config.js if it exists
+        fetch('config.js')
+            .then(response => {
+                if (response.ok) {
+                    // config.js exists, load it
+                    const script = document.createElement('script');
+                    script.src = 'config.js';
+                    script.type = 'module';
+                    document.head.appendChild(script);
+                }
+            })
+            .catch(() => {
+                // config.js doesn't exist or failed to load - that's fine, we'll use defaults
+                console.log('config.js not found - using default configuration');
+            });
+    </script>
     <script src="taskpane.js" type="module"></script>
 </body>
 </html>

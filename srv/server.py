@@ -28,13 +28,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 # --- CLI Arguments ---
 parser = argparse.ArgumentParser(description='QuizNGO Quiz Server')
 parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
-parser.add_argument('--lb-url', type=str, default=None, help='Load balancer URL (e.g., http://localhost:5000)')
+parser.add_argument('--lb-url', type=str, required=True, help='Load balancer URL (e.g., http://localhost:5000) - REQUIRED')
 parser.add_argument('--address', type=str, default=None, help='This server\'s public address (e.g., http://192.168.31.22:5001)')
+parser.add_argument('--admin-url', type=str, default=None, help='Admin client base URL (e.g., http://192.168.31.22:3002)')
+parser.add_argument('--game-url', type=str, default=None, help='Game client base URL (e.g., http://192.168.31.22:8080)')
 cli_args = parser.parse_args()
 
 PORT = cli_args.port
 LB_URL = cli_args.lb_url
 SERVER_ADDRESS = cli_args.address or f'http://localhost:{PORT}'
+ADMIN_URL = cli_args.admin_url or 'http://localhost:3002'
+GAME_URL = cli_args.game_url or 'http://localhost:8080'
 lb_server_id = None  # Set after registration with LB
 
 from handlers.websocket_handlers import register_websocket_handlers
@@ -108,7 +112,7 @@ register_websocket_handlers(
 player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
 game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
 navigation_bp = create_navigation_routes(socketio, game, game_sessions, client_rooms)
-info_bp = create_info_routes(game)
+info_bp = create_info_routes(game, ADMIN_URL, GAME_URL)
 
 app.register_blueprint(player_bp)
 app.register_blueprint(game_bp)
@@ -197,9 +201,6 @@ def api_handler():
 def register_with_lb():
     """Register this server with the load balancer."""
     global lb_server_id
-    if not LB_URL:
-        return
-
     logger = logging.getLogger(__name__)
     try:
         logger.info(f'Attempting to register with Load Balancer at {LB_URL}...')
@@ -273,22 +274,16 @@ if __name__ == '__main__':
     print("=" * 40)
     print(f"Server will run on: http://localhost:{PORT}")
     print(f"API Documentation: http://localhost:{PORT}/docs")
-    if LB_URL:
-        print(f"Load Balancer: {LB_URL}")
-        print(f"Server Address: {SERVER_ADDRESS}")
-        print("")
-        print("⚠️  Load Balancer mode enabled")
-        print("   Server will register with LB in 2 seconds...")
-        print("   If LB is not available, server will shut down.")
-    else:
-        print("")
-        print("✅ Standalone mode (no Load Balancer)")
+    print(f"Load Balancer: {LB_URL}")
+    print(f"Server Address: {SERVER_ADDRESS}")
+    print("")
+    print("⚠️  Server will register with LB in 2 seconds...")
+    print("   If LB is not available, server will shut down.")
     print("")
     print("Press Ctrl+C to stop the server")
     print("=" * 40)
 
     # Register with LB after a short delay (let server start first)
-    if LB_URL:
-        eventlet.spawn_after(2, register_with_lb)
+    eventlet.spawn_after(2, register_with_lb)
 
     socketio.run(app, debug=False, host='0.0.0.0', port=PORT)

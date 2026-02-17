@@ -179,24 +179,26 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
 
     @game_bp.route('/sim_gamePIN', methods=['GET'])
     def get_active_game_pins():
-        """Get list of all active game PINs for the simulator"""
+        """Get list of all game PINs (including those not started yet) for the simulator and LB cleanup"""
         try:
-            active_pins = []
-            
+            all_pins = []
+
+            # Return ALL sessions, including those with active=False (waiting for admin to start)
+            # This prevents LB from cleaning up valid PINs that haven't been started yet
             for game_pin, session in game_sessions.items():
-                if session.get('active', False):
-                    active_pins.append({
-                        'gamePin': game_pin,
-                        'timestamp': session.get('timestamp'),
-                        'active': session.get('active', False)
-                    })
-            
-            game.log(f'📋 Retrieved {len(active_pins)} active game PINs for simulator')
-            
+                all_pins.append({
+                    'gamePin': game_pin,
+                    'timestamp': session.get('timestamp'),
+                    'active': session.get('active', False),
+                    'gameStarted': session.get('gameStarted', False)
+                })
+
+            game.log(f'📋 Retrieved {len(all_pins)} game PINs (active and waiting)')
+
             return jsonify({
                 'status': 'success',
-                'count': len(active_pins),
-                'games': active_pins
+                'count': len(all_pins),
+                'games': all_pins
             })
             
         except Exception as e:

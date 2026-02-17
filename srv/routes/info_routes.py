@@ -15,13 +15,15 @@ from flask import Blueprint, request, jsonify, send_from_directory, send_file
 import qrcode
 
 
-def create_info_routes(game):
+def create_info_routes(game, admin_url='http://localhost:3002', game_url='http://localhost:8080'):
     """
     Create info routes blueprint.
-    
+
     Args:
         game: GameManager instance
-    
+        admin_url: Base URL for admin client (e.g., http://192.168.31.22:3002)
+        game_url: Base URL for game client (e.g., http://192.168.31.22:8080)
+
     Returns:
         Blueprint with info routes
     """
@@ -56,15 +58,15 @@ def create_info_routes(game):
                 }), 400
             
             # Build admin URL (for QR code in "Start Game" button)
-            admin_url = f'http://192.168.31.22:3002/{game_pin}'
+            admin_game_url = f'{admin_url}/{game_pin}'
             
             game.log(f'✅ Generated game info for PIN: {game_pin}')
-            game.log(f'   Admin URL: {admin_url}')
-            
+            game.log(f'   Admin URL: {admin_game_url}')
+
             return jsonify({
                 'status': 'success',
                 'gamePin': game_pin,
-                'adminUrl': admin_url,
+                'adminUrl': admin_game_url,
                 'qrCodeUrl': f'/qr-code/{game_pin}'
             })
             
@@ -85,8 +87,8 @@ def create_info_routes(game):
             if len(game_pin) != 6:
                 return "Invalid game PIN (must be 6 digits)", 400
             
-            # Build admin URL (port 3002)
-            admin_url = f'http://192.168.31.22:3002/{game_pin}'
+            # Build admin URL
+            admin_game_url = f'{admin_url}/{game_pin}'
             
             # Generate QR code
             qr = qrcode.QRCode(
@@ -95,7 +97,7 @@ def create_info_routes(game):
                 box_size=10,
                 border=4,
             )
-            qr.add_data(admin_url)
+            qr.add_data(admin_game_url)
             qr.make(fit=True)
             
             # Create image
@@ -125,7 +127,7 @@ def create_info_routes(game):
                 return "Invalid game PIN - must be 6 digits", 400
             
             # Build player URL with pin as query parameter (game client expects this format)
-            player_url = f'http://192.168.31.22:8080/?pin={game_pin_clean}'
+            player_url = f'{game_url}/?pin={game_pin_clean}'
             
             # Generate QR code
             qr = qrcode.QRCode(
@@ -145,7 +147,7 @@ def create_info_routes(game):
             img.save(img_io, 'PNG')
             img_io.seek(0)
             
-            game.log(f'✅ Generated player QR code for game PIN: {formatted_pin}')
+            game.log(f'✅ Generated player QR code for game PIN: {game_pin_clean}')
             
             return send_file(img_io, mimetype='image/png', as_attachment=False)
             

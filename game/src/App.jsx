@@ -59,11 +59,21 @@ function App() {
         .then(data => {
           if (data.status === 'success') {
             setServerUrl(data.server_url)
+          } else {
+            // Failed to resolve - show error and go back to PIN screen
+            console.error('Failed to resolve PIN:', data.message)
+            setError(language === 'he' ? 'לא נמצא משחק עם PIN זה' : 'Game not found with this PIN')
+            setScreen(SCREENS.PIN)
           }
         })
-        .catch(err => console.error('Failed to resolve PIN from URL:', err))
+        .catch(err => {
+          // Network error - show error and go back to PIN screen
+          console.error('Failed to resolve PIN from URL:', err)
+          setError(language === 'he' ? 'שגיאת רשת - לא ניתן למצוא את המשחק' : 'Network error - cannot find game')
+          setScreen(SCREENS.PIN)
+        })
     }
-  }, [urlPin, serverUrl])
+  }, [urlPin, serverUrl, language])
 
   // Apply direction when language changes
   useEffect(() => {

@@ -36,12 +36,10 @@ echo.
 REM Configure via environment variables or use defaults
 if "%QUIZNGO_PORT%"=="" set QUIZNGO_PORT=5001
 if "%QUIZNGO_LB_URL%"=="" set QUIZNGO_LB_URL=http://localhost:5000
-if "%QUIZNGO_ADDRESS%"=="" set QUIZNGO_ADDRESS=http://localhost:5001
+if "%QUIZNGO_ADDRESS%"=="" set QUIZNGO_ADDRESS=http://localhost:%QUIZNGO_PORT%
+if "%QUIZNGO_ADMIN_URL%"=="" set QUIZNGO_ADMIN_URL=http://localhost:3002
+if "%QUIZNGO_GAME_URL%"=="" set QUIZNGO_GAME_URL=http://localhost:8080
 
-REM Start server (use --lb-url only if LB_URL is set)
-if "%QUIZNGO_LB_URL%"=="none" (
-    python server.py --port %QUIZNGO_PORT%
-) else (
-    python server.py --port %QUIZNGO_PORT% --lb-url %QUIZNGO_LB_URL% --address %QUIZNGO_ADDRESS%
-)
+REM Start server (always requires Load Balancer)
+python server.py --port %QUIZNGO_PORT% --lb-url %QUIZNGO_LB_URL% --address %QUIZNGO_ADDRESS% --admin-url %QUIZNGO_ADMIN_URL% --game-url %QUIZNGO_GAME_URL%
 

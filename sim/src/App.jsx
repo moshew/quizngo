@@ -73,9 +73,17 @@ function App() {
         if (data.status === 'success') {
           setServerUrl(data.server_url)
           console.log('Server resolved via LB:', data.server_url)
+        } else {
+          // Failed to resolve - clear server URL
+          setServerUrl(null)
+          console.error('Failed to resolve PIN:', data.message)
         }
       })
-      .catch(err => console.error('Failed to resolve PIN via LB:', err))
+      .catch(err => {
+        // Network error or invalid response - clear server URL
+        setServerUrl(null)
+        console.error('Failed to resolve PIN via LB:', err)
+      })
   }, [gamePin])
 
   // Reset simulator when game PIN changes

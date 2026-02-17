@@ -19,11 +19,19 @@ def create_resolve_routes(server_registry, pin_registry):
         # Check if PIN is already assigned
         existing = pin_registry.resolve(game_pin)
         if existing:
-            return jsonify({
-                'status': 'success',
-                'game_pin': game_pin,
-                'server_url': existing['server_address']
-            })
+            # Verify the server is still active/healthy
+            server = server_registry.get(existing['server_id'])
+            if server and server['status'] == 'active':
+                return jsonify({
+                    'status': 'success',
+                    'game_pin': game_pin,
+                    'server_url': existing['server_address']
+                })
+            else:
+                # Server is down - remove stale mapping and assign new server
+                logger.warning(f"Server {existing['server_id']} for PIN {game_pin} is {server['status'] if server else 'not found'} - removing mapping")
+                pin_registry.remove(game_pin)
+                # Continue to assign new server below
 
         # Select least-loaded server
         server = server_registry.select_server()
