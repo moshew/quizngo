@@ -17,8 +17,16 @@ from flask_socketio import emit, leave_room
 from utils.room_utils import emit_to_room
 
 
-def register_websocket_handlers(socketio, game, connected_clients, client_rooms, 
-                                 socket_to_player, game_sessions, player_registry):
+def register_websocket_handlers(
+    socketio,
+    game,
+    connected_clients,
+    client_rooms,
+    socket_to_player,
+    game_sessions,
+    player_registry,
+    game_timeout_controls=None
+):
     """
     Register all WebSocket event handlers.
     
@@ -52,11 +60,11 @@ def register_websocket_handlers(socketio, game, connected_clients, client_rooms,
         connected_clients.discard(request.sid)
         game.log(f'📡 WS ← disconnect: {request.sid}')
         
-        # Get room info (gamePin) before leaving
-        game_pin_from_room = client_rooms.get(request.sid)
+        # Track socket type before mutating mappings.
+        was_player_socket = request.sid in socket_to_player
         
         # Check if this socket belongs to a player (sim)
-        if request.sid in socket_to_player:
+        if was_player_socket:
             user_id = socket_to_player[request.sid]
             
             # Mark player as disconnected in registry
@@ -94,7 +102,7 @@ def register_websocket_handlers(socketio, game, connected_clients, client_rooms,
             
             # Check if this was an add-in socket (NOT a player socket)
             # If add-in disconnects and no other add-in sockets exist for this game, close the game
-            if request.sid not in socket_to_player:
+            if not was_player_socket:
                 # This was NOT a player - likely an add-in
                 # Check if any other non-player sockets exist for this game
                 other_addin_sockets = [
@@ -109,9 +117,9 @@ def register_websocket_handlers(socketio, game, connected_clients, client_rooms,
                     from utils.room_utils import close_game_and_cleanup
                     close_game_and_cleanup(
                         game_sessions, player_registry, client_rooms, socket_to_player,
-                        socketio, game_pin, game.logger, reason='addin_closed'
+                        socketio, game_pin, game.logger, reason='addin_closed',
+                        game_timeout_controls=game_timeout_controls
                     )
         else:
             game.log(f'Client disconnected: {request.sid}')
-
 

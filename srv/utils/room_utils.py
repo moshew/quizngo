@@ -12,140 +12,198 @@ import threading
 
 
 def check_game_active(game_sessions, game_pin):
-    """Check if a game session is active"""
+    """Check if a game session is active."""
     if game_pin not in game_sessions:
         return False
     return game_sessions[game_pin].get('active', False)
 
 
-def schedule_game_timeout(game_sessions, player_registry, client_rooms, socket_to_player, 
-                          socketio, game_pin, logger, timeout_seconds=3600):
-    """Schedule automatic game closure after timeout (default 1 hour)"""
-    from flask_socketio import leave_room
-    
-    def timeout_worker():
-        time.sleep(timeout_seconds)
-        
-        # Check if game is still active
-        if game_pin in game_sessions and game_sessions[game_pin].get('active', False):
-            logger.info(f'⏰ Auto-closing game {game_pin} after {timeout_seconds}s timeout')
-            
-            # Close game and clean up players
-            close_game_and_cleanup(
-                game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, game_pin, logger, reason='timeout'
-            )
-    
-    timeout_thread = threading.Thread(target=timeout_worker)
-    timeout_thread.daemon = True
-    timeout_thread.start()
-    logger.info(f'⏰ Scheduled auto-close for game {game_pin} in {timeout_seconds}s (1 hour)')
-
-
-def close_game_and_cleanup(game_sessions, player_registry, client_rooms, socket_to_player,
-                           socketio, game_pin, logger, reason='manual'):
-    """
-    Close a game session and remove all associated players.
-    
-    Args:
-        game_sessions: Dict of game sessions (keyed by gamePin)
-        player_registry: Dict of player registrations
-        client_rooms: Dict mapping socket ID to gamePin
-        socket_to_player: Dict mapping socket ID to player UID
-        socketio: SocketIO instance
-        game_pin: The game PIN to close
-        logger: Logger instance
-        reason: Reason for closure (e.g., 'manual', 'timeout', 'ended')
-    """
-    from flask_socketio import leave_room
-    
-    if game_pin not in game_sessions:
-        logger.info(f'⚠️ Cannot close game {game_pin} - not found')
+def _cancel_game_timeout(game_timeout_controls, game_pin, logger):
+    """Cancel and remove a scheduled timeout for the provided game pin."""
+    if game_timeout_controls is None:
         return
-    
-    # Notify clients BEFORE cleanup, to ensure they receive the message
-    try:
-        emit_to_room(socketio, client_rooms, logger, 'game_closed', {
-            'gamePin': game_pin,
-            'timestamp': time.time(),
-            'message': f'Game closed due to {reason}',
-            'reason': reason
-        }, game_pin)
-    except Exception as e:
-        logger.info(f'⚠️ Error sending game_closed event: {e}')
 
-    # --- Perform data cleanup (players, sockets) ---
-    
-    # Remove all players from this session
+    timeout_event = game_timeout_controls.pop(game_pin, None)
+    if timeout_event:
+        timeout_event.set()
+        logger.info(f'Canceled auto-close timer for game {game_pin}')
+
+
+def schedule_game_timeout(
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    socketio,
+    game_pin,
+    logger,
+    timeout_seconds=3600,
+    game_timeout_controls=None
+):
+    """Schedule automatic game closure after timeout (default: 1 hour)."""
+    timeout_event = threading.Event()
+
+    if game_timeout_controls is not None:
+        # Replace previous timer for the same pin (if any) to avoid leaks.
+        previous_event = game_timeout_controls.pop(game_pin, None)
+        if previous_event:
+            previous_event.set()
+        game_timeout_controls[game_pin] = timeout_event
+
+    def timeout_worker():
+        canceled = timeout_event.wait(timeout_seconds)
+        if canceled:
+            logger.info(f'Auto-close worker stopped for game {game_pin} (canceled)')
+            return
+
+        # If the session still exists (active or waiting), close it.
+        if game_pin in game_sessions:
+            session = game_sessions[game_pin]
+            logger.info(
+                f'Auto-closing game {game_pin} after {timeout_seconds}s '
+                f'(active={session.get("active", False)}, started={session.get("gameStarted", False)})'
+            )
+            close_game_and_cleanup(
+                game_sessions,
+                player_registry,
+                client_rooms,
+                socket_to_player,
+                socketio,
+                game_pin,
+                logger,
+                reason='timeout',
+                game_timeout_controls=game_timeout_controls
+            )
+
+    timeout_thread = threading.Thread(target=timeout_worker, daemon=True)
+    timeout_thread.start()
+    logger.info(f'Scheduled auto-close for game {game_pin} in {timeout_seconds}s (1 hour)')
+
+
+def close_game_and_cleanup(
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    socketio,
+    game_pin,
+    logger,
+    reason='manual',
+    game_timeout_controls=None
+):
+    """
+    Close a game session and remove all associated players and sockets.
+
+    Args:
+        game_sessions: Dict of game sessions (keyed by gamePin).
+        player_registry: Dict of player registrations.
+        client_rooms: Dict mapping socket ID to gamePin.
+        socket_to_player: Dict mapping socket ID to player UID.
+        socketio: SocketIO instance.
+        game_pin: The game PIN to close.
+        logger: Logger instance.
+        reason: Reason for closure (e.g., manual, timeout, addin_closed).
+        game_timeout_controls: Optional dict of game_pin -> threading.Event.
+    """
+    from flask_socketio import leave_room
+
+    # Stop any background timer tied to this game first.
+    _cancel_game_timeout(game_timeout_controls, game_pin, logger)
+
+    if game_pin not in game_sessions:
+        logger.info(f'Cannot close game {game_pin} - session not found')
+        return
+
+    # Notify clients BEFORE cleanup, to maximize delivery success.
+    try:
+        emit_to_room(
+            socketio,
+            client_rooms,
+            logger,
+            'game_closed',
+            {
+                'gamePin': game_pin,
+                'timestamp': time.time(),
+                'message': f'Game closed due to {reason}',
+                'reason': reason
+            },
+            game_pin
+        )
+    except Exception as exc:
+        logger.info(f'Error sending game_closed event for {game_pin}: {exc}')
+
+    # Remove all players from this session.
     players_to_remove = [
         uid for uid, player in list(player_registry.items())
         if player.get('gamePin') == game_pin
     ]
-    
     for uid in players_to_remove:
-        # Get name safely
-        player_name = 'Unknown'
         if uid in player_registry:
-            player_name = player_registry[uid].get('nickname', 'Unknown')
             del player_registry[uid]
-    
-    # Clear socket mappings for player sockets in this game
-    player_sockets_to_remove = [
-        sid for sid, g_pin in list(client_rooms.items())
-        if g_pin == game_pin and sid in socket_to_player
+
+    # Remove ALL sockets (players + add-in sockets) associated with this game.
+    sockets_to_remove = [
+        sid for sid, pin in list(client_rooms.items())
+        if pin == game_pin
     ]
-    
-    for sid in player_sockets_to_remove:
-        # Properly remove from Socket.IO room to prevent receiving future events
+
+    removed_player_sockets = 0
+    removed_addin_sockets = 0
+
+    for sid in sockets_to_remove:
         try:
             leave_room(game_pin, sid=sid)
         except Exception:
-            pass  # Ignore errors if socket already disconnected
-            
+            pass
+
         if sid in socket_to_player:
             del socket_to_player[sid]
+            removed_player_sockets += 1
+        else:
+            removed_addin_sockets += 1
+
         if sid in client_rooms:
             del client_rooms[sid]
-            
-    logger.info(f'🧹 Data cleanup for {game_pin}: Removed {len(players_to_remove)} players and {len(player_sockets_to_remove)} player sockets')
-    
-    # Delete the game session entirely
-    del game_sessions[game_pin]
-    logger.info(f'🗑️ Game {game_pin} deleted. Reason: {reason}')
 
-    # Notify load balancer that this PIN is done
+    logger.info(
+        f'Cleanup for {game_pin}: players={len(players_to_remove)}, '
+        f'player_sockets={removed_player_sockets}, addin_sockets={removed_addin_sockets}'
+    )
+
+    # Delete the game session itself.
+    del game_sessions[game_pin]
+    logger.info(f'Game {game_pin} deleted. Reason: {reason}')
+
+    # Notify load balancer that this PIN is done.
     try:
         from utils.lb_client import notify_game_ended
         notify_game_ended(game_pin)
-    except Exception as e:
-        logger.debug(f'Could not notify LB (may not be enabled): {e}')  # Best effort
+    except Exception as exc:
+        logger.debug(f'Could not notify LB about game {game_pin}: {exc}')
 
 
 def emit_to_room(socketio, client_rooms, logger, event, data, game_pin, skip_sid=None):
     """
     Emit a message only to clients in a specific room (gamePin).
-    
+
     Args:
-        socketio: SocketIO instance
-        client_rooms: Dict mapping socket ID to gamePin
-        logger: Logger instance
-        event: The event name
-        data: The data to send
-        game_pin: The gamePin of the room to send to
-        skip_sid: Optional socket ID to skip (e.g., disconnecting client)
-    
+        socketio: SocketIO instance.
+        client_rooms: Dict mapping socket ID to gamePin.
+        logger: Logger instance.
+        event: The event name.
+        data: The data payload.
+        game_pin: The room to emit to.
+        skip_sid: Optional socket ID to skip.
+
     Returns:
-        Number of clients the message was sent to
+        Number of tracked clients in the target game room.
     """
-    # Count active clients in this room (from our tracking)
     tracked_count = sum(1 for pin in client_rooms.values() if pin == game_pin)
-    
-    # Always emit to the room - Socket.IO will handle delivery to connected clients only
-    # Wrap in try/except to handle cases where client disconnects during emit
+
     try:
         socketio.emit(event, data, room=game_pin, skip_sid=skip_sid)
-        logger.info(f'📤 WS → {event} to room {game_pin} (~{tracked_count} tracked client(s))')
-    except Exception as e:
-        logger.info(f'⚠️ Emit failed for {event} to {game_pin} (client may have disconnected): {e}')
-    
+        logger.info(f'WS -> {event} to room {game_pin} (~{tracked_count} tracked client(s))')
+    except Exception as exc:
+        logger.info(f'Emit failed for {event} to {game_pin}: {exc}')
+
     return tracked_count

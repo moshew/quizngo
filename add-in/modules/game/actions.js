@@ -239,11 +239,21 @@ async function connectWebSocketForGame(gamePin) {
         },
         
         onGameClosed: (data) => {
+            setGamePIN(null);
+            resetServerUrl();
+            hideAdminConnectionScreen();
+            const btnStartGame = document.getElementById('btnStartGame');
+            if (btnStartGame) btnStartGame.disabled = false;
             console.log('🛑 Game closed:', data);
             showError('המשחק נסגר: ' + (data.message || 'סיום'));
         },
         
         onReconnectionFailed: () => {
+            setGamePIN(null);
+            resetServerUrl();
+            hideAdminConnectionScreen();
+            const btnStartGame = document.getElementById('btnStartGame');
+            if (btnStartGame) btnStartGame.disabled = false;
             console.log('❌ Reconnection failed after 30 seconds');
             showError('החיבור אבד. המשחק נסגר.');
         },
@@ -322,6 +332,8 @@ async function connectWebSocketForGame(gamePin) {
  * End the current game and disconnect WebSocket
  */
 export async function endGame() {
+    // Stop local timer processes without sending extra results.
+    await stopTimer({ finalize: false, silent: true, reason: 'end_game' });
     console.log('🛑 Ending game...');
     
     const gamePin = getGamePIN();
@@ -343,8 +355,28 @@ export async function endGame() {
 
 // Global timer variables
 let timerInterval = null;
+let timerStartTimeout = null;
 let timerRemaining = 0;
 let questionStartTime = null; // Track when the question timer started (for scoring)
+
+function clearTimerHandles() {
+    let hadDelay = false;
+    let hadInterval = false;
+
+    if (timerStartTimeout) {
+        clearTimeout(timerStartTimeout);
+        timerStartTimeout = null;
+        hadDelay = true;
+    }
+
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        hadInterval = true;
+    }
+
+    return { hadDelay, hadInterval };
+}
 
 /**
  * Start question timer with delay
@@ -357,11 +389,10 @@ let questionStartTime = null; // Track when the question timer started (for scor
 export async function startTimer() { 
     console.log('⏱️ startTimer called');
     
-    // Stop any existing timer first
-    if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-    }
+    // Stop any existing timer process first (without finalizing results).
+    clearTimerHandles();
+    timerRemaining = 0;
+    questionStartTime = null;
     
     // Get settings from state
     const settings = getPresentationSettings();
@@ -378,7 +409,15 @@ export async function startTimer() {
     console.log(`⏱️ Timer will count down from ${questionWaitTime} seconds`);
     
     // Step 1: Wait for clock activation delay
-    setTimeout(() => {
+    timerStartTimeout = setTimeout(() => {
+        timerStartTimeout = null;
+
+        // If game already ended/closed while waiting, abort.
+        const activeGamePin = getGamePIN();
+        if (!activeGamePin) {
+            console.log('Timer start canceled - no active game PIN');
+            return;
+        }
         console.log('🎬 Delay finished, starting countdown timer...');
         
         // Record the start time for scoring calculations
@@ -401,8 +440,7 @@ export async function startTimer() {
             if (timerRemaining <= 0) {
                 // Timer finished
                 console.log('⏰ Timer finished!');
-                clearInterval(timerInterval);
-                timerInterval = null;
+                clearTimerHandles();
                 updateQuestionTimeDisplay(0);
                 
                 // Process scores and send results
@@ -424,22 +462,36 @@ export async function startTimer() {
 /**
  * Stop timer
  */
-export async function stopTimer() { 
-    console.log('⏹️ stopTimer called');
-    
-    if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
+export async function stopTimer(options = {}) {
+    const normalizedOptions = typeof options === 'boolean'
+        ? { finalize: options }
+        : (options || {});
+    const { finalize = true, silent = false, reason = 'manual' } = normalizedOptions;
+
+    console.log(`⏹️ stopTimer called (finalize=${finalize}, reason=${reason})`);
+
+    const { hadDelay, hadInterval } = clearTimerHandles();
+    const hadTimerActivity = hadDelay || hadInterval;
+
+    if (!hadTimerActivity) {
+        console.log('⚠️ No active timer to stop');
+        return false;
+    }
+
+    if (finalize && hadInterval && questionStartTime) {
+        // Process scores and send results when timer is intentionally ended.
+        await handleQuestionEnd();
+    } else {
+        questionStartTime = null;
         timerRemaining = 0;
-        
-        // Process scores and send results when timer is manually stopped (all answered)
-        handleQuestionEnd();
-        
+    }
+
+    if (!silent) {
         console.log('✅ Timer stopped');
         showStatus('⏸️ טיימר הופסק', 'info');
-    } else {
-        console.log('⚠️ No active timer to stop');
     }
+
+    return true;
 }
 
 /**
@@ -448,6 +500,11 @@ export async function stopTimer() {
 async function handleQuestionEnd() {
     try {
         console.log('🎯 Handling question end - processing scores...');
+
+        if (!questionStartTime) {
+            console.warn('⚠️ Skipping question end processing - no questionStartTime');
+            return;
+        }
         
         // Get current slide ID from state
         const slideId = getCurrentSlideId();
@@ -525,6 +582,9 @@ async function handleQuestionEnd() {
         
     } catch (error) {
         console.error('❌ Error handling question end:', error);
+    } finally {
+        questionStartTime = null;
+        timerRemaining = 0;
     }
 }
 

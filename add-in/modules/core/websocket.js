@@ -125,6 +125,9 @@ export function disconnectWebSocket() {
     clearReconnectionTimeout();
     reconnectionAttempts = 0;
     reconnectionStartTime = null;
+
+    // Stop any question timer processes without sending results.
+    stopTimerWithoutFinalizing('websocket_disconnect');
     
     if (socket) {
         socket.disconnect();
@@ -367,11 +370,14 @@ function setupSocketEventHandlers(config, gamePin) {
     });
     
     // Handle game closed event (from server)
-    socket.on('game_closed', (data) => {
+    socket.on('game_closed', async (data) => {
         console.log('🛑 Game closed event received:', data);
         
         // Clear reconnection - game is intentionally closed
         clearReconnectionTimeout();
+
+        // Stop local timer processes immediately, without finalizing/scoring.
+        await stopTimerWithoutFinalizing('game_closed');
         
         if (onGameClosed) {
             onGameClosed(data);
@@ -581,7 +587,19 @@ async function updateRespondentsCount(count) {
 }
 
 /**
- * Stop timer and send "answer time ended" when all answered
+ * Stop timer without ending answer-time flow (used for game/session shutdown).
+ */
+async function stopTimerWithoutFinalizing(reason = 'cleanup') {
+    try {
+        const { stopTimer } = await import('../game/actions.js');
+        await stopTimer({ finalize: false, silent: true, reason });
+    } catch (error) {
+        console.error('Error stopping timer during cleanup:', error);
+    }
+}
+
+/**
+ * Stop timer and send "answer time ended" when all answered.
  */
 async function stopTimerAndEndAnswerTime() {
     try {

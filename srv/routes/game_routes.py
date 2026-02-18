@@ -16,7 +16,15 @@ from flask import Blueprint, request, jsonify
 from utils.room_utils import emit_to_room, check_game_active, close_game_and_cleanup, schedule_game_timeout
 
 
-def create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player):
+def create_game_routes(
+    socketio,
+    game,
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    game_timeout_controls=None
+):
     """
     Create game management routes blueprint.
     
@@ -239,7 +247,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 game.log(f'🧹 Cleaning up previous game session: {game_pin}')
                 close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
-                    socketio, game_pin, game.logger, reason='new_session'
+                    socketio, game_pin, game.logger, reason='new_session',
+                    game_timeout_controls=game_timeout_controls
                 )
             
             # Store session with gamePin as the key
@@ -253,7 +262,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             # Schedule auto-close after 1 hour
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, game_pin, game.logger
+                socketio, game_pin, game.logger,
+                game_timeout_controls=game_timeout_controls
             )
             
             game.log(f'✅ Session registered: PIN={game_pin}')
@@ -400,7 +410,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             # Use centralized cleanup function
             close_game_and_cleanup(
                 game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, game_pin, game.logger, reason='manual'
+                socketio, game_pin, game.logger, reason='manual',
+                game_timeout_controls=game_timeout_controls
             )
             
             return jsonify({
@@ -447,7 +458,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
                 game.log(f'🧹 Cleaning up previous game session: {game_pin}')
                 close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
-                    socketio, game_pin, game.logger, reason='new_session'
+                    socketio, game_pin, game.logger, reason='new_session',
+                    game_timeout_controls=game_timeout_controls
                 )
             
             # Get optional language parameter
@@ -466,7 +478,8 @@ def create_game_routes(socketio, game, game_sessions, player_registry, client_ro
             # Schedule auto-close after 1 hour
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
-                socketio, game_pin, game.logger
+                socketio, game_pin, game.logger,
+                game_timeout_controls=game_timeout_controls
             )
             
             game.log(f'✅ Room created: PIN={game_pin} (waiting for admin to start game)')

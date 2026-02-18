@@ -135,6 +135,7 @@ client_rooms = {}  # maps session_id -> gamePin (room name)
 socket_to_player = {}  # maps socket_id -> uid
 game_sessions = {}  # maps gamePin -> session info
 player_registry = {}  # maps uid -> player info
+game_timeout_controls = {}  # maps gamePin -> threading.Event for auto-close cancellation
 
 # Initialize logger (replaces GameManager)
 game = GameLogger()
@@ -142,12 +143,21 @@ game = GameLogger()
 # Register WebSocket handlers
 register_websocket_handlers(
     socketio, game, connected_clients, client_rooms,
-    socket_to_player, game_sessions, player_registry
+    socket_to_player, game_sessions, player_registry,
+    game_timeout_controls=game_timeout_controls
 )
 
 # Create and register blueprints
 player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
-game_bp = create_game_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
+game_bp = create_game_routes(
+    socketio,
+    game,
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    game_timeout_controls=game_timeout_controls
+)
 navigation_bp = create_navigation_routes(socketio, game, game_sessions, client_rooms)
 info_bp = create_info_routes(game, ADMIN_URL, GAME_URL)
 
