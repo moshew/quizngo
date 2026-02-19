@@ -21,6 +21,56 @@ const SCREENS = {
   GAME_OVER: 'gameOver'
 }
 
+const SERVER_CODE_MESSAGES = {
+  ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: {
+    he: 'חדר לא נמצא. יש ליצור חדר תחילה.',
+    en: 'Room not found. Create room first.',
+  },
+  NO_ACTIVE_GAME_FOUND_WITH_PIN: {
+    he: 'לא נמצא משחק פעיל עם הקוד {{gamePin}}',
+    en: 'No active game found with PIN {{gamePin}}',
+  },
+  GAME_HAS_NOT_STARTED_YET_PLEASE_WAIT_FOR_THE_HOST: {
+    he: 'המשחק עדיין לא התחיל. יש להמתין למארח.',
+    en: 'Game has not started yet. Please wait for the host.',
+  },
+  GAME_SESSION_NOT_FOUND: {
+    he: 'סשן המשחק לא נמצא',
+    en: 'Game session not found',
+  },
+  GAME_IS_NO_LONGER_ACTIVE: {
+    he: 'המשחק כבר אינו פעיל',
+    en: 'Game is no longer active',
+  },
+  INVALID_GAME_PIN: {
+    he: 'קוד משחק לא תקין',
+    en: 'Invalid game PIN',
+  },
+  SERVER_ERROR: {
+    he: 'שגיאת שרת פנימית',
+    en: 'Internal server error',
+  },
+}
+
+function formatServerMessage(message, language = 'en', fallback = 'Server error') {
+  if (!message) return fallback
+  if (typeof message === 'string') return message
+
+  if (typeof message === 'object') {
+    const code = typeof message.code === 'string' ? message.code.toUpperCase() : ''
+    if (!code) return fallback
+
+    const params = message.params || {}
+    const templateSet = SERVER_CODE_MESSAGES[code]
+    const template = (templateSet && (templateSet[language] || templateSet.en)) || code.replace(/_/g, ' ').toLowerCase()
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+      params[key] !== undefined ? String(params[key]) : '',
+    )
+  }
+
+  return fallback
+}
+
 function App() {
   // Check URL for pin parameter
   const urlParams = new URLSearchParams(window.location.search)
@@ -44,11 +94,13 @@ function App() {
   const [answerTimeRemaining, setAnswerTimeRemaining] = useState(null)
   const [gameStarted, setGameStarted] = useState(false)
   const [serverUrl, setServerUrl] = useState(null)
+  const [disconnected, setDisconnected] = useState(false)
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
   const timerRef = useRef(null)
   const uidRef = useRef(null)
+  const gameClosedRef = useRef(false)
 
   // Resolve server URL via LB when PIN comes from URL
   useEffect(() => {
@@ -143,6 +195,7 @@ function App() {
 
     socket.on('game_closed', (data) => {
       console.log('🚫 Game closed!', data)
+      gameClosedRef.current = true
       // Clear answer timer
       if (timerRef.current) {
         clearInterval(timerRef.current)
@@ -156,6 +209,15 @@ function App() {
 
     socket.on('disconnect', () => {
       console.log('❌ Socket disconnected')
+      // Only show disconnected overlay if this wasn't a normal game_closed
+      if (!gameClosedRef.current) {
+        if (timerRef.current) {
+          clearInterval(timerRef.current)
+          timerRef.current = null
+        }
+        setAnswerTimeRemaining(null)
+        setDisconnected(true)
+      }
     })
   }, [startAnswerTimer])
 
@@ -245,7 +307,7 @@ function App() {
         console.log(`✅ Joined game! UID: ${data.uid}, state: ${gameState}`)
       } else {
         socket.disconnect()
-        setError(data.message || data.error || 'Failed to join game')
+        setError(formatServerMessage(data.message, language, data.error || 'Failed to join game'))
       }
     } catch (err) {
       console.error('❌ Join error:', err)
@@ -365,6 +427,8 @@ function App() {
     setError('')
     setPinError('')
     setCheckingPin(false)
+    setDisconnected(false)
+    gameClosedRef.current = false
   }
 
   // Cleanup on unmount
@@ -386,6 +450,21 @@ function App() {
 
   return (
     <div className="game-app">
+      {disconnected && (
+        <div className="disconnected-overlay">
+          <div className="disconnected-icon">&#x26A0;</div>
+          <div className="disconnected-title">
+            {language === 'he' ? 'החיבור אבד' : 'Connection Lost'}
+          </div>
+          <div className="disconnected-subtitle">
+            {language === 'he' ? 'השרת לא זמין. המשחק נסגר.' : 'Server unavailable. Game closed.'}
+          </div>
+          <button className="btn-primary" onClick={playAgain}>
+            {language === 'he' ? 'חזרה למסך הראשי' : 'Back to Main Screen'}
+          </button>
+        </div>
+      )}
+
       {showLanguageSwitcher && (
         <LanguageSwitcher language={language} setLanguage={setLanguage} />
       )}

@@ -105,6 +105,44 @@ export default {
         error: 'خطأ في الحفظ'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'لا توجد خوادم متاحة',
+        'Game server is unavailable': 'خادم اللعبة غير متاح',
+        'Game PIN not found': 'لم يتم العثور على PIN اللعبة',
+        'Failed to resolve server from LB': 'فشل الاتصال بموزع الحمل',
+        'Room not found. Add-in must create room first.': 'الغرفة غير موجودة. يجب إنشاء غرفة أولاً.',
+        'Game already started': 'اللعبة بدأت بالفعل',
+        'Game session not found': 'جلسة اللعبة غير موجودة',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ خطأ في إنشاء الغرفة: {{message}}',
+        websocket: '⚠️ خطأ في اتصال WebSocket',
+        startGame: 'خطأ في بدء اللعبة: {{message}}',
+        gameClosed: 'تم إغلاق اللعبة: {{reason}}',
+        connectionLost: 'فقد الاتصال. تم إغلاق اللعبة.',
+        addGameId: 'خطأ في إضافة معرف اللعبة',
+        addQrCode: 'خطأ في إضافة رمز QR',
+        addQuestionTime: 'خطأ في إضافة وقت السؤال',
+        addRespondersCount: 'خطأ في إضافة عدد المجيبين',
+        addParticipantsCount: 'خطأ في إضافة عدد المشاركين',
+        addParticipantsList: 'خطأ في إضافة قائمة المشاركين',
+        addAnswersDistribution: 'خطأ في إضافة توزيع الإجابات',
+        addLeaderboard: 'خطأ في إضافة عناصر لوحة المتصدرين',
+        selectSlideFirst: 'يرجى اختيار شريحة أولاً',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ تم إنشاء الغرفة! PIN: {{pin}} - في انتظار المسؤول لبدء اللعبة',
+        gameStarted: '✅ بدأت اللعبة! جاري قبول المشاركين...',
+        gameIdAdded: '✅ تم إضافة معرف اللعبة إلى الشريحة!',
+        qrCodeAdded: '✅ تم إضافة رمز QR إلى الشريحة!',
+        questionTimeAdded: '✅ تم إضافة وقت السؤال إلى الشريحة!',
+        respondersCountAdded: '✅ تم إضافة عدد المجيبين إلى الشريحة!',
+        participantsCountAdded: '✅ تم إضافة عدد المشاركين إلى الشريحة!',
+    },
     // Tooltips
     tooltips: {
         edit: 'تعديل',

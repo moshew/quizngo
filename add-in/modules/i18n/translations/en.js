@@ -115,6 +115,45 @@ export default {
         error: 'Error saving'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'No active servers available',
+        'Game server is unavailable': 'Game server is unavailable',
+        'Game PIN not found': 'Game PIN not found',
+        'Failed to resolve server from LB': 'Failed to resolve server',
+        'Room not found. Add-in must create room first.': 'Room not found. Create room first.',
+        'Game already started': 'Game already started',
+        'Game session not found': 'Game session not found',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ Error creating room: {{message}}',
+        websocket: '⚠️ WebSocket connection error',
+        startGame: 'Error starting game: {{message}}',
+        gameClosed: 'Game closed: {{reason}}',
+        connectionLost: 'Connection lost. Game closed.',
+        addGameId: 'Error adding game ID',
+        addQrCode: 'Error adding QR Code',
+        addQuestionTime: 'Error adding question time',
+        addRespondersCount: 'Error adding responders count',
+        addParticipantsCount: 'Error adding participants count',
+        addParticipantsList: 'Error adding participants list',
+        addAnswersDistribution: 'Error adding answers distribution',
+        addLeaderboard: 'Error adding leaderboard elements',
+        selectSlideFirst: 'Please select a slide first'
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ Room created! PIN: {{pin}} - Waiting for Admin to start game',
+        gameStarted: '✅ Game started! Accepting participants...',
+        gameIdAdded: '✅ Game ID added to slide!',
+        qrCodeAdded: '✅ QR Code added to slide!',
+        questionTimeAdded: '✅ Question time added to slide!',
+        respondersCountAdded: '✅ Responders count added to slide!',
+        participantsCountAdded: '✅ Participants count added to slide!',
+    },
+
     // Tooltips
     tooltips: {
         edit: 'Edit',

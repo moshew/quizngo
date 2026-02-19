@@ -105,6 +105,44 @@ export default {
         error: 'Erreur d\'enregistrement'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'Aucun serveur actif disponible',
+        'Game server is unavailable': 'Le serveur de jeu est indisponible',
+        'Game PIN not found': 'PIN du jeu introuvable',
+        'Failed to resolve server from LB': 'Échec de connexion au répartiteur de charge',
+        'Room not found. Add-in must create room first.': 'Salle introuvable. Veuillez créer une salle d\'abord.',
+        'Game already started': 'Le jeu a déjà commencé',
+        'Game session not found': 'Session de jeu introuvable',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ Erreur lors de la création de la salle : {{message}}',
+        websocket: '⚠️ Erreur de connexion WebSocket',
+        startGame: 'Erreur lors du démarrage du jeu : {{message}}',
+        gameClosed: 'Jeu fermé : {{reason}}',
+        connectionLost: 'Connexion perdue. Jeu fermé.',
+        addGameId: 'Erreur lors de l\'ajout de l\'ID du jeu',
+        addQrCode: 'Erreur lors de l\'ajout du code QR',
+        addQuestionTime: 'Erreur lors de l\'ajout du temps de question',
+        addRespondersCount: 'Erreur lors de l\'ajout du nombre de répondants',
+        addParticipantsCount: 'Erreur lors de l\'ajout du nombre de participants',
+        addParticipantsList: 'Erreur lors de l\'ajout de la liste des participants',
+        addAnswersDistribution: 'Erreur lors de l\'ajout de la distribution des réponses',
+        addLeaderboard: 'Erreur lors de l\'ajout du classement',
+        selectSlideFirst: 'Veuillez d\'abord sélectionner une diapositive',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ Salle créée ! PIN : {{pin}} - En attente du démarrage par l\'Admin',
+        gameStarted: '✅ Jeu lancé ! Acceptation des participants...',
+        gameIdAdded: '✅ ID du jeu ajouté à la diapositive !',
+        qrCodeAdded: '✅ Code QR ajouté à la diapositive !',
+        questionTimeAdded: '✅ Temps de question ajouté à la diapositive !',
+        respondersCountAdded: '✅ Nombre de répondants ajouté à la diapositive !',
+        participantsCountAdded: '✅ Nombre de participants ajouté à la diapositive !',
+    },
     // Tooltips
     tooltips: {
         edit: 'Modifier',

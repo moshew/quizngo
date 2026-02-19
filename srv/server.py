@@ -83,6 +83,7 @@ from routes.player_routes import create_player_routes
 from routes.game_routes import create_game_routes
 from routes.navigation_routes import create_navigation_routes
 from routes.info_routes import create_info_routes
+from utils.response_normalizer import normalize_flask_json_response
 
 # Configuration
 LOG_DIR = Path(__file__).parent / 'logs'
@@ -167,6 +168,12 @@ app.register_blueprint(navigation_bp)
 app.register_blueprint(info_bp)
 
 
+@app.after_request
+def normalize_message_fields(response):
+    """Ensure API responses expose message/reason as structured objects."""
+    return normalize_flask_json_response(response)
+
+
 @app.route('/', methods=['GET', 'POST'])
 def api_handler():
     """Handle API requests via query parameters"""
@@ -245,8 +252,13 @@ def api_handler():
 
 # --- Load Balancer Integration ---
 
-def register_with_lb():
-    """Register this server with the load balancer."""
+def register_with_lb(initial=False):
+    """Register this server with the load balancer.
+
+    Args:
+        initial: If True, exit the process on failure (first-time registration).
+                 If False, just log a warning (re-registration from heartbeat).
+    """
     global lb_server_id
     logger = logging.getLogger(__name__)
     try:
@@ -263,24 +275,26 @@ def register_with_lb():
             from utils.lb_client import init_lb
             init_lb(LB_URL, lb_server_id)
 
-            start_heartbeat()
+            if initial:
+                start_heartbeat()
         else:
             logger.error(f'❌ LB registration failed: {data}')
-            logger.error(f'Load Balancer is not accepting registration. Shutting down.')
-            sys.exit(1)
+            if initial:
+                sys.exit(1)
     except Exception as e:
         logger.error(f'❌ Failed to connect to Load Balancer: {e}')
-        logger.error(f'Cannot reach Load Balancer at {LB_URL}. Please ensure:')
-        logger.error(f'  1. Load Balancer is running: cd srv-lb && python server.py')
-        logger.error(f'  2. URL is correct: {LB_URL}')
-        logger.error(f'  3. Network/firewall allows connection')
-        logger.error(f'')
-        logger.error(f'Shutting down server.')
-        sys.exit(1)
+        if initial:
+            logger.error(f'Cannot reach Load Balancer at {LB_URL}. Please ensure:')
+            logger.error(f'  1. Load Balancer is running: cd srv-lb && python server.py')
+            logger.error(f'  2. URL is correct: {LB_URL}')
+            logger.error(f'  3. Network/firewall allows connection')
+            logger.error(f'')
+            logger.error(f'Shutting down server.')
+            sys.exit(1)
 
 
 def start_heartbeat():
-    """Push stats to LB every 30 seconds."""
+    """Push stats to LB every 30 seconds. Re-registers if LB forgot us."""
     def heartbeat_worker():
         while True:
             eventlet.sleep(30)
@@ -293,10 +307,13 @@ def start_heartbeat():
                     'memory_mb': round(psutil.Process().memory_info().rss / (1024 * 1024), 1),
                     'active_games_count': len(game_sessions)
                 }
-                http_requests.post(
+                resp = http_requests.post(
                     f'{LB_URL}/api/servers/{lb_server_id}/heartbeat',
                     json=stats, timeout=5, verify=False
                 )
+                if resp.status_code == 404:
+                    logging.getLogger(__name__).warning('LB does not recognize us — re-registering...')
+                    register_with_lb()
             except Exception as e:
                 logging.getLogger(__name__).warning(f'Heartbeat failed: {e}')
     eventlet.spawn(heartbeat_worker)
@@ -332,7 +349,7 @@ if __name__ == '__main__':
     print("=" * 40)
 
     # Register with LB after a short delay (let server start first)
-    eventlet.spawn_after(2, register_with_lb)
+    eventlet.spawn_after(2, register_with_lb, True)
 
     if USE_SSL:
         certfile = str(CERT_DIR / 'localhost.crt')

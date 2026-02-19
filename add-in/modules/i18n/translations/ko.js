@@ -105,6 +105,44 @@ export default {
         error: '저장 오류'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': '사용 가능한 서버가 없습니다',
+        'Game server is unavailable': '게임 서버를 사용할 수 없습니다',
+        'Game PIN not found': '게임 PIN을 찾을 수 없습니다',
+        'Failed to resolve server from LB': '로드 밸런서 연결 실패',
+        'Room not found. Add-in must create room first.': '방을 찾을 수 없습니다. 먼저 방을 만드세요.',
+        'Game already started': '게임이 이미 시작되었습니다',
+        'Game session not found': '게임 세션을 찾을 수 없습니다',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ 방 생성 오류: {{message}}',
+        websocket: '⚠️ WebSocket 연결 오류',
+        startGame: '게임 시작 오류: {{message}}',
+        gameClosed: '게임 종료: {{reason}}',
+        connectionLost: '연결이 끊어졌습니다. 게임이 종료되었습니다.',
+        addGameId: '게임 ID 추가 오류',
+        addQrCode: 'QR 코드 추가 오류',
+        addQuestionTime: '질문 시간 추가 오류',
+        addRespondersCount: '응답자 수 추가 오류',
+        addParticipantsCount: '참가자 수 추가 오류',
+        addParticipantsList: '참가자 목록 추가 오류',
+        addAnswersDistribution: '응답 분포 추가 오류',
+        addLeaderboard: '리더보드 요소 추가 오류',
+        selectSlideFirst: '먼저 슬라이드를 선택하세요',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ 방 생성 완료! PIN: {{pin}} - 관리자의 시작을 기다리는 중',
+        gameStarted: '✅ 게임 시작! 참가자를 받고 있습니다...',
+        gameIdAdded: '✅ 게임 ID가 슬라이드에 추가되었습니다!',
+        qrCodeAdded: '✅ QR 코드가 슬라이드에 추가되었습니다!',
+        questionTimeAdded: '✅ 질문 시간이 슬라이드에 추가되었습니다!',
+        respondersCountAdded: '✅ 응답자 수가 슬라이드에 추가되었습니다!',
+        participantsCountAdded: '✅ 참가자 수가 슬라이드에 추가되었습니다!',
+    },
     // Tooltips
     tooltips: {
         edit: '편집',

@@ -105,6 +105,44 @@ export default {
         error: '保存出错'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': '没有可用的服务器',
+        'Game server is unavailable': '游戏服务器不可用',
+        'Game PIN not found': '未找到游戏PIN',
+        'Failed to resolve server from LB': '连接负载均衡器失败',
+        'Room not found. Add-in must create room first.': '未找到房间。请先创建房间。',
+        'Game already started': '游戏已经开始',
+        'Game session not found': '未找到游戏会话',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ 创建房间错误：{{message}}',
+        websocket: '⚠️ WebSocket连接错误',
+        startGame: '启动游戏错误：{{message}}',
+        gameClosed: '游戏已关闭：{{reason}}',
+        connectionLost: '连接丢失。游戏已关闭。',
+        addGameId: '添加游戏ID错误',
+        addQrCode: '添加二维码错误',
+        addQuestionTime: '添加问题时间错误',
+        addRespondersCount: '添加回答者数量错误',
+        addParticipantsCount: '添加参与者数量错误',
+        addParticipantsList: '添加参与者列表错误',
+        addAnswersDistribution: '添加答案分布错误',
+        addLeaderboard: '添加排行榜元素错误',
+        selectSlideFirst: '请先选择一张幻灯片',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ 房间已创建！PIN：{{pin}} - 等待管理员启动游戏',
+        gameStarted: '✅ 游戏开始！正在接受参与者...',
+        gameIdAdded: '✅ 游戏ID已添加到幻灯片！',
+        qrCodeAdded: '✅ 二维码已添加到幻灯片！',
+        questionTimeAdded: '✅ 问题时间已添加到幻灯片！',
+        respondersCountAdded: '✅ 回答者数量已添加到幻灯片！',
+        participantsCountAdded: '✅ 参与者数量已添加到幻灯片！',
+    },
     // Tooltips
     tooltips: {
         edit: '编辑',

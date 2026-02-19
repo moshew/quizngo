@@ -105,6 +105,44 @@ export default {
         error: 'Fehler beim Speichern'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'Keine aktiven Server verfügbar',
+        'Game server is unavailable': 'Spielserver nicht verfügbar',
+        'Game PIN not found': 'Spiel-PIN nicht gefunden',
+        'Failed to resolve server from LB': 'Verbindung zum Load Balancer fehlgeschlagen',
+        'Room not found. Add-in must create room first.': 'Raum nicht gefunden. Bitte zuerst einen Raum erstellen.',
+        'Game already started': 'Spiel bereits gestartet',
+        'Game session not found': 'Spielsitzung nicht gefunden',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ Fehler beim Erstellen des Raums: {{message}}',
+        websocket: '⚠️ WebSocket-Verbindungsfehler',
+        startGame: 'Fehler beim Starten des Spiels: {{message}}',
+        gameClosed: 'Spiel geschlossen: {{reason}}',
+        connectionLost: 'Verbindung verloren. Spiel geschlossen.',
+        addGameId: 'Fehler beim Hinzufügen der Spiel-ID',
+        addQrCode: 'Fehler beim Hinzufügen des QR-Codes',
+        addQuestionTime: 'Fehler beim Hinzufügen der Fragezeit',
+        addRespondersCount: 'Fehler beim Hinzufügen der Antwortenden-Anzahl',
+        addParticipantsCount: 'Fehler beim Hinzufügen der Teilnehmerzahl',
+        addParticipantsList: 'Fehler beim Hinzufügen der Teilnehmerliste',
+        addAnswersDistribution: 'Fehler beim Hinzufügen der Antwortverteilung',
+        addLeaderboard: 'Fehler beim Hinzufügen der Bestenliste',
+        selectSlideFirst: 'Bitte wählen Sie zuerst eine Folie aus',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ Raum erstellt! PIN: {{pin}} - Warten auf Admin zum Starten',
+        gameStarted: '✅ Spiel gestartet! Teilnehmer werden akzeptiert...',
+        gameIdAdded: '✅ Spiel-ID zur Folie hinzugefügt!',
+        qrCodeAdded: '✅ QR-Code zur Folie hinzugefügt!',
+        questionTimeAdded: '✅ Fragezeit zur Folie hinzugefügt!',
+        respondersCountAdded: '✅ Antwortenden-Anzahl zur Folie hinzugefügt!',
+        participantsCountAdded: '✅ Teilnehmerzahl zur Folie hinzugefügt!',
+    },
     // Tooltips
     tooltips: {
         edit: 'Bearbeiten',

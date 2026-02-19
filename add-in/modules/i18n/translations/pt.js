@@ -105,6 +105,44 @@ export default {
         error: 'Erro ao salvar'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'Nenhum servidor ativo disponível',
+        'Game server is unavailable': 'Servidor de jogo indisponível',
+        'Game PIN not found': 'PIN do jogo não encontrado',
+        'Failed to resolve server from LB': 'Falha ao conectar ao balanceador de carga',
+        'Room not found. Add-in must create room first.': 'Sala não encontrada. Crie uma sala primeiro.',
+        'Game already started': 'O jogo já começou',
+        'Game session not found': 'Sessão de jogo não encontrada',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ Erro ao criar sala: {{message}}',
+        websocket: '⚠️ Erro de conexão WebSocket',
+        startGame: 'Erro ao iniciar o jogo: {{message}}',
+        gameClosed: 'Jogo encerrado: {{reason}}',
+        connectionLost: 'Conexão perdida. Jogo encerrado.',
+        addGameId: 'Erro ao adicionar ID do jogo',
+        addQrCode: 'Erro ao adicionar código QR',
+        addQuestionTime: 'Erro ao adicionar tempo de pergunta',
+        addRespondersCount: 'Erro ao adicionar contagem de respondentes',
+        addParticipantsCount: 'Erro ao adicionar contagem de participantes',
+        addParticipantsList: 'Erro ao adicionar lista de participantes',
+        addAnswersDistribution: 'Erro ao adicionar distribuição de respostas',
+        addLeaderboard: 'Erro ao adicionar elementos do placar',
+        selectSlideFirst: 'Por favor, selecione um slide primeiro',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ Sala criada! PIN: {{pin}} - Aguardando Admin iniciar o jogo',
+        gameStarted: '✅ Jogo iniciado! Aceitando participantes...',
+        gameIdAdded: '✅ ID do jogo adicionado ao slide!',
+        qrCodeAdded: '✅ Código QR adicionado ao slide!',
+        questionTimeAdded: '✅ Tempo de pergunta adicionado ao slide!',
+        respondersCountAdded: '✅ Contagem de respondentes adicionada ao slide!',
+        participantsCountAdded: '✅ Contagem de participantes adicionada ao slide!',
+    },
     // Tooltips
     tooltips: {
         edit: 'Editar',

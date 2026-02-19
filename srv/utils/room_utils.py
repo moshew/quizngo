@@ -11,6 +11,16 @@ import time
 import threading
 
 
+_REASON_CODE_MAP = {
+    'manual': 'MANUAL',
+    'timeout': 'TIMEOUT',
+    'addin_closed': 'ADDIN_CLOSED',
+    'new_session': 'NEW_SESSION',
+    'cleanup': 'CLEANUP',
+    'websocket_disconnect': 'WEBSOCKET_DISCONNECT',
+}
+
+
 def check_game_active(game_sessions, game_pin):
     """Check if a game session is active."""
     if game_pin not in game_sessions:
@@ -77,7 +87,7 @@ def schedule_game_timeout(
 
     timeout_thread = threading.Thread(target=timeout_worker, daemon=True)
     timeout_thread.start()
-    logger.info(f'Scheduled auto-close for game {game_pin} in {timeout_seconds}s (1 hour)')
+    logger.info(f'Scheduled auto-close for game {game_pin} in {timeout_seconds}s')
 
 
 def close_game_and_cleanup(
@@ -124,8 +134,15 @@ def close_game_and_cleanup(
             {
                 'gamePin': game_pin,
                 'timestamp': time.time(),
-                'message': f'Game closed due to {reason}',
-                'reason': reason
+                'message': {
+                    'code': 'GAME_CLOSED',
+                    'params': {
+                        'reason': _REASON_CODE_MAP.get(reason, str(reason).upper())
+                    }
+                },
+                'reason': {
+                    'code': _REASON_CODE_MAP.get(reason, str(reason).upper())
+                }
             },
             game_pin
         )

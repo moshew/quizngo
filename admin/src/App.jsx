@@ -6,6 +6,34 @@ const LB_URL = import.meta.env.VITE_LB_URL || `http://${window.location.hostname
 const formatPin = (pin = '') => (pin.length === 6 ? `${pin.slice(0, 3)}-${pin.slice(3)}` : pin)
 const sanitizePin = (value = '') => value.replace(/[^0-9]/g, '').slice(0, 6)
 
+const SERVER_CODE_MESSAGES_HE = {
+  ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: 'חדר לא נמצא. יש ליצור חדר תחילה.',
+  GAME_ALREADY_STARTED: 'המשחק כבר התחיל',
+  GAME_SESSION_IS_NOT_ACTIVE_OR_HAS_BEEN_CLOSED: 'המשחק אינו פעיל או נסגר',
+  GAME_SESSION_NOT_FOUND: 'סשן משחק לא נמצא',
+  GAME_PIN_MUST_BE_6_DIGITS: 'קוד משחק חייב להכיל 6 ספרות',
+  MISSING_GAME_PIN: 'חסר קוד משחק',
+  SERVER_ERROR: 'שגיאת שרת פנימית',
+}
+
+function formatServerMessage(message, fallback = 'שגיאת שרת') {
+  if (!message) return fallback
+  if (typeof message === 'string') return message
+
+  if (typeof message === 'object') {
+    const code = typeof message.code === 'string' ? message.code.toUpperCase() : ''
+    if (!code) return fallback
+
+    const params = message.params || {}
+    const template = SERVER_CODE_MESSAGES_HE[code] || code.replace(/_/g, ' ').toLowerCase()
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+      params[key] !== undefined ? String(params[key]) : '',
+    )
+  }
+
+  return fallback
+}
+
 function App() {
   const [gamePin, setGamePin] = useState(null)
   const [pinInput, setPinInput] = useState('')
@@ -147,7 +175,7 @@ function App() {
         console.log('Game was already started')
         setGameStarted(true)
       } else {
-        alert('שגיאה בהתחלת המשחק: ' + data.message)
+        alert('שגיאה בהתחלת המשחק: ' + formatServerMessage(data.message))
       }
     } catch (err) {
       console.error('Error starting game:', err)
@@ -182,7 +210,7 @@ function App() {
         setGameActive(false)
       } else if (data.status === 'error') {
         // Only show alerts for actual errors, not warnings
-        alert('שגיאה: ' + data.message)
+        alert('שגיאה: ' + formatServerMessage(data.message))
       }
     } catch (err) {
       alert('שגיאת רשת: ' + err.message)

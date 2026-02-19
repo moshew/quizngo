@@ -16,6 +16,13 @@ from flask import Blueprint, request, jsonify
 from utils.room_utils import emit_to_room, check_game_active, close_game_and_cleanup, schedule_game_timeout
 
 
+# Auto-close policy:
+# - Room waiting for admin start: 5 minutes
+# - Active started game: 1 hour
+WAITING_ROOM_TIMEOUT_SECONDS = 300
+STARTED_GAME_TIMEOUT_SECONDS = 3600
+
+
 def create_game_routes(
     socketio,
     game,
@@ -201,8 +208,6 @@ def create_game_routes(
                     'gameStarted': session.get('gameStarted', False)
                 })
 
-            game.log(f'📋 Retrieved {len(all_pins)} game PINs (active and waiting)')
-
             return jsonify({
                 'status': 'success',
                 'count': len(all_pins),
@@ -263,6 +268,7 @@ def create_game_routes(
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 socketio, game_pin, game.logger,
+                timeout_seconds=STARTED_GAME_TIMEOUT_SECONDS,
                 game_timeout_controls=game_timeout_controls
             )
             
@@ -475,10 +481,11 @@ def create_game_routes(
                 'language': language
             }
             
-            # Schedule auto-close after 1 hour
+            # Schedule auto-close after 5 minutes while waiting for admin to start.
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 socketio, game_pin, game.logger,
+                timeout_seconds=WAITING_ROOM_TIMEOUT_SECONDS,
                 game_timeout_controls=game_timeout_controls
             )
             
@@ -546,6 +553,14 @@ def create_game_routes(
             session['gameStarted'] = True
             session['active'] = True
             session['startedAt'] = time.time()
+
+            # Replace waiting-room timeout with regular started-game timeout.
+            schedule_game_timeout(
+                game_sessions, player_registry, client_rooms, socket_to_player,
+                socketio, game_pin, game.logger,
+                timeout_seconds=STARTED_GAME_TIMEOUT_SECONDS,
+                game_timeout_controls=game_timeout_controls
+            )
             
             game.log(f'✅ Game started and activated: PIN={game_pin}')
             

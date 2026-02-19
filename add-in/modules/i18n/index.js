@@ -249,6 +249,177 @@ export function createLanguageSelector(currentLang = null) {
     `;
 }
 
+const SERVER_CODE_TRANSLATIONS = {
+    INTERNAL_SERVER_ERROR: {
+        he: 'שגיאת שרת פנימית',
+        en: 'Internal server error'
+    },
+    WEBSOCKET_CONNECTION_ERROR: {
+        he: '⚠️ שגיאה בחיבור WebSocket',
+        en: '⚠️ WebSocket connection error'
+    },
+    WEBSOCKET_ERROR: {
+        he: '⚠️ שגיאת WebSocket',
+        en: '⚠️ WebSocket error'
+    },
+    MISSING_GAME_PIN: {
+        he: 'חסר קוד משחק',
+        en: 'Missing game PIN'
+    },
+    GAME_PIN_MUST_BE_6_DIGITS: {
+        he: 'קוד משחק חייב להכיל 6 ספרות',
+        en: 'Game PIN must be 6 digits'
+    },
+    INVALID_GAME_PIN: {
+        he: 'קוד משחק לא תקין',
+        en: 'Invalid game PIN'
+    },
+    INVALID_GAME_PIN_LENGTH: {
+        he: 'אורך קוד המשחק אינו תקין',
+        en: 'Invalid game PIN length'
+    },
+    ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: {
+        he: 'חדר לא נמצא. יש ליצור חדר תחילה.',
+        en: 'Room not found. Create room first.'
+    },
+    GAME_ALREADY_STARTED: {
+        he: 'המשחק כבר התחיל',
+        en: 'Game already started'
+    },
+    GAME_SESSION_NOT_FOUND: {
+        he: 'סשן משחק לא נמצא',
+        en: 'Game session not found'
+    },
+    GAME_PIN_NOT_FOUND: {
+        he: 'קוד משחק לא נמצא',
+        en: 'Game PIN not found'
+    },
+    GAME_SERVER_IS_UNAVAILABLE: {
+        he: 'שרת המשחק אינו זמין',
+        en: 'Game server is unavailable'
+    },
+    NO_ACTIVE_SERVERS_AVAILABLE: {
+        he: 'אין שרתים זמינים',
+        en: 'No active servers available'
+    },
+    FAILED_TO_RESOLVE_SERVER_FROM_LB: {
+        he: 'שגיאה בפנייה למאזן העומסים',
+        en: 'Failed to resolve server from LB'
+    },
+    NO_ACTIVE_GAME_FOUND_WITH_PIN: {
+        he: 'לא נמצא משחק פעיל עם הקוד {{gamePin}}',
+        en: 'No active game found with PIN {{gamePin}}'
+    },
+    NAME_ALREADY_IN_USE: {
+        he: 'השם "{{name}}" כבר בשימוש',
+        en: 'The name "{{name}}" is already in use'
+    },
+    GAME_CLOSED: {
+        he: 'המשחק נסגר',
+        en: 'Game closed'
+    },
+    MANUAL: {
+        he: 'על ידי המארח',
+        en: 'by the host'
+    },
+    TIMEOUT: {
+        he: 'עקב פסק זמן',
+        en: 'due to timeout'
+    },
+    ADDIN_CLOSED: {
+        he: 'עקב סגירת התוסף',
+        en: 'because the add-in was closed'
+    },
+    NEW_SESSION: {
+        he: 'עקב פתיחת משחק חדש',
+        en: 'because a new session started'
+    }
+};
+
+const SERVER_CODE_TO_LEGACY_MESSAGE = {
+    NO_ACTIVE_SERVERS_AVAILABLE: 'No active servers available',
+    GAME_SERVER_IS_UNAVAILABLE: 'Game server is unavailable',
+    GAME_PIN_NOT_FOUND: 'Game PIN not found',
+    ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: 'Room not found. Add-in must create room first.',
+    GAME_ALREADY_STARTED: 'Game already started',
+    GAME_SESSION_NOT_FOUND: 'Game session not found'
+};
+
+function interpolateTemplate(template, params = {}) {
+    if (typeof template !== 'string') {
+        return '';
+    }
+    return template.replace(/\{\{(\w+)\}\}/g, (match, paramKey) => {
+        return params[paramKey] !== undefined ? params[paramKey] : match;
+    });
+}
+
+function translateServerCode(code, params = {}) {
+    if (!code || typeof code !== 'string') {
+        return null;
+    }
+
+    const normalizedCode = code.trim().toUpperCase();
+    const localizedMap = SERVER_CODE_TRANSLATIONS[normalizedCode];
+
+    if (!localizedMap) {
+        return null;
+    }
+
+    const template = localizedMap[currentLanguage] || localizedMap.en || localizedMap.he;
+    return interpolateTemplate(template, params);
+}
+
+/**
+ * Translate a server error message using the serverErrors map.
+ * Falls back to the original message if no translation is found.
+ */
+export function tServerError(message) {
+    const serverErrors = translations?.serverErrors || {};
+
+    if (message && typeof message === 'object') {
+        const code = message.code || message.errorCode || message.reasonCode;
+        const params = message.params || {};
+
+        if (typeof code === 'string') {
+            const legacyMessage = SERVER_CODE_TO_LEGACY_MESSAGE[code.toUpperCase()];
+            if (legacyMessage && legacyMessage in serverErrors) {
+                return interpolateTemplate(serverErrors[legacyMessage], params);
+            }
+
+            if (legacyMessage) {
+                return interpolateTemplate(legacyMessage, params);
+            }
+
+            const byCode = translateServerCode(code, params);
+            if (byCode) {
+                return byCode;
+            }
+        }
+
+        if (typeof message.message === 'string') {
+            return tServerError(message.message);
+        }
+
+        return translateServerCode('INTERNAL_SERVER_ERROR') || 'Server error';
+    }
+
+    if (typeof message === 'string') {
+        if (message in serverErrors) {
+            return serverErrors[message];
+        }
+
+        const byCode = translateServerCode(message);
+        if (byCode) {
+            return byCode;
+        }
+
+        return message;
+    }
+
+    return translateServerCode('INTERNAL_SERVER_ERROR') || 'Server error';
+}
+
 // Expose to window for easy access
 window.i18n = {
     t,

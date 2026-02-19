@@ -105,6 +105,44 @@ export default {
         error: 'Ошибка сохранения'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'Нет доступных серверов',
+        'Game server is unavailable': 'Сервер игры недоступен',
+        'Game PIN not found': 'PIN игры не найден',
+        'Failed to resolve server from LB': 'Ошибка подключения к балансировщику нагрузки',
+        'Room not found. Add-in must create room first.': 'Комната не найдена. Сначала создайте комнату.',
+        'Game already started': 'Игра уже началась',
+        'Game session not found': 'Сессия игры не найдена',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ Ошибка создания комнаты: {{message}}',
+        websocket: '⚠️ Ошибка подключения WebSocket',
+        startGame: 'Ошибка запуска игры: {{message}}',
+        gameClosed: 'Игра закрыта: {{reason}}',
+        connectionLost: 'Соединение потеряно. Игра закрыта.',
+        addGameId: 'Ошибка добавления ID игры',
+        addQrCode: 'Ошибка добавления QR-кода',
+        addQuestionTime: 'Ошибка добавления времени вопроса',
+        addRespondersCount: 'Ошибка добавления количества ответивших',
+        addParticipantsCount: 'Ошибка добавления количества участников',
+        addParticipantsList: 'Ошибка добавления списка участников',
+        addAnswersDistribution: 'Ошибка добавления распределения ответов',
+        addLeaderboard: 'Ошибка добавления элементов таблицы лидеров',
+        selectSlideFirst: 'Пожалуйста, сначала выберите слайд',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ Комната создана! PIN: {{pin}} - Ожидание запуска админом',
+        gameStarted: '✅ Игра началась! Принимаем участников...',
+        gameIdAdded: '✅ ID игры добавлен на слайд!',
+        qrCodeAdded: '✅ QR-код добавлен на слайд!',
+        questionTimeAdded: '✅ Время вопроса добавлено на слайд!',
+        respondersCountAdded: '✅ Количество ответивших добавлено на слайд!',
+        participantsCountAdded: '✅ Количество участников добавлено на слайд!',
+    },
     // Tooltips
     tooltips: {
         edit: 'Редактировать',

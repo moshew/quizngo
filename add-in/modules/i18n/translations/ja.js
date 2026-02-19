@@ -105,6 +105,44 @@ export default {
         error: '保存エラー'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': '利用可能なサーバーがありません',
+        'Game server is unavailable': 'ゲームサーバーが利用できません',
+        'Game PIN not found': 'ゲームPINが見つかりません',
+        'Failed to resolve server from LB': 'ロードバランサーへの接続に失敗しました',
+        'Room not found. Add-in must create room first.': 'ルームが見つかりません。先にルームを作成してください。',
+        'Game already started': 'ゲームは既に開始されています',
+        'Game session not found': 'ゲームセッションが見つかりません',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ ルーム作成エラー: {{message}}',
+        websocket: '⚠️ WebSocket接続エラー',
+        startGame: 'ゲーム開始エラー: {{message}}',
+        gameClosed: 'ゲームが閉じられました: {{reason}}',
+        connectionLost: '接続が切断されました。ゲームが閉じられました。',
+        addGameId: 'ゲームID追加エラー',
+        addQrCode: 'QRコード追加エラー',
+        addQuestionTime: '質問時間追加エラー',
+        addRespondersCount: '回答者数追加エラー',
+        addParticipantsCount: '参加者数追加エラー',
+        addParticipantsList: '参加者リスト追加エラー',
+        addAnswersDistribution: '回答分布追加エラー',
+        addLeaderboard: 'リーダーボード要素追加エラー',
+        selectSlideFirst: '先にスライドを選択してください',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ ルーム作成完了！PIN: {{pin}} - Adminの開始を待っています',
+        gameStarted: '✅ ゲーム開始！参加者を受け付けています...',
+        gameIdAdded: '✅ ゲームIDをスライドに追加しました！',
+        qrCodeAdded: '✅ QRコードをスライドに追加しました！',
+        questionTimeAdded: '✅ 質問時間をスライドに追加しました！',
+        respondersCountAdded: '✅ 回答者数をスライドに追加しました！',
+        participantsCountAdded: '✅ 参加者数をスライドに追加しました！',
+    },
     // Tooltips
     tooltips: {
         edit: '編集',

@@ -115,6 +115,45 @@ export default {
         error: 'שגיאה בשמירה'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'אין שרתים זמינים',
+        'Game server is unavailable': 'שרת המשחק אינו זמין',
+        'Game PIN not found': 'PIN משחק לא נמצא',
+        'Failed to resolve server from LB': 'שגיאה בפנייה למאזן העומסים',
+        'Room not found. Add-in must create room first.': 'חדר לא נמצא. יש ליצור חדר תחילה.',
+        'Game already started': 'המשחק כבר התחיל',
+        'Game session not found': 'משחק לא נמצא',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ שגיאה ביצירת חדר: {{message}}',
+        websocket: '⚠️ שגיאה בחיבור WebSocket',
+        startGame: 'שגיאה בהפעלת המשחק: {{message}}',
+        gameClosed: 'המשחק נסגר: {{reason}}',
+        connectionLost: 'החיבור אבד. המשחק נסגר.',
+        addGameId: 'שגיאה בהוספת מזהה משחק',
+        addQrCode: 'שגיאה בהוספת QR Code',
+        addQuestionTime: 'שגיאה בהוספת זמן שאלה',
+        addRespondersCount: 'שגיאה בהוספת מספר עונים',
+        addParticipantsCount: 'שגיאה בהוספת מספר המשתתפים',
+        addParticipantsList: 'שגיאה בהוספת רשימת משתתפים',
+        addAnswersDistribution: 'שגיאה בהוספת פילוג תשובות',
+        addLeaderboard: 'שגיאה בהוספת אלמנטים לטבלת מובילים',
+        selectSlideFirst: 'אנא בחר שקף תחילה'
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ חדר נוצר! PIN: {{pin}} - ממתין ל-Admin להתחיל משחק',
+        gameStarted: '✅ המשחק התחיל! מקבל משתתפים...',
+        gameIdAdded: '✅ מזהה משחק נוסף לשקף!',
+        qrCodeAdded: '✅ QR Code נוסף לשקף!',
+        questionTimeAdded: '✅ זמן שאלה נוסף לשקף!',
+        respondersCountAdded: '✅ מספר עונים נוסף לשקף!',
+        participantsCountAdded: '✅ מספר משתתפים נוסף לשקף!',
+    },
+
     // Tooltips
     tooltips: {
         edit: 'עריכה',

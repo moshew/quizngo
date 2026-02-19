@@ -6,6 +6,7 @@
 /* global PowerPoint */
 
 import { showError, showStatus } from '../ui/manager.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Add Answers Distribution Bar Chart
@@ -19,7 +20,7 @@ export async function addAnswersDistribution() {
             await context.sync();
             
             if (slides.items.length === 0) {
-                showError('אנא בחר שקף תחילה');
+                showError(t('errors.selectSlideFirst'));
                 return;
             }
             
@@ -237,7 +238,7 @@ export async function addAnswersDistribution() {
         });
     } catch (error) {
         console.error('Error adding answers distribution:', error);
-        showError('שגיאה בהוספת פילוג תשובות');
+        showError(t('errors.addAnswersDistribution'));
     }
 }
 
@@ -419,7 +420,7 @@ export async function addLeaderboardElements() {
             await context.sync();
             
             if (slides.items.length === 0) {
-                showError('אנא בחר שקף תחילה');
+                showError(t('errors.selectSlideFirst'));
                 return;
             }
             
@@ -556,7 +557,7 @@ export async function addLeaderboardElements() {
         });
     } catch (error) {
         console.error('Error adding leaderboard elements:', error);
-        showError('שגיאה בהוספת אלמנטים לטבלת מובילים');
+        showError(t('errors.addLeaderboard'));
     }
 }
 

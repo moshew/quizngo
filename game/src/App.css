@@ -503,6 +503,49 @@ body {
   text-shadow: 0 0 15px rgba(255, 140, 0, 0.4);
 }
 
+/* ====== DISCONNECTED OVERLAY ====== */
+
+.disconnected-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  background: rgba(26, 26, 46, 0.97);
+  animation: fadeIn 0.4s ease;
+}
+
+.disconnected-icon {
+  font-size: 64px;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.disconnected-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ff6b6b;
+  text-shadow: 0 0 20px rgba(255, 107, 107, 0.4);
+  text-align: center;
+}
+
+.disconnected-subtitle {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.disconnected-overlay .btn-primary {
+  max-width: 300px;
+}
+
 /* ====== SPINNER ====== */
 
 .spinner {

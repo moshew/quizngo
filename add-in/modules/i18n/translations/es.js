@@ -105,6 +105,44 @@ export default {
         error: 'Error al guardar'
     },
 
+    // Server error message translations
+    serverErrors: {
+        'No active servers available': 'No hay servidores activos disponibles',
+        'Game server is unavailable': 'El servidor de juego no está disponible',
+        'Game PIN not found': 'PIN del juego no encontrado',
+        'Failed to resolve server from LB': 'Error al conectar con el balanceador de carga',
+        'Room not found. Add-in must create room first.': 'Sala no encontrada. Primero debe crear una sala.',
+        'Game already started': 'El juego ya ha comenzado',
+        'Game session not found': 'Sesión de juego no encontrada',
+    },
+    // Errors
+    errors: {
+        createRoom: '⚠️ Error al crear la sala: {{message}}',
+        websocket: '⚠️ Error de conexión WebSocket',
+        startGame: 'Error al iniciar el juego: {{message}}',
+        gameClosed: 'Juego cerrado: {{reason}}',
+        connectionLost: 'Conexión perdida. Juego cerrado.',
+        addGameId: 'Error al agregar ID del juego',
+        addQrCode: 'Error al agregar código QR',
+        addQuestionTime: 'Error al agregar tiempo de pregunta',
+        addRespondersCount: 'Error al agregar cantidad de respondientes',
+        addParticipantsCount: 'Error al agregar cantidad de participantes',
+        addParticipantsList: 'Error al agregar lista de participantes',
+        addAnswersDistribution: 'Error al agregar distribución de respuestas',
+        addLeaderboard: 'Error al agregar tabla de líderes',
+        selectSlideFirst: 'Por favor seleccione una diapositiva primero',
+    },
+
+    // Success
+    success: {
+        roomCreated: '✅ ¡Sala creada! PIN: {{pin}} - Esperando al Admin para iniciar',
+        gameStarted: '✅ ¡Juego iniciado! Aceptando participantes...',
+        gameIdAdded: '✅ ¡ID del juego agregado a la diapositiva!',
+        qrCodeAdded: '✅ ¡Código QR agregado a la diapositiva!',
+        questionTimeAdded: '✅ ¡Tiempo de pregunta agregado a la diapositiva!',
+        respondersCountAdded: '✅ ¡Cantidad de respondientes agregada a la diapositiva!',
+        participantsCountAdded: '✅ ¡Cantidad de participantes agregada a la diapositiva!',
+    },
     // Tooltips
     tooltips: {
         edit: 'Editar',

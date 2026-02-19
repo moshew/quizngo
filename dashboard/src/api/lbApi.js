@@ -2,6 +2,38 @@ const JSON_HEADERS = {
   'Content-Type': 'application/json',
 }
 
+const SERVER_CODE_MESSAGES = {
+  SERVER_NOT_FOUND: 'Server not found',
+  SERVER_MARKED_AS_DRAINING: 'Server marked as draining',
+  SERVER_REACTIVATED: 'Server reactivated',
+  SERVER_REMOVED: 'Server removed',
+  ADDRESS_IS_REQUIRED: 'address is required',
+  STATS_DATA_REQUIRED: 'Stats data required',
+  GAME_PIN_IS_REQUIRED: 'game_pin is required',
+  NO_ACTIVE_SERVERS_AVAILABLE: 'No active servers available',
+  GAME_PIN_NOT_FOUND: 'Game PIN not found',
+  GAME_SERVER_IS_UNAVAILABLE: 'Game server is unavailable',
+  SERVER_ERROR: 'Server error',
+}
+
+function formatServerMessage(message) {
+  if (!message) return ''
+  if (typeof message === 'string') return message
+
+  if (typeof message === 'object') {
+    const code = typeof message.code === 'string' ? message.code.toUpperCase() : ''
+    if (!code) return ''
+
+    const params = message.params || {}
+    const template = SERVER_CODE_MESSAGES[code] || code.replace(/_/g, ' ').toLowerCase()
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+      params[key] !== undefined ? String(params[key]) : '',
+    )
+  }
+
+  return ''
+}
+
 export function normalizeBaseUrl(url) {
   return (url || '').trim().replace(/\/+$/, '')
 }
@@ -24,7 +56,7 @@ async function requestJson(url, options = {}) {
 
   if (!response.ok || payload?.status === 'error') {
     const errorMessage =
-      payload?.message ||
+      formatServerMessage(payload?.message) ||
       payload?.error ||
       `Request failed (${response.status})`
     throw new Error(errorMessage)

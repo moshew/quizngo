@@ -289,14 +289,14 @@ function setupSocketEventHandlers(config, gamePin) {
         }
         
         if (onError) {
-            onError('שגיאה בחיבור WebSocket: ' + error.message);
+            onError({ code: 'WEBSOCKET_CONNECTION_ERROR' });
         }
     });
     
     socket.on('error', (error) => {
         console.error('WebSocket error:', error);
         if (onError) {
-            onError('שגיאת WebSocket: ' + error.message);
+            onError({ code: 'WEBSOCKET_ERROR' });
         }
     });
     

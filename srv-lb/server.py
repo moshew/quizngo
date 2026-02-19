@@ -18,6 +18,7 @@ from routes.resolve_routes import create_resolve_routes
 from routes.registration_routes import create_registration_routes
 from routes.admin_routes import create_admin_routes
 from utils.scheduler import start_health_checker, start_stale_cleanup
+from utils.response_normalizer import normalize_flask_json_response
 
 # --- Logging ---
 LOG_DIR = Path(__file__).parent / 'logs'
@@ -56,6 +57,12 @@ pin_registry = PinRegistry()
 app.register_blueprint(create_resolve_routes(server_registry, pin_registry))
 app.register_blueprint(create_registration_routes(server_registry, pin_registry))
 app.register_blueprint(create_admin_routes(server_registry, pin_registry))
+
+
+@app.after_request
+def normalize_message_fields(response):
+    """Ensure API responses expose message/reason as structured objects."""
+    return normalize_flask_json_response(response)
 
 
 @app.route('/')

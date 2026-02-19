@@ -20,6 +20,7 @@ import {
     generateGamePin
 } from '../core/state.js';
 import { showStatus, showError, showAdminConnectionScreen, hideAdminConnectionScreen, isAdminConnectionScreenOpen } from '../ui/manager.js';
+import { t, tServerError } from '../i18n/index.js';
 import { updateAllQuestionTimeElements } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
 import { connectWebSocket, disconnectWebSocket, resetParticipantsList, resetCurrentQuestionAnswers } from '../core/websocket.js';
@@ -57,7 +58,7 @@ export async function startPresentationMode() {
         // Step 2: Create room on the assigned server (NOT active yet - players can't join until Admin starts)
         const createResult = await createRoom(gamePin);
         if (createResult.status !== 'success') {
-            showError('⚠️ שגיאה ביצירת חדר: ' + createResult.message);
+            showError(t('errors.createRoom', { message: tServerError(createResult.message) }));
             return;
         }
 
@@ -66,7 +67,7 @@ export async function startPresentationMode() {
         // Connect WebSocket with the gamePin
         const socket = await connectWebSocketForGame(gamePin);
         if (!socket) {
-            showError('⚠️ שגיאה בחיבור WebSocket');
+            showError(t('errors.websocket'));
             return;
         }
 
@@ -118,11 +119,11 @@ export async function startPresentationMode() {
 
         // Format PIN as XXX-XXX for display
         const formattedPin = gamePin.slice(0, 3) + '-' + gamePin.slice(3);
-        showStatus(`✅ חדר נוצר! PIN: ${formattedPin} - ממתין ל-Admin להתחיל משחק`, 'success');
+        showStatus(t('success.roomCreated', { pin: formattedPin }), 'success');
 
     } catch (error) {
         console.error('❌ Error starting presentation mode:', error);
-        showError('שגיאה בהפעלת המשחק: ' + error.message);
+        showError(t('errors.startGame', { message: tServerError(error.serverMessage || error.message) }));
     }
 }
 
@@ -182,7 +183,7 @@ async function connectWebSocketForGame(gamePin) {
         },
         
         onError: (msg) => {
-            showError(msg);
+            showError(tServerError(msg));
         },
         
         onSlideNavigation: async (data) => {
@@ -245,7 +246,8 @@ async function connectWebSocketForGame(gamePin) {
             const btnStartGame = document.getElementById('btnStartGame');
             if (btnStartGame) btnStartGame.disabled = false;
             console.log('🛑 Game closed:', data);
-            showError('המשחק נסגר: ' + (data.message || 'סיום'));
+            const closeReason = data?.reason || data?.message || { code: 'GAME_SESSION_NOT_FOUND' };
+            showError(t('errors.gameClosed', { reason: tServerError(closeReason) }));
         },
         
         onReconnectionFailed: () => {
@@ -255,12 +257,12 @@ async function connectWebSocketForGame(gamePin) {
             const btnStartGame = document.getElementById('btnStartGame');
             if (btnStartGame) btnStartGame.disabled = false;
             console.log('❌ Reconnection failed after 30 seconds');
-            showError('החיבור אבד. המשחק נסגר.');
+            showError(t('errors.connectionLost'));
         },
         
         onGameStarted: async (data) => {
             console.log('🎮 Game started by Admin - initializing game state');
-            showStatus('✅ המשחק התחיל! מקבל משתתפים...', 'success');
+            showStatus(t('success.gameStarted'), 'success');
 
             // Close admin connection overlay if still open
             hideAdminConnectionScreen();

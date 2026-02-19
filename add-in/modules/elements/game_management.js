@@ -7,6 +7,7 @@
 
 import { getApiBase } from '../core/api.js';
 import { showError } from '../ui/manager.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Reset Game ID in all slides to placeholder
@@ -167,12 +168,12 @@ export async function insertGameIdButton() {
                 textRange.font.bold = true;
                 
                 await context.sync();
-                showError('✅ מזהה משחק נוסף לשקף!');
+                showError(t('success.gameIdAdded'));
             }
         });
     } catch (error) {
         console.error('Error adding game ID:', error);
-        showError('שגיאה בהוספת מזהה משחק');
+        showError(t('errors.addGameId'));
     }
 }
 
@@ -380,7 +381,7 @@ export async function insertQrCodeButton() {
             await context.sync();
             
             if (slides.items.length === 0) {
-                showError('אנא בחר שקף תחילה');
+                showError(t('errors.selectSlideFirst'));
                 return;
             }
             
@@ -431,10 +432,10 @@ export async function insertQrCodeButton() {
                 // Border/fill styling is not critical - continue without it
             }
             
-            showError('✅ QR Code נוסף לשקף!');
+            showError(t('success.qrCodeAdded'));
         });
     } catch (error) {
         console.error('Error adding QR code placeholder:', error);
-        showError('שגיאה בהוספת QR Code');
+        showError(t('errors.addQrCode'));
     }
 }

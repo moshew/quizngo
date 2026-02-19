@@ -6,6 +6,7 @@
 /* global PowerPoint */
 
 import { showError } from '../ui/manager.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Add Question Time textbox
@@ -52,12 +53,12 @@ export async function addQuestionTime() {
                 
                 await context.sync();
                 console.log('âœ… Question time added to slide');
-                showError('âœ… ×–×ž×Ÿ ×©××œ×” × ×•×¡×£ ×œ×©×§×£!');
+                showError(t('success.questionTimeAdded'));
             }
         });
     } catch (error) {
         console.error('Error adding question time:', error);
-        showError('×©×’×™××” ×‘×”×•×¡×¤×ª ×–×ž×Ÿ ×©××œ×”');
+        showError(t('errors.addQuestionTime'));
     }
 }
 
@@ -106,12 +107,12 @@ export async function addRespondentsCount() {
                 
                 await context.sync();
                 console.log('âœ… Respondents count added to slide');
-                showError('âœ… ×ž×¡×¤×¨ ×¢×•× ×™× × ×•×¡×£ ×œ×©×§×£!');
+                showError(t('success.respondersCountAdded'));
             }
         });
     } catch (error) {
         console.error('Error adding respondents count:', error);
-        showError('×©×’×™××” ×‘×”×•×¡×¤×ª ×ž×¡×¤×¨ ×¢×•× ×™×');
+        showError(t('errors.addRespondersCount'));
     }
 }
 

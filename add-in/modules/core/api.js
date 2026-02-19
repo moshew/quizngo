@@ -36,6 +36,31 @@ export function resetServerUrl() {
     currentServerUrl = null;
 }
 
+async function parseApiErrorMessage(response, fallbackCode = 'REQUEST_FAILED') {
+    const jsonResponse = response.clone();
+    const textResponse = response.clone();
+
+    try {
+        const data = await jsonResponse.json();
+        if (data && typeof data === 'object') {
+            return data.message || data.error || { code: fallbackCode };
+        }
+    } catch (_) {
+        // Ignore and fall back to plain-text parsing.
+    }
+
+    try {
+        const text = await textResponse.text();
+        if (text) {
+            return text;
+        }
+    } catch (_) {
+        // Ignore.
+    }
+
+    return { code: fallbackCode };
+}
+
 /**
  * Resolve a server for a new game via the Load Balancer.
  * Called by the add-in when creating a new game.
@@ -65,7 +90,12 @@ export async function resolveServerForNewGame(gamePin) {
         console.log('Server assigned by LB:', currentServerUrl);
         return serverUrl;
     }
-    throw new Error(data.message || 'Failed to resolve server from LB');
+    const serverMessage = data.message || { code: 'FAILED_TO_RESOLVE_SERVER_FROM_LB' };
+    const error = new Error(
+        typeof serverMessage === 'string' ? serverMessage : 'SERVER_MESSAGE_OBJECT'
+    );
+    error.serverMessage = serverMessage;
+    throw error;
 }
 
 // Legacy constant for backward compatibility (now dynamic)
@@ -114,9 +144,9 @@ export async function registerRoom(socketId, gamePin) {
         });
         
         if (!response.ok) {
-            const text = await response.text();
-            console.error('❌ Failed to register room:', text);
-            return { status: 'error', message: text };
+            const serverMessage = await parseApiErrorMessage(response, 'REGISTER_ROOM_FAILED');
+            console.error('Failed to register room:', serverMessage);
+            return { status: 'error', message: serverMessage };
         }
         
         const data = await response.json();
@@ -124,7 +154,7 @@ export async function registerRoom(socketId, gamePin) {
         return data;
     } catch (error) {
         console.error('❌ Error registering room:', error);
-        return { status: 'error', message: error.message };
+        return { status: 'error', message: error.serverMessage || error.message };
     }
 }
 
@@ -145,9 +175,9 @@ export async function createRoom(gamePin, language = null) {
         const response = await makeApiCall(`?create_room&game_pin=${gamePin}&language=${language}`);
         
         if (!response.ok) {
-            const text = await response.text();
-            console.error('❌ Failed to create room:', text);
-            return { status: 'error', message: text };
+            const serverMessage = await parseApiErrorMessage(response, 'CREATE_ROOM_FAILED');
+            console.error('Failed to create room:', serverMessage);
+            return { status: 'error', message: serverMessage };
         }
         
         const data = await response.json();
@@ -155,7 +185,7 @@ export async function createRoom(gamePin, language = null) {
         return data;
     } catch (error) {
         console.error('❌ Error creating room:', error);
-        return { status: 'error', message: error.message };
+        return { status: 'error', message: error.serverMessage || error.message };
     }
 }
 
@@ -166,9 +196,9 @@ export async function registerGameSession(gamePin) {
         const response = await makeApiCall(`?register_session&game_pin=${gamePin}`);
         
         if (!response.ok) {
-            const text = await response.text();
-            console.error('❌ Failed to register game session:', text);
-            return { status: 'error', message: text };
+            const serverMessage = await parseApiErrorMessage(response, 'REGISTER_SESSION_FAILED');
+            console.error('Failed to register game session:', serverMessage);
+            return { status: 'error', message: serverMessage };
         }
         
         const data = await response.json();
@@ -176,7 +206,7 @@ export async function registerGameSession(gamePin) {
         return data;
     } catch (error) {
         console.error('❌ Error registering game session:', error);
-        return { status: 'error', message: error.message };
+        return { status: 'error', message: error.serverMessage || error.message };
     }
 }
 
@@ -187,9 +217,9 @@ export async function closeGameSession(gamePin) {
         const response = await makeApiCall(`?close_game&game_pin=${gamePin}`);
         
         if (!response.ok) {
-            const text = await response.text();
-            console.error('❌ Failed to close game session:', text);
-            return { status: 'error', message: text };
+            const serverMessage = await parseApiErrorMessage(response, 'CLOSE_GAME_FAILED');
+            console.error('Failed to close game session:', serverMessage);
+            return { status: 'error', message: serverMessage };
         }
         
         const data = await response.json();
@@ -197,6 +227,6 @@ export async function closeGameSession(gamePin) {
         return data;
     } catch (error) {
         console.error('❌ Error closing game session:', error);
-        return { status: 'error', message: error.message };
+        return { status: 'error', message: error.serverMessage || error.message };
     }
 }
