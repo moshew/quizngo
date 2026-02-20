@@ -54,6 +54,35 @@ def register_websocket_handlers(
             import traceback
             traceback.print_exc()
 
+    @socketio.on('register_player_socket')
+    def handle_register_player_socket(data):
+        """Called by simulator player sockets after joining via HTTP join_player.
+
+        Registers the socket to the game room and links it to the player UID
+        so that disconnect events correctly mark the player as disconnected
+        rather than triggering the add-in auto-close logic.
+        """
+        try:
+            from flask_socketio import join_room
+            uid      = (data.get('uid')      or '').strip()
+            game_pin = (data.get('gamePin')  or '').strip()
+
+            if not uid or not game_pin:
+                return
+            if game_pin not in game_sessions:
+                return
+            if uid not in player_registry:
+                return
+            if player_registry[uid].get('gamePin') != game_pin:
+                return
+
+            join_room(game_pin)
+            client_rooms[request.sid]    = game_pin
+            socket_to_player[request.sid] = uid
+            game.log(f'🔗 Player socket {request.sid} registered to game {game_pin} (uid: {uid})')
+        except Exception as e:
+            game.log(f'❌ Error in register_player_socket: {e}')
+
     @socketio.on('disconnect')
     def handle_disconnect():
         """Handle client disconnection"""

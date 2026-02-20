@@ -8,6 +8,7 @@ add-in/yarn-error.log*
 
 # Office Add-in certificates
 add-in/certs/
+add-in/assets/templates/
 
 # Python virtual environment
 srv/venv/
@@ -44,3 +45,9 @@ Desktop.ini
 *.temp
 
 game/node_modules/
+
+# Local PPTX conversion utility files
+utils/pptx2base64/pptxs/*
+!utils/pptx2base64/pptxs/.gitkeep
+utils/pptx2base64/output/*
+!utils/pptx2base64/output/.gitkeep

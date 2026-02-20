@@ -73,6 +73,7 @@ export default {
     // Buttons
     buttons: {
         startGame: 'Iniciar jogo',
+        stopGame: 'Parar jogo',
         edit: 'Editar'
     },
 
@@ -148,5 +149,15 @@ export default {
         edit: 'Editar',
         save: 'Salvar',
         cancel: 'Cancelar'
+    },
+
+    // Onboarding
+    onboarding: {
+        selectLanguage: 'Selecionar idioma',
+        enter: 'Entrar',
+        chooseTemplate: 'Escolher modelo de jogo',
+        blankTemplate: 'Modelo em branco',
+        classicBlack: 'Preto clássico',
+        applyTemplate: 'Aplicar modelo'
     }
 };

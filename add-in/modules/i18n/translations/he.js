@@ -73,6 +73,7 @@ export default {
     // Buttons
     buttons: {
         startGame: 'הפעל משחק',
+        stopGame: 'עצור משחק',
         edit: 'עריכה'
     },
 
@@ -159,5 +160,15 @@ export default {
         edit: 'עריכה',
         save: 'שמור',
         cancel: 'ביטול'
+    },
+
+    // Onboarding
+    onboarding: {
+        selectLanguage: 'בחר שפה',
+        enter: 'כניסה',
+        chooseTemplate: 'בחר תבנית למשחק',
+        blankTemplate: 'תבנית ריקה',
+        classicBlack: 'שחור קלאסי',
+        applyTemplate: 'החל תבנית'
     }
 };

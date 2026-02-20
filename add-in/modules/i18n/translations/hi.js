@@ -73,6 +73,7 @@ export default {
     // Buttons
     buttons: {
         startGame: 'गेम शुरू करें',
+        stopGame: 'गेम बंद करें',
         edit: 'संपादित करें'
     },
 
@@ -148,5 +149,15 @@ export default {
         edit: 'संपादित करें',
         save: 'सहेजें',
         cancel: 'रद्द करें'
+    },
+
+    // Onboarding
+    onboarding: {
+        selectLanguage: 'भाषा चुनें',
+        enter: 'प्रवेश',
+        chooseTemplate: 'खेल टेम्पलेट चुनें',
+        blankTemplate: 'रिक्त टेम्पलेट',
+        classicBlack: 'क्लासिक ब्लैक',
+        applyTemplate: 'टेम्पलेट लागू करें'
     }
 };

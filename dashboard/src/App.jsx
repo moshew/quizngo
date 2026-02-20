@@ -463,14 +463,12 @@ function App() {
                   <th>משחקים</th>
                   <th>CPU</th>
                   <th>Memory</th>
-                  <th>PINs</th>
                   <th>Heartbeat</th>
                   <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
                 {servers.map((server) => {
-                  const activePins = server.active_pins || []
                   return (
                     <tr key={server.server_id}>
                       <td>{server.server_id}</td>
@@ -484,12 +482,6 @@ function App() {
                       <td>{formatNumber(server.stats?.active_games_count)}</td>
                       <td>{formatNumber(server.stats?.cpu_percent, 1)}%</td>
                       <td>{formatNumber(server.stats?.memory_mb, 1)}MB</td>
-                      <td>
-                        <div>{activePins.length}</div>
-                        <small className="pins-preview">
-                          {activePins.slice(0, 3).join(', ') || '-'}
-                        </small>
-                      </td>
                       <td title={formatDate(server.last_heartbeat)}>
                         {relativeTime(server.last_heartbeat)}
                       </td>

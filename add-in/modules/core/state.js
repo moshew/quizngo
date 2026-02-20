@@ -491,15 +491,17 @@ export async function saveGameData() {
 }
 
 /**
- * Load game data from PowerPoint presentation tags
+ * Load game data from PowerPoint presentation tags.
+ * @returns {Promise<boolean>} true if game data was found (returning user), false if not (first time)
  */
 export async function loadGameData() {
+    let hasData = false;
     try {
         await PowerPoint.run(async (context) => {
             const presentation = context.presentation;
             presentation.tags.load("items");
             await context.sync();
-            
+
             for (const tag of presentation.tags.items) {
                 if (tag.key.toLowerCase() === 'quizngo_game_data') {
                     const gameState = JSON.parse(tag.value);
@@ -511,6 +513,7 @@ export async function loadGameData() {
                         afterQuestionLeaderboard: false,
                         language: 'he'
                     };
+                    hasData = true;
                     console.log('✅ Game data loaded from presentation');
                     console.log('📋 Slide types loaded:', Object.keys(_slideTypeData).length);
                     console.log('⚙️ Settings loaded:', _presentationSettings);
@@ -522,6 +525,7 @@ export async function loadGameData() {
     } catch (error) {
         console.error('❌ Failed to load game data:', error);
     }
+    return hasData;
 }
 
 /**

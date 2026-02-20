@@ -73,6 +73,7 @@ export default {
     // Buttons
     buttons: {
         startGame: 'Начать игру',
+        stopGame: 'Остановить игру',
         edit: 'Редактировать'
     },
 
@@ -148,5 +149,15 @@ export default {
         edit: 'Редактировать',
         save: 'Сохранить',
         cancel: 'Отмена'
+    },
+
+    // Onboarding
+    onboarding: {
+        selectLanguage: 'Выбрать язык',
+        enter: 'Войти',
+        chooseTemplate: 'Выбрать шаблон игры',
+        blankTemplate: 'Пустой шаблон',
+        classicBlack: 'Классический чёрный',
+        applyTemplate: 'Применить шаблон'
     }
 };

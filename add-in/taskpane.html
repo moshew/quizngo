@@ -22,7 +22,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f3f2f1;
+            background-color: #ffffff;
             direction: var(--direction);
             overflow-x: hidden;
         }
@@ -34,6 +34,19 @@
 
         body.ltr {
             direction: ltr;
+        }
+
+        /* Boot state: avoid partial first paint while Office + data init is running */
+        body.app-booting .container {
+            visibility: hidden;
+        }
+
+        body.app-booting.boot-main {
+            background: #ffffff;
+        }
+
+        body.app-booting.boot-onboarding {
+            background: #ffffff;
         }
 
         .container {
@@ -65,7 +78,7 @@
         }
 
         .tab:hover:not(.active) {
-            background-color: #f3f2f1;
+            background-color: #ffffff;
         }
 
         /* Content Area */
@@ -116,7 +129,7 @@
         }
 
         .slide-item:hover {
-            background-color: #f3f2f1;
+            background-color: #ffffff;
         }
 
         .slide-item.selected {
@@ -209,7 +222,7 @@
         }
 
         .context-menu-item:hover {
-            background-color: #f3f2f1;
+            background-color: #ffffff;
             color: #0078d4;
         }
         
@@ -331,7 +344,7 @@
         }
 
         .custom-dropdown-item:hover {
-            background-color: #f3f2f1;
+            background-color: #ffffff;
         }
 
         .custom-dropdown-item.selected {
@@ -530,7 +543,7 @@
 
         /* Persistent Bottom Actions */
         .bottom-actions {
-            background: #f3f2f1;
+            background: #ffffff;
             padding: 10px;
             border-top: 1px solid #e1dfdd;
             display: flex;
@@ -558,6 +571,15 @@
 
         .btn-start-game:hover {
             background-color: #106ebe;
+        }
+
+        .btn-stop-game {
+            background-color: #d13438;
+            color: white;
+        }
+
+        .btn-stop-game:hover {
+            background-color: #a52729;
         }
 
         /* Loading Spinner */
@@ -606,7 +628,7 @@
         }
 
         .setting-checkbox-group {
-            background: #f8f9fa;
+            background: #ffffff;
             padding: 10px;
             border-radius: 4px;
         }
@@ -738,7 +760,7 @@
             display: flex;
             align-items: center;
             width: 100%;
-            background: #f5f5f6;
+            background: #ffffff;
             border-radius: 8px;
             overflow: hidden;
         }
@@ -827,9 +849,190 @@
             border-top: 1px solid #e1dfdd;
             margin: 20px 0;
         }
+
+        /* ===== Onboarding Screens ===== */
+        .onboarding-screen {
+            position: fixed;
+            inset: 0;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            z-index: 5000;
+            direction: ltr;
+        }
+
+        .onboarding-screen.hidden {
+            display: none;
+        }
+
+        /* Language Screen */
+        .onboarding-lang__body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0px 24px 150px;
+            gap: 2px;
+        }
+
+        .onboarding-lang__logo {
+            width: 125%;
+            height: auto;
+        }
+
+        .onboarding-lang__label {
+            font-size: 15px;
+            font-weight: 600;
+            color: #323130;
+            margin: 0;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        .onboarding-lang__select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #c8c6c4;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            background: white;
+            outline: none;
+        }
+
+        .onboarding-lang__select:focus {
+            border-color: #0078d4;
+            box-shadow: 0 0 0 1px #0078d4;
+        }
+
+        .onboarding-lang__btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .onboarding-lang__btn:hover {
+            background: #106ebe;
+        }
+
+        /* Template Screen */
+        .onboarding-tpl__body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 16px;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .onboarding-tpl__title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #323130;
+            margin: 0;
+            text-align: center;
+        }
+
+        .onboarding-tpl__grid {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .onboarding-tpl__card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            border-radius: 8px;
+            padding: 6px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .onboarding-tpl__card:hover {
+            border-color: #c8c6c4;
+        }
+
+        .onboarding-tpl__card.selected {
+            border-color: #0078d4;
+            box-shadow: 0 0 0 2px rgba(0,120,212,0.2);
+        }
+
+        .onboarding-tpl__card img {
+            width: 280px;
+            height: auto;
+            border-radius: 4px;
+            display: block;
+        }
+
+        .onboarding-tpl__card-blank {
+            width: 280px;
+            height: 158px;
+            background: #ffffff;
+            border: 1px solid #c8c6c4;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .onboarding-tpl__card-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #323130;
+            text-align: center;
+        }
+
+        .onboarding-tpl__footer {
+            padding: 10px 16px;
+            border-top: 1px solid #e1dfdd;
+            background: #ffffff;
+        }
+
+        .onboarding-tpl__apply-btn {
+            width: 100%;
+            padding: 10px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .onboarding-tpl__apply-btn:hover {
+            background: #106ebe;
+        }
+
+        .onboarding-tpl__apply-btn:disabled {
+            background: #c8c6c4;
+            cursor: not-allowed;
+        }
     </style>
 </head>
-<body class="rtl">
+<body class="app-booting boot-main rtl">
     <div class="container">
         <!-- Tabs -->
         <div class="tabs">
@@ -907,7 +1110,7 @@
         <!-- Persistent Bottom Buttons -->
         <div class="bottom-actions">
             <button id="btnStartGame" class="btn-start-game">
-                <i class="ms-Icon ms-Icon--Play"></i> <span data-i18n="buttons.startGame"></span>
+                <i id="btnStartGameIcon" class="ms-Icon ms-Icon--Play"></i> <span id="btnStartGameLabel"></span>
             </button>
         </div>
     </div>
@@ -993,7 +1196,45 @@
         </div>
     </div>
 
+    <!-- ===== Onboarding: Language Selection Screen ===== -->
+    <div id="onboardingLang" class="onboarding-screen hidden">
+        <div class="onboarding-lang__body">
+            <img class="onboarding-lang__logo" src="assets/logo.png" alt="QuizNGO" />
+            <p id="onboardingLangLabel" class="onboarding-lang__label">Select Language</p>
+            <select id="onboardingLangSelect" class="onboarding-lang__select">
+                <!-- Options generated by JS -->
+            </select>
+            <button id="onboardingLangBtn" class="onboarding-lang__btn">Enter</button>
+        </div>
+    </div>
+
+    <!-- ===== Onboarding: Template Selection Screen ===== -->
+    <div id="onboardingTemplate" class="onboarding-screen hidden">
+        <div class="onboarding-tpl__body">
+            <p id="onboardingTplTitle" class="onboarding-tpl__title">Choose a Game Template</p>
+            <div class="onboarding-tpl__grid">
+                <!-- Blank Template -->
+                <div class="onboarding-tpl__card" id="tplCardBlank" data-template="blank">
+                    <div class="onboarding-tpl__card-blank"></div>
+                    <span id="tplLabelBlank" class="onboarding-tpl__card-label">Blank Template</span>
+                </div>
+                <!-- Classic Black Template -->
+                <div class="onboarding-tpl__card" id="tplCardClassic" data-template="classic_black">
+                    <img src="assets/black_template.jpeg" alt="Classic Black" />
+                    <span id="tplLabelClassic" class="onboarding-tpl__card-label">Classic Black</span>
+                </div>
+            </div>
+        </div>
+        <div class="onboarding-tpl__footer">
+            <button id="onboardingApplyBtn" class="onboarding-tpl__apply-btn" disabled>
+                <i class="ms-Icon ms-Icon--CheckMark"></i>
+                <span id="onboardingApplyLabel">Apply Template</span>
+            </button>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Load config.js synchronously before taskpane.js so window.* config is available at import time -->
     <script src="config.js" onerror="console.log('config.js not found - using default configuration')"></script>
     <script src="taskpane.js" type="module"></script>

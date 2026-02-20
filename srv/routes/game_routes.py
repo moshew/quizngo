@@ -18,9 +18,11 @@ from utils.room_utils import emit_to_room, check_game_active, close_game_and_cle
 
 # Auto-close policy:
 # - Room waiting for admin start: 5 minutes
-# - Active started game: 1 hour
+# - Active started game with guardian: 1 hour
+# - Active started game without guardian: 10 minutes
 WAITING_ROOM_TIMEOUT_SECONDS = 300
 STARTED_GAME_TIMEOUT_SECONDS = 3600
+GUARDIAN_LESS_TIMEOUT_SECONDS = 600
 
 
 def create_game_routes(
@@ -146,6 +148,10 @@ def create_game_routes(
                     'status': 'error',
                     'message': 'Missing or empty results'
                 }), 400
+
+            # Build once per request: O(number_of_sockets).
+            # Prevents O(results * sockets) scans under heavy load.
+            sid_by_uid = {uid: sid for sid, uid in socket_to_player.items()}
             
             # Send individual results to each player's own socket (not broadcast)
             for result in results:
@@ -162,12 +168,8 @@ def create_game_routes(
                     'timestamp': data.get('timestamp')
                 }
                 
-                # Find the specific socket for this player
-                target_sid = None
-                for sid, uid in socket_to_player.items():
-                    if uid == user_id:
-                        target_sid = sid
-                        break
+                # Resolve socket in O(1) from prebuilt mapping.
+                target_sid = sid_by_uid.get(user_id)
                 
                 if target_sid:
                     socketio.emit('player_results', player_data, to=target_sid)
@@ -264,11 +266,11 @@ def create_game_routes(
                 'gameStarted': False
             }
             
-            # Schedule auto-close after 1 hour
+            # Schedule auto-close while waiting for room creation/start.
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 socketio, game_pin, game.logger,
-                timeout_seconds=STARTED_GAME_TIMEOUT_SECONDS,
+                timeout_seconds=WAITING_ROOM_TIMEOUT_SECONDS,
                 game_timeout_controls=game_timeout_controls
             )
             
@@ -554,11 +556,23 @@ def create_game_routes(
             session['active'] = True
             session['startedAt'] = time.time()
 
-            # Replace waiting-room timeout with regular started-game timeout.
+            # Guardian socket is registered in client_rooms but not mapped in
+            # socket_to_player (player sockets are mapped there).
+            has_guardian = any(
+                gpin == game_pin and sid not in socket_to_player
+                for sid, gpin in client_rooms.items()
+            )
+            timeout_seconds = (
+                STARTED_GAME_TIMEOUT_SECONDS
+                if has_guardian
+                else GUARDIAN_LESS_TIMEOUT_SECONDS
+            )
+
+            # Replace waiting-room timeout with guardian-aware started timeout.
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 socketio, game_pin, game.logger,
-                timeout_seconds=STARTED_GAME_TIMEOUT_SECONDS,
+                timeout_seconds=timeout_seconds,
                 game_timeout_controls=game_timeout_controls
             )
             

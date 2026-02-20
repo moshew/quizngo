@@ -73,6 +73,7 @@ export default {
     // Buttons
     buttons: {
         startGame: '开始游戏',
+        stopGame: '停止游戏',
         edit: '编辑'
     },
 
@@ -148,5 +149,15 @@ export default {
         edit: '编辑',
         save: '保存',
         cancel: '取消'
+    },
+
+    // Onboarding
+    onboarding: {
+        selectLanguage: '选择语言',
+        enter: '进入',
+        chooseTemplate: '选择游戏模板',
+        blankTemplate: '空白模板',
+        classicBlack: '经典黑色',
+        applyTemplate: '应用模板'
     }
 };

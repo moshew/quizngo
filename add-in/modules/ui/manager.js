@@ -55,47 +55,33 @@ async function resolveAdminUrl(gamePin) {
  */
 export function showStatus(message, type = 'info') {
     console.log(`Status (${type}): ${message}`);
-    
-    const detectedInfo = document.getElementById('detectedInfo');
-    if (detectedInfo) {
-        let color = '#000';
-        let background = '#f8f9fa';
-        
-        // Only show in UI for warnings, errors, and success
-        if (type === 'warning') {
-            color = '#856404';
-            background = '#fff3cd';
-        } else if (type === 'error') {
-            color = '#721c24';
-            background = '#f8d7da';
-        } else if (type === 'success') {
-            color = '#155724';
-            background = '#d4edda';
-        } else {
-            // For plain info, don't show unless explicitly needed
-            // return; 
-            // Uncomment above if we want to hide info messages
-        }
 
-        // Show message if it's one of the special types
-        if (['warning', 'error', 'success'].includes(type)) {
-            detectedInfo.innerHTML = type === 'success' ? `✅ ${message}` : (type === 'error' ? `❌ ${message}` : `⚠️ ${message}`);
-            detectedInfo.style.display = 'block';
-            detectedInfo.style.background = background;
-            detectedInfo.style.color = color;
-            detectedInfo.style.padding = '10px';
-            detectedInfo.style.borderRadius = '4px';
-            detectedInfo.style.marginBottom = '10px';
-            
-            // Hide after 5 seconds
-            setTimeout(() => {
-                // Only hide if content hasn't changed significantly
-                if (detectedInfo.style.display === 'block') {
-                    detectedInfo.style.display = 'none';
-                }
-            }, 5000);
+    if (!['warning', 'error', 'success'].includes(type)) return;
+
+    const typeConfig = {
+        warning: { color: '#856404', background: '#fff3cd', prefix: '⚠️' },
+        error:   { color: '#721c24', background: '#f8d7da', prefix: '❌' },
+        success: { color: '#155724', background: '#d4edda', prefix: '✅' }
+    };
+    const { color, background, prefix } = typeConfig[type];
+
+    // Prefer detectedInfo if it exists; fall back to errorMessage
+    const target = document.getElementById('detectedInfo') || document.getElementById('errorMessage');
+    if (!target) return;
+
+    target.textContent = `${prefix} ${message}`;
+    target.style.display = 'block';
+    target.style.background = background;
+    target.style.color = color;
+
+    setTimeout(() => {
+        if (target.style.display === 'block') {
+            target.style.display = 'none';
+            // Restore errorMessage default style if it was used as fallback
+            target.style.background = '';
+            target.style.color = '';
         }
-    }
+    }, 5000);
 }
 
 /**

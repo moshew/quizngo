@@ -58,6 +58,9 @@ export async function startPresentationMode() {
         // Step 2: Create room on the assigned server (NOT active yet - players can't join until Admin starts)
         const createResult = await createRoom(gamePin);
         if (createResult.status !== 'success') {
+            setGamePIN(null);
+            resetServerUrl();
+            window.updateStartStopButton?.();
             showError(t('errors.createRoom', { message: tServerError(createResult.message) }));
             return;
         }
@@ -67,6 +70,9 @@ export async function startPresentationMode() {
         // Connect WebSocket with the gamePin
         const socket = await connectWebSocketForGame(gamePin);
         if (!socket) {
+            setGamePIN(null);
+            resetServerUrl();
+            window.updateStartStopButton?.();
             showError(t('errors.websocket'));
             return;
         }
@@ -113,16 +119,14 @@ export async function startPresentationMode() {
         // Show admin connection overlay (does NOT replace the UI)
         await showAdminConnectionScreen(gamePin);
 
-        // Disable the start game button while overlay is open
-        const btnStartGame = document.getElementById('btnStartGame');
-        if (btnStartGame) btnStartGame.disabled = true;
-
-        // Format PIN as XXX-XXX for display
-        const formattedPin = gamePin.slice(0, 3) + '-' + gamePin.slice(3);
-        showStatus(t('success.roomCreated', { pin: formattedPin }), 'success');
+        // Update button to "Stop Game" now that game is initialized
+        window.updateStartStopButton?.();
 
     } catch (error) {
         console.error('❌ Error starting presentation mode:', error);
+        setGamePIN(null);
+        resetServerUrl();
+        window.updateStartStopButton?.();
         showError(t('errors.startGame', { message: tServerError(error.serverMessage || error.message) }));
     }
 }
@@ -243,23 +247,27 @@ async function connectWebSocketForGame(gamePin) {
             setGamePIN(null);
             resetServerUrl();
             hideAdminConnectionScreen();
-            const btnStartGame = document.getElementById('btnStartGame');
-            if (btnStartGame) btnStartGame.disabled = false;
+            window.updateStartStopButton?.();
             console.log('🛑 Game closed:', data);
             const closeReason = data?.reason || data?.message || { code: 'GAME_SESSION_NOT_FOUND' };
-            showError(t('errors.gameClosed', { reason: tServerError(closeReason) }));
+            const reasonCode = (typeof closeReason === 'object' ? closeReason.code : closeReason) || '';
+            const message = t('errors.gameClosed', { reason: tServerError(closeReason) });
+            if (reasonCode.toUpperCase() === 'MANUAL') {
+                showStatus(message, 'success');
+            } else {
+                showError(message);
+            }
         },
-        
+
         onReconnectionFailed: () => {
             setGamePIN(null);
             resetServerUrl();
             hideAdminConnectionScreen();
-            const btnStartGame = document.getElementById('btnStartGame');
-            if (btnStartGame) btnStartGame.disabled = false;
+            window.updateStartStopButton?.();
             console.log('❌ Reconnection failed after 30 seconds');
             showError(t('errors.connectionLost'));
         },
-        
+
         onGameStarted: async (data) => {
             console.log('🎮 Game started by Admin - initializing game state');
             showStatus(t('success.gameStarted'), 'success');
@@ -267,9 +275,8 @@ async function connectWebSocketForGame(gamePin) {
             // Close admin connection overlay if still open
             hideAdminConnectionScreen();
 
-            // Re-enable the start game button
-            const btnStartGame = document.getElementById('btnStartGame');
-            if (btnStartGame) btnStartGame.disabled = false;
+            // PIN is still set - button remains "Stop Game"
+            window.updateStartStopButton?.();
 
             // Initialize all add-in state for the game
             // NOTE: Do NOT call resetParticipantsList() here - players join BEFORE
@@ -351,6 +358,7 @@ export async function endGame() {
     disconnectWebSocket();
     setGamePIN(null);
     resetServerUrl();
+    window.updateStartStopButton?.();
 
     console.log('✅ Game ended');
 }

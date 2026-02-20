@@ -73,6 +73,7 @@ export default {
     // Buttons
     buttons: {
         startGame: 'ゲーム開始',
+        stopGame: 'ゲーム終了',
         edit: '編集'
     },
 
@@ -148,5 +149,15 @@ export default {
         edit: '編集',
         save: '保存',
         cancel: 'キャンセル'
+    },
+
+    // Onboarding
+    onboarding: {
+        selectLanguage: '言語を選択',
+        enter: '入る',
+        chooseTemplate: 'ゲームテンプレートを選択',
+        blankTemplate: '空白テンプレート',
+        classicBlack: 'クラシックブラック',
+        applyTemplate: 'テンプレートを適用'
     }
 };
