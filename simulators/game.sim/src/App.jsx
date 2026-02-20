@@ -583,6 +583,12 @@ function App() {
   
   // טעינת משחק אוטומטי
   const loadGamePin = async () => {
+    // אם כבר הוזן PIN תקין - השתמש בו ואל תביא מה-LB
+    if (gamePin && gamePin.replace(/-/g, '').length === 6) {
+      console.log(`✅ Using existing PIN: ${gamePin}`)
+      return
+    }
+
     setLoadingGamePin(true)
     try {
       console.log('Loading active games from LB...')
@@ -596,14 +602,14 @@ function App() {
       console.log('📥 Received games:', data)
       
       if (data.status === 'success' && data.pins && data.pins.length > 0) {
-        // קח את ה-PIN הראשון
-        const firstGame = data.pins[0]
-        const pin = firstGame.game_pin
-        
+        // קח את ה-PIN האחרון (המשחק החדש ביותר לפי assigned_at)
+        const latestGame = data.pins.reduce((a, b) => a.assigned_at > b.assigned_at ? a : b)
+        const pin = latestGame.game_pin
+
         // עיצוב עם קו מפריד
         const formattedPin = `${pin.slice(0, 3)}-${pin.slice(3)}`
-        
-        console.log(`✅ Loading first game PIN: ${formattedPin}`)
+
+        console.log(`✅ Loading latest game PIN: ${formattedPin}`)
         setGamePin(formattedPin)
       } else {
         alert('אין משחקים פעילים כרגע')
