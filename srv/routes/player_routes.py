@@ -343,7 +343,7 @@ def create_player_routes(
                     return jsonify(rejoin_response)
             
             # No UID or UID not found — check if name is taken by another player
-            for existing_uid, player in player_registry.items():
+            for existing_uid, player in list(player_registry.items()):
                 if player.get('gamePin') == game_pin and player.get('nickname') == name:
                     # Name is taken (whether connected or disconnected) — reject
                     game.log(f'🚫 Rejected join attempt - name {name} already taken in game {game_pin}')
