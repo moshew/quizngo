@@ -211,7 +211,7 @@ async def _make_socket(server_url: str) -> sio_module.AsyncClient:
         engineio_logger=False,
         reconnection=False,   # Don't auto-reconnect; simplifies cleanup
     )
-    await sio.connect(server_url)
+    await sio.connect(server_url, transports=['websocket'])
     return sio
 
 
