@@ -3,12 +3,23 @@
 // Load Balancer URL - entry point for PIN assignment and resolution
 // Configure this via window.QUIZNGO_LB_URL or change for production deployment
 export const LB_URL = (() => {
+    const normalizeBase = (value) => String(value || '').replace(/\/+$/, '') + '/';
+
     // Try to get from window/global config first (can be set by manifest or build)
     if (typeof window !== 'undefined' && window.QUIZNGO_LB_URL) {
-        return window.QUIZNGO_LB_URL;
+        return normalizeBase(window.QUIZNGO_LB_URL);
     }
-    // Add-in taskpane is HTTPS, but backend can run locally on HTTP localhost.
-    return `http://localhost:5000/`;
+
+    if (typeof window !== 'undefined') {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocalhost) {
+            return 'http://localhost:5000/';
+        }
+        // Production default behind reverse proxy.
+        return normalizeBase(`${window.location.origin}/lb`);
+    }
+
+    return 'http://localhost:5000/';
 })();
 
 // Dynamic server URL - set after LB assigns a server for the current game
@@ -75,17 +86,7 @@ export async function resolveServerForNewGame(gamePin) {
     });
     const data = await response.json();
     if (data.status === 'success') {
-        // Rewrite server URL to localhost so add-in traffic stays on local machine.
-        // This avoids mixed-content issues with remote HTTP IP addresses.
-        let serverUrl = data.server_url;
-        try {
-            const parsed = new URL(serverUrl);
-            parsed.hostname = 'localhost';
-            parsed.protocol = 'http:';
-            serverUrl = parsed.toString();
-        } catch (e) {
-            console.warn('Could not rewrite server URL to localhost:', e);
-        }
+        const serverUrl = data.server_url;
         currentServerUrl = serverUrl.replace(/\/$/, '') + '/';
         console.log('Server assigned by LB:', currentServerUrl);
         return serverUrl;

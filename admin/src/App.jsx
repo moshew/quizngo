@@ -1,10 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 
 // Load Balancer URL - used to resolve game PIN to server
-const LB_URL = import.meta.env.VITE_LB_URL || `http://${window.location.hostname}:5000`
+const DEFAULT_LB_URL = (() => {
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `http://${host}:5000`
+  }
+  return `${window.location.origin}/lb`
+})()
+const LB_URL = (import.meta.env.VITE_LB_URL || DEFAULT_LB_URL).replace(/\/+$/, '')
 
 const formatPin = (pin = '') => (pin.length === 6 ? `${pin.slice(0, 3)}-${pin.slice(3)}` : pin)
 const sanitizePin = (value = '') => value.replace(/[^0-9]/g, '').slice(0, 6)
+const extractPinFromPath = (pathname = '') => {
+  const segments = pathname.split('/').filter(Boolean)
+  const pinSegment = [...segments].reverse().find((segment) => /^[0-9]{6}$/.test(segment))
+  return pinSegment || ''
+}
 
 const SERVER_CODE_MESSAGES_HE = {
   ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: 'חדר לא נמצא. יש ליצור חדר תחילה.',
@@ -83,7 +95,7 @@ function App() {
         setGameStarted(Boolean(data.gameStarted))
 
         if (updateUrl) {
-          window.history.replaceState(null, '', '/' + pin)
+          window.history.replaceState(null, '', `/admin/${pin}`)
         }
 
         return true
@@ -116,9 +128,8 @@ function App() {
     }
     hasInitialized.current = true
 
-    // Get game PIN from URL path (e.g., /123456)
-    const pathParts = window.location.pathname.split('/').filter(Boolean)
-    const urlGamePin = pathParts[0]
+    // Supports /admin/123456 and legacy /123456
+    const urlGamePin = extractPinFromPath(window.location.pathname)
 
     console.log('Checking for game PIN in URL:', window.location.pathname)
     console.log('Extracted game PIN:', urlGamePin)

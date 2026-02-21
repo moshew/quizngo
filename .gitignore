@@ -13,6 +13,7 @@ add-in/assets/templates/
 # Python virtual environment
 srv/venv/
 venv/
+.venv/
 
 # Python cache
 __pycache__/
@@ -28,6 +29,18 @@ srv/logs/
 .env
 .vscode/
 .idea/
+.dev/
+
+# Local add-in development configuration
+add-in/config.js
+add-in/manifest.dev.xml
+
+# Generated game bundle assets
+game/dist/assets/
+
+# Local dev helper scripts
+scripts/dev_up.sh
+scripts/dev_down.sh
 
 # OS files
 .DS_Store

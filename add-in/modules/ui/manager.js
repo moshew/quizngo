@@ -46,6 +46,10 @@ async function resolveAdminUrl(gamePin) {
         console.warn('Could not resolve admin URL from server:', error);
     }
 
+    if (typeof window !== 'undefined') {
+        return `${window.location.origin}/admin/${gamePin}`;
+    }
+
     // Last fallback for local-only development.
     return `http://localhost:3002/${gamePin}`;
 }

@@ -92,8 +92,12 @@ if cli_args.address:
         SERVER_ADDRESS = cli_args.address.replace('http://', 'https://', 1)
         print(f"WARNING: --address used http:// while SSL is enabled. Using {SERVER_ADDRESS}")
     elif not USE_SSL and cli_args.address.startswith('https://'):
-        SERVER_ADDRESS = cli_args.address.replace('https://', 'http://', 1)
-        print(f"WARNING: --address used https:// while SSL is disabled. Using {SERVER_ADDRESS}")
+        # Keep HTTPS public address for reverse-proxy deployments (TLS terminated upstream).
+        SERVER_ADDRESS = cli_args.address
+        print(
+            f"INFO: --address is HTTPS while local SSL is disabled; "
+            f"assuming reverse proxy TLS termination. Using {SERVER_ADDRESS}"
+        )
 
 from handlers.websocket_handlers import register_websocket_handlers
 from routes.player_routes import create_player_routes
@@ -320,8 +324,12 @@ def api_handler():
         elif 'reset_animations' in request.args:
             action = 'reset_animations'
         else:
-            # Default: show docs
-            return info_bp.view_functions['info.docs']()
+            # Default: return a lightweight status payload.
+            return jsonify({
+                'status': 'ok',
+                'service': 'quizngo-srv',
+                'docs': '/docs'
+            })
         
         # Route to appropriate handler
         if action == 'init':

@@ -9,7 +9,14 @@ import GameOverScreen from './screens/GameOverScreen'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import { applyDirection } from './i18n'
 
-const LB_URL = import.meta.env.VITE_LB_URL || `http://${window.location.hostname}:5000`
+const DEFAULT_LB_URL = (() => {
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `http://${host}:5000`
+  }
+  return `${window.location.origin}/lb`
+})()
+const LB_URL = (import.meta.env.VITE_LB_URL || DEFAULT_LB_URL).replace(/\/+$/, '')
 
 // Screens: pin -> name -> lobby -> answer -> result -> (answer again) -> gameOver
 const SCREENS = {
