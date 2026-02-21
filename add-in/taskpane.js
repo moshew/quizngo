@@ -234,12 +234,25 @@ window.closeDialogs = function() {
     document.querySelectorAll('.overlay').forEach(el => el.style.display = 'none');
 };
 
+const SETTINGS_LIMITS = {
+    questionWaitTime: { min: 5, max: 60, fallback: 30 },
+    clockActivationDelay: { min: 0, max: 60, fallback: 5 }
+};
+
+function clampSettingValue(rawValue, limits) {
+    const parsed = parseInt(rawValue, 10);
+    const normalized = Number.isNaN(parsed) ? limits.fallback : parsed;
+    return Math.min(limits.max, Math.max(limits.min, normalized));
+}
+
 // Load settings into the settings tab
 function loadSettingsToTab() {
     const settings = getPresentationSettings();
+    const questionWaitTime = clampSettingValue(settings.questionWaitTime, SETTINGS_LIMITS.questionWaitTime);
+    const clockActivationDelay = clampSettingValue(settings.clockActivationDelay, SETTINGS_LIMITS.clockActivationDelay);
     
-    document.getElementById('settingTimeTab').value = settings.questionWaitTime;
-    document.getElementById('settingDelayTab').value = settings.clockActivationDelay;
+    document.getElementById('settingTimeTab').value = questionWaitTime;
+    document.getElementById('settingDelayTab').value = clockActivationDelay;
     document.getElementById('settingAfterStatsTab').checked = settings.afterQuestionStatistics !== false;
     document.getElementById('settingAfterLeaderboardTab').checked = settings.afterQuestionLeaderboard === true;
     
@@ -252,13 +265,16 @@ function loadSettingsToTab() {
 
 // Save settings when any setting changes
 function autoSaveSettings() {
-    const timeValue = parseInt(document.getElementById('settingTimeTab').value);
-    const time = isNaN(timeValue) ? 30 : timeValue;
-    const delayValue = parseInt(document.getElementById('settingDelayTab').value);
-    const delay = isNaN(delayValue) ? 5 : delayValue;
+    const timeInput = document.getElementById('settingTimeTab');
+    const delayInput = document.getElementById('settingDelayTab');
+    const time = clampSettingValue(timeInput.value, SETTINGS_LIMITS.questionWaitTime);
+    const delay = clampSettingValue(delayInput.value, SETTINGS_LIMITS.clockActivationDelay);
     const stats = document.getElementById('settingAfterStatsTab').checked;
     const board = document.getElementById('settingAfterLeaderboardTab').checked;
     const lang = getLanguage();
+
+    timeInput.value = time;
+    delayInput.value = delay;
     
     setPresentationSettings({
         questionWaitTime: time,

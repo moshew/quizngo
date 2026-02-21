@@ -25,6 +25,19 @@ import { updateAllQuestionTimeElements } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
 import { connectWebSocket, disconnectWebSocket, resetParticipantsList, resetCurrentQuestionAnswers } from '../core/websocket.js';
 
+const QUESTION_WAIT_TIME_LIMITS = {
+    min: 5,
+    max: 60,
+    fallback: 30
+};
+
+function getNormalizedQuestionWaitTime(settings = getPresentationSettings()) {
+    const rawValue = settings?.questionWaitTime;
+    const parsedValue = Number.parseInt(rawValue, 10);
+    const normalized = Number.isNaN(parsedValue) ? QUESTION_WAIT_TIME_LIMITS.fallback : parsedValue;
+    return Math.min(QUESTION_WAIT_TIME_LIMITS.max, Math.max(QUESTION_WAIT_TIME_LIMITS.min, normalized));
+}
+
 /**
  * Start presentation mode (game start screen)
  * This is where the gamePin is generated and WebSocket connects
@@ -102,7 +115,7 @@ export async function startPresentationMode() {
             } = await import('../core/state.js');
 
             const settings = getPresentationSettings();
-            const initialTime = settings?.questionWaitTime || 30;
+            const initialTime = getNormalizedQuestionWaitTime(settings);
             await updateAllQuestionTimeElements(initialTime);
             await updateAllRespondentsCountElements(0);
             await resetParticipantsNumInSlides();
@@ -270,7 +283,6 @@ async function connectWebSocketForGame(gamePin) {
 
         onGameStarted: async (data) => {
             console.log('🎮 Game started by Admin - initializing game state');
-            showStatus(t('success.gameStarted'), 'success');
 
             // Close admin connection overlay if still open
             hideAdminConnectionScreen();
@@ -286,7 +298,7 @@ async function connectWebSocketForGame(gamePin) {
                 resetHiddenParticipants();
 
                 const settings = getPresentationSettings();
-                const initialTime = settings?.questionWaitTime || 30;
+                const initialTime = getNormalizedQuestionWaitTime(settings);
                 await updateAllQuestionTimeElements(initialTime);
                 await updateAllRespondentsCountElements(0);
                 await resetParticipantsNumInSlides();
@@ -408,9 +420,7 @@ export async function startTimer() {
     const settings = getPresentationSettings();
     
     // Use explicit check for undefined/null to allow 0 values
-    const questionWaitTime = settings.questionWaitTime !== undefined && settings.questionWaitTime !== null 
-        ? settings.questionWaitTime 
-        : 30;
+    const questionWaitTime = getNormalizedQuestionWaitTime(settings);
     const clockActivationDelay = settings.clockActivationDelay !== undefined && settings.clockActivationDelay !== null 
         ? settings.clockActivationDelay 
         : 5;
@@ -532,7 +542,7 @@ async function handleQuestionEnd() {
         
         // Get question time from settings
         const settings = getPresentationSettings();
-        const questionTime = settings?.questionWaitTime || 30;
+        const questionTime = getNormalizedQuestionWaitTime(settings);
         
         // Process answers and calculate scores
         const results = await processAnswersAndScores(slideId, questionStartTime, questionTime);
@@ -616,7 +626,7 @@ function sendAnswerTimeStarted() {
         const data = {
             gamePin: gamePin,
             timestamp: Date.now(),
-            questionWaitTime: settings?.questionWaitTime || 30
+            questionWaitTime: getNormalizedQuestionWaitTime(settings)
         };
         
         // Send via REST API instead of WebSocket

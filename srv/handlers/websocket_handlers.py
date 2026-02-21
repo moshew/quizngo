@@ -14,7 +14,12 @@ import time
 from flask import request
 from flask_socketio import emit, leave_room
 
-from utils.room_utils import emit_to_room
+from utils.room_utils import (
+    emit_to_addins,
+    register_player_socket,
+    unregister_socket,
+    has_addin_socket,
+)
 
 
 def register_websocket_handlers(
@@ -23,6 +28,8 @@ def register_websocket_handlers(
     connected_clients,
     client_rooms,
     socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
     game_sessions,
     player_registry,
     game_timeout_controls=None
@@ -45,8 +52,6 @@ def register_websocket_handlers(
         """Handle client connection"""
         try:
             connected_clients.add(request.sid)
-            game.log(f'📡 WS ← connect: {request.sid}')
-            
             # Send connection acknowledgment
             emit('status_update', {'connected': True})
         except Exception as e:
@@ -77,9 +82,15 @@ def register_websocket_handlers(
                 return
 
             join_room(game_pin)
-            client_rooms[request.sid]    = game_pin
-            socket_to_player[request.sid] = uid
-            game.log(f'🔗 Player socket {request.sid} registered to game {game_pin} (uid: {uid})')
+            register_player_socket(
+                client_rooms,
+                socket_to_player,
+                addin_sockets_by_game,
+                player_sockets_by_game,
+                request.sid,
+                game_pin,
+                uid
+            )
         except Exception as e:
             game.log(f'❌ Error in register_player_socket: {e}')
 
@@ -87,68 +98,52 @@ def register_websocket_handlers(
     def handle_disconnect():
         """Handle client disconnection"""
         connected_clients.discard(request.sid)
-        game.log(f'📡 WS ← disconnect: {request.sid}')
+        game_pin = client_rooms.get(request.sid)
+        user_id = socket_to_player.get(request.sid)
         
         # Track socket type before mutating mappings.
-        was_player_socket = request.sid in socket_to_player
+        was_player_socket = user_id is not None
         
         # Check if this socket belongs to a player (sim)
         if was_player_socket:
-            user_id = socket_to_player[request.sid]
-            
             # Mark player as disconnected in registry
             if user_id in player_registry:
                 player = player_registry[user_id]
                 player_name = player.get('nickname', 'Unknown')
-                game_pin = player.get('gamePin')
+                game_pin = player.get('gamePin') or game_pin
                 
                 player['connected'] = False
                 player['disconnectedAt'] = time.time()
-                
-                game.log(f'👋 Player WebSocket disconnected: {player_name} (UID: {user_id})')
-                game.log(f'📝 Player {player_name} marked as disconnected (can reconnect)')
-                
+
                 # Send remove update so UI updates
                 if game_pin in game_sessions:
-                    emit_to_room(socketio, client_rooms, game.logger, 'participant_update', {
+                    emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'participant_update', {
                         'nick': player_name,
                         'type': 'remove',
                         'user_id': user_id,
                         'timestamp': time.time()
                     }, game_pin)
-                    # Player stays in registry as disconnected so they can rejoin
-                    game.log(f'📝 Player {player_name} kept in registry for potential rejoin')
-            
-            # Remove socket->player mapping
-            del socket_to_player[request.sid]
         
         # NOW leave Socket.IO room and remove from mapping
-        if request.sid in client_rooms:
-            game_pin = client_rooms[request.sid]
+        if game_pin is not None:
             leave_room(game_pin)
-            del client_rooms[request.sid]
-            game.log(f'🚪 Client left room {game_pin}: {request.sid}')
+            unregister_socket(
+                client_rooms,
+                socket_to_player,
+                addin_sockets_by_game,
+                player_sockets_by_game,
+                request.sid
+            )
             
             # Check if this was an add-in socket (NOT a player socket)
             # If add-in disconnects and no other add-in sockets exist for this game, close the game
             if not was_player_socket:
-                # This was NOT a player - likely an add-in
-                # Check if any other non-player sockets exist for this game
-                other_addin_sockets = [
-                    sid for sid, g_pin in client_rooms.items()
-                    if g_pin == game_pin and sid not in socket_to_player
-                ]
-                
-                if not other_addin_sockets:
+                if not has_addin_socket(addin_sockets_by_game, game_pin):
                     # No more add-in sockets for this game - close it
-                    game.log(f'🔌 Add-in disconnected for game {game_pin} - closing game and notifying players')
-                    
                     from utils.room_utils import close_game_and_cleanup
                     close_game_and_cleanup(
                         game_sessions, player_registry, client_rooms, socket_to_player,
+                        addin_sockets_by_game, player_sockets_by_game,
                         socketio, game_pin, game.logger, reason='addin_closed',
                         game_timeout_controls=game_timeout_controls
                     )
-        else:
-            game.log(f'Client disconnected: {request.sid}')
-

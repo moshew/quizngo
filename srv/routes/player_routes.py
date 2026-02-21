@@ -9,10 +9,23 @@ import time
 import uuid
 from flask import Blueprint, request, jsonify
 
-from utils.room_utils import emit_to_room, check_game_active
+from utils.room_utils import (
+    emit_to_addins,
+    register_player_socket,
+    check_game_active,
+)
 
 
-def create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player):
+def create_player_routes(
+    socketio,
+    game,
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game
+):
     """
     Create player routes blueprint.
     
@@ -40,8 +53,6 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'status': 'error',
                     'message': 'No JSON data provided'
                 }), 400
-            
-            game.log(f'📨 POST /rejoin - {data}')
             
             # Get userId, gamePin and optional socketId from data
             user_id = data.get('userId')
@@ -86,20 +97,16 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             player_registry[user_id]['connected'] = True
             player_registry[user_id]['reconnectedAt'] = time.time()
             
-            game.log(f'✅ Player {player_name} (UID: {user_id}) reconnected to game {game_pin}')
-            
             session = game_sessions[player_game_pin]
             
             # Always send add update on rejoin to ensure add-in has the player
-            emit_to_room(socketio, client_rooms, game.logger, 'participant_update', {
+            emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'participant_update', {
                 'nick': player_name,
                 'icon': player.get('icon', '👤'),
                 'type': 'add',
                 'user_id': user_id,
                 'timestamp': time.time()
             }, game_pin)
-            
-            game.log(f'📢 Sent add update for reconnected player {player_name}')
             
             # Check current game state and send appropriate status
             game_state = session.get('currentState', 'waiting')
@@ -129,10 +136,15 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             # If socketId provided, register socket to room (room = gamePin)
             if socket_id:
                 socketio.server.enter_room(socket_id, game_pin, namespace='/')
-                client_rooms[socket_id] = game_pin
-                # Link socket to player for disconnect handling
-                socket_to_player[socket_id] = user_id
-                game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {user_id}')
+                register_player_socket(
+                    client_rooms,
+                    socket_to_player,
+                    addin_sockets_by_game,
+                    player_sockets_by_game,
+                    socket_id,
+                    game_pin,
+                    user_id
+                )
             
             return jsonify(response_data)
             
@@ -156,8 +168,6 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                     'status': 'error',
                     'message': 'No JSON data provided'
                 }), 400
-            
-            game.log(f'📨 POST /submit_answer - {data}')
             
             # Get userId from data - REQUIRED
             user_id = data.get('userId')
@@ -190,10 +200,15 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             # Get gamePin from player registry
             game_pin = player['gamePin']
             
-            game.log(f'✅ Answer from {player["nickname"]} (UID: {user_id}) in game {game_pin}')
-            
-            # Broadcast answer to add-in in this game room via WebSocket
-            emit_to_room(socketio, client_rooms, game.logger, 'player_answer', data, game_pin)
+            # Forward player answers only to add-in sockets (not all players).
+            emit_to_addins(
+                socketio,
+                addin_sockets_by_game,
+                game.logger,
+                'player_answer',
+                data,
+                game_pin
+            )
             
             return jsonify({
                 'status': 'success',
@@ -284,16 +299,20 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                         'timestamp': time.time()
                     }
                     
-                    sent = emit_to_room(socketio, client_rooms, game.logger, 'participant_update', participant_data, game_pin)
-                    game.log(f'✅ Player rejoined, participant_update sent to {sent} client(s)')
+                    emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'participant_update', participant_data, game_pin)
                     
                     # If socketId provided, register socket to room (room = gamePin)
                     if socket_id:
                         socketio.server.enter_room(socket_id, game_pin, namespace='/')
-                        client_rooms[socket_id] = game_pin
-                        # Link socket to player for disconnect handling
-                        socket_to_player[socket_id] = uid
-                        game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {uid}')
+                        register_player_socket(
+                            client_rooms,
+                            socket_to_player,
+                            addin_sockets_by_game,
+                            player_sockets_by_game,
+                            socket_id,
+                            game_pin,
+                            uid
+                        )
                     
                     # Build response with game state for mid-game rejoin
                     rejoin_response = {
@@ -354,9 +373,6 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'joinedAt': time.time()
             }
             
-            game.log(f'👥 Player joining: {name} (UID: {uid}) to game PIN: {game_pin}')
-            game.log(f'💾 Registered player in registry: {player_registry[uid]}')
-            
             # Send participant update to add-ins in this specific game room
             participant_data = {
                 'nick': name,
@@ -366,17 +382,20 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
                 'timestamp': time.time()
             }
             
-            sent = emit_to_room(socketio, client_rooms, game.logger, 'participant_update', participant_data, game_pin)
-            
-            game.log(f'✅ Player joined, participant_update sent to {sent} client(s)')
+            emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'participant_update', participant_data, game_pin)
             
             # If socketId provided, register socket to room (room = gamePin)
             if socket_id:
                 socketio.server.enter_room(socket_id, game_pin, namespace='/')
-                client_rooms[socket_id] = game_pin
-                # Link socket to player for disconnect handling
-                socket_to_player[socket_id] = uid
-                game.log(f'🔗 Registered socket {socket_id} to room {game_pin} and linked to player {uid}')
+                register_player_socket(
+                    client_rooms,
+                    socket_to_player,
+                    addin_sockets_by_game,
+                    player_sockets_by_game,
+                    socket_id,
+                    game_pin,
+                    uid
+                )
             
             # Build response with current game state for mid-game join
             join_response = {
@@ -437,15 +456,12 @@ def create_player_routes(socketio, game, game_sessions, player_registry, client_
             player_name = player['nickname']
             game_pin = player['gamePin']
             
-            game.log(f'👋 Player disconnecting: {player_name} (UID: {uid})')
-            
             # Remove from registry
             del player_registry[uid]
-            game.log(f'🗑️ Removed player {player_name} from registry')
 
             # Notify add-in to remove from screen
             if game_pin in game_sessions:
-                emit_to_room(socketio, client_rooms, game.logger, 'participant_update', {
+                emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'participant_update', {
                     'nick': player_name,
                     'type': 'remove',
                     'user_id': uid,

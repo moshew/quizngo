@@ -13,7 +13,15 @@ import re
 import time
 from flask import Blueprint, request, jsonify
 
-from utils.room_utils import emit_to_room, check_game_active, close_game_and_cleanup, schedule_game_timeout
+from utils.room_utils import (
+    emit_to_room,
+    emit_to_addins,
+    register_addin_socket,
+    has_addin_socket,
+    check_game_active,
+    close_game_and_cleanup,
+    schedule_game_timeout,
+)
 
 
 # Auto-close policy:
@@ -32,6 +40,8 @@ def create_game_routes(
     player_registry,
     client_rooms,
     socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
     game_timeout_controls=None
 ):
     """
@@ -57,15 +67,12 @@ def create_game_routes(
             data = request.get_json()
             game_pin = data.get('gamePin', 'N/A')
             
-            game.log(f'📨 POST /answer_time_started - gamePin: {game_pin}')
-            
             if game_pin and game_pin != 'N/A':
                 # Update session state
                 if game_pin in game_sessions:
                     game_sessions[game_pin]['currentState'] = 'answering'
                     game_sessions[game_pin]['currentQuestion'] = data
                     game_sessions[game_pin]['answerStartedAt'] = time.time()
-                    game.log(f'💾 Saved current question state for game {game_pin}')
                 
                 # Find all players in this game
                 players_in_game = [
@@ -82,9 +89,7 @@ def create_game_routes(
                     })
                 
                 # Send to each player via room broadcast
-                sent_count = emit_to_room(socketio, client_rooms, game.logger, 'answer_time_started', data, game_pin)
-                
-                game.log(f'✅ Sent answer_time_started to {len(players_in_game)} player(s) in game {game_pin}')
+                emit_to_room(socketio, client_rooms, game.logger, 'answer_time_started', data, game_pin)
                 
                 return jsonify({
                     'status': 'success',
@@ -112,8 +117,6 @@ def create_game_routes(
         try:
             data = request.get_json()
             
-            game.log(f'📨 POST /submit_results')
-            
             if not data:
                 game.log('❌ No JSON data received')
                 return jsonify({
@@ -124,8 +127,6 @@ def create_game_routes(
             game_pin = data.get('gamePin')
             results = data.get('results', [])
             
-            game.log(f'   gamePin: {game_pin}, results: {len(results)} players')
-            
             # Clear current question state (answer time ended)
             if game_pin in game_sessions:
                 game_sessions[game_pin]['currentState'] = 'results'
@@ -133,7 +134,6 @@ def create_game_routes(
                     del game_sessions[game_pin]['currentQuestion']
                 if 'answerStartedAt' in game_sessions[game_pin]:
                     del game_sessions[game_pin]['answerStartedAt']
-                game.log(f'💾 Cleared current question state for game {game_pin}')
             
             if not game_pin:
                 game.log('❌ Missing gamePin in request')
@@ -173,11 +173,6 @@ def create_game_routes(
                 
                 if target_sid:
                     socketio.emit('player_results', player_data, to=target_sid)
-                    game.log(f'   → {result.get("nickname")}: Rank #{result.get("rank")}, Score: {result.get("cumulativeScore")} (socket: {target_sid})')
-                else:
-                    game.log(f'   ⚠️ No socket found for {result.get("nickname")} (uid: {user_id}), skipping')
-            
-            game.log(f'✅ Results sent to {len(results)} player(s)')
             
             return jsonify({
                 'status': 'success',
@@ -254,6 +249,7 @@ def create_game_routes(
                 game.log(f'🧹 Cleaning up previous game session: {game_pin}')
                 close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
+                    addin_sockets_by_game, player_sockets_by_game,
                     socketio, game_pin, game.logger, reason='new_session',
                     game_timeout_controls=game_timeout_controls
                 )
@@ -269,6 +265,7 @@ def create_game_routes(
             # Schedule auto-close while waiting for room creation/start.
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
+                addin_sockets_by_game, player_sockets_by_game,
                 socketio, game_pin, game.logger,
                 timeout_seconds=WAITING_ROOM_TIMEOUT_SECONDS,
                 game_timeout_controls=game_timeout_controls
@@ -361,9 +358,14 @@ def create_game_routes(
             
             # Join Socket.IO room using gamePin as room name
             socketio.server.enter_room(socket_id, game_pin, namespace='/')
-            
-            # Track in our mapping
-            client_rooms[socket_id] = game_pin
+            register_addin_socket(
+                client_rooms,
+                socket_to_player,
+                addin_sockets_by_game,
+                player_sockets_by_game,
+                socket_id,
+                game_pin
+            )
             
             # Check if there's an active game session
             has_active_game = game_pin in game_sessions and game_sessions[game_pin].get('active', False)
@@ -418,6 +420,7 @@ def create_game_routes(
             # Use centralized cleanup function
             close_game_and_cleanup(
                 game_sessions, player_registry, client_rooms, socket_to_player,
+                addin_sockets_by_game, player_sockets_by_game,
                 socketio, game_pin, game.logger, reason='manual',
                 game_timeout_controls=game_timeout_controls
             )
@@ -466,6 +469,7 @@ def create_game_routes(
                 game.log(f'🧹 Cleaning up previous game session: {game_pin}')
                 close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
+                    addin_sockets_by_game, player_sockets_by_game,
                     socketio, game_pin, game.logger, reason='new_session',
                     game_timeout_controls=game_timeout_controls
                 )
@@ -486,6 +490,7 @@ def create_game_routes(
             # Schedule auto-close after 5 minutes while waiting for admin to start.
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
+                addin_sockets_by_game, player_sockets_by_game,
                 socketio, game_pin, game.logger,
                 timeout_seconds=WAITING_ROOM_TIMEOUT_SECONDS,
                 game_timeout_controls=game_timeout_controls
@@ -558,10 +563,7 @@ def create_game_routes(
 
             # Guardian socket is registered in client_rooms but not mapped in
             # socket_to_player (player sockets are mapped there).
-            has_guardian = any(
-                gpin == game_pin and sid not in socket_to_player
-                for sid, gpin in client_rooms.items()
-            )
+            has_guardian = has_addin_socket(addin_sockets_by_game, game_pin)
             timeout_seconds = (
                 STARTED_GAME_TIMEOUT_SECONDS
                 if has_guardian
@@ -571,6 +573,7 @@ def create_game_routes(
             # Replace waiting-room timeout with guardian-aware started timeout.
             schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
+                addin_sockets_by_game, player_sockets_by_game,
                 socketio, game_pin, game.logger,
                 timeout_seconds=timeout_seconds,
                 game_timeout_controls=game_timeout_controls
@@ -579,7 +582,7 @@ def create_game_routes(
             game.log(f'✅ Game started and activated: PIN={game_pin}')
             
             # Emit event to Add-in to initialize game state
-            emit_to_room(socketio, client_rooms, game.logger, 'game_started', {
+            emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'game_started', {
                 'gamePin': game_pin,
                 'action': 'initialize_game'
             }, game_pin)

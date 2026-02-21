@@ -7,9 +7,19 @@ Run locally for testing: python server.py
 Deploy to server: see deployment instructions
 """
 
-# IMPORTANT: eventlet monkey patch must be at the very top, before any other imports
-import eventlet
-eventlet.monkey_patch()
+import os
+
+# On Windows, eventlet uses select(), which has a low FD cap and can crash
+# under high WebSocket connection counts.
+SOCKETIO_ASYNC_MODE = 'threading'
+if os.name != 'nt':
+    try:
+        # IMPORTANT: if enabled, monkey patch should happen before other imports.
+        import eventlet
+        eventlet.monkey_patch()
+        SOCKETIO_ASYNC_MODE = 'eventlet'
+    except Exception as exc:
+        print(f"WARNING: eventlet unavailable, falling back to threading mode: {exc}")
 
 import sys
 import random
@@ -53,6 +63,12 @@ parser.add_argument('--lb-url', type=str, default=None, help='Load balancer URL 
 parser.add_argument('--address', type=str, default=None, help='This server\'s public address (e.g., http://192.168.31.22:5001)')
 parser.add_argument('--admin-url', type=str, default=None, help='Admin client base URL (e.g., http://192.168.31.22:3002)')
 parser.add_argument('--game-url', type=str, default=None, help='Game client base URL (e.g., http://192.168.31.22:8080)')
+parser.add_argument(
+    '--log-verbosity',
+    choices=['quiet', 'normal', 'verbose'],
+    default=os.getenv('QUIZNGO_LOG_VERBOSITY', 'quiet'),
+    help='Logging verbosity: quiet=warnings/errors only, normal=important info, verbose=debug'
+)
 parser.add_argument('--ssl', action='store_true', default=False, help='Enable HTTPS (default: disabled)')
 parser.add_argument('--no-ssl', dest='ssl', action='store_false', help='Disable HTTPS (default)')
 parser.add_argument('--cert-dir', type=str, default=None, help='Directory containing localhost.crt and localhost.key (default: ~/.office-addin-dev-certs)')
@@ -67,6 +83,7 @@ LB_URL = cli_args.lb_url or f'{PROTOCOL}://localhost:5000'
 SERVER_ADDRESS = cli_args.address or f'{PROTOCOL}://{LOCAL_IP}:{PORT}'
 ADMIN_URL = cli_args.admin_url or f'http://{LOCAL_IP}:3002'
 GAME_URL = cli_args.game_url or f'http://{LOCAL_IP}:8080'
+LOG_VERBOSITY = (cli_args.log_verbosity or 'quiet').lower()
 lb_server_id = None  # Set after registration with LB
 
 # Prevent protocol mismatch between announced server address and actual listener mode.
@@ -88,19 +105,71 @@ from utils.response_normalizer import normalize_flask_json_response
 # Configuration
 LOG_DIR = Path(__file__).parent / 'logs'
 LOG_FILE = LOG_DIR / 'quizngo.log'
+LOG_LEVELS = {
+    'quiet': logging.WARNING,
+    'normal': logging.INFO,
+    'verbose': logging.DEBUG
+}
+LOG_LEVEL = LOG_LEVELS.get(LOG_VERBOSITY, logging.WARNING)
+
+# High-volume messages that can flood logs under load.
+HIGH_VOLUME_LOG_PATTERNS = (
+    'POST /submit_answer',
+    'POST /answer_time_started',
+    'POST /submit_results',
+    'POST /register_room - socketId',
+    'POST /rejoin -',
+    'WS ->',
+    'WS ← connect',
+    'WS ← disconnect',
+    'Answer from ',
+    'Player joining:',
+    'Registered player in registry',
+    'Player joined, participant_update sent',
+    'Player rejoined, participant_update sent',
+    'Registered socket ',
+    'No socket found for',
+    'Saved current question state',
+    'Cleared current question state',
+    'Auto-close worker stopped for game',
+)
+
+
+class HighVolumeLogFilter(logging.Filter):
+    """Drop very noisy INFO/DEBUG records for quieter production logs."""
+
+    def filter(self, record):
+        if LOG_VERBOSITY == 'verbose':
+            return True
+        if record.levelno >= logging.WARNING:
+            return True
+        msg = record.getMessage()
+        return not any(token in msg for token in HIGH_VOLUME_LOG_PATTERNS)
 
 # Create log directory if it doesn't exist
 LOG_DIR.mkdir(exist_ok=True)
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE, encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
+
+# Suppress high-volume request/access logs and websocket chatter unless verbose.
+if LOG_VERBOSITY in ('quiet', 'normal'):
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        handler.addFilter(HighVolumeLogFilter())
+
+third_party_level = logging.INFO if LOG_VERBOSITY == 'verbose' else logging.WARNING
+logging.getLogger('werkzeug').setLevel(third_party_level)
+logging.getLogger('engineio').setLevel(third_party_level)
+logging.getLogger('socketio').setLevel(third_party_level)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
 class GameLogger:
@@ -109,7 +178,18 @@ class GameLogger:
         self.logger = logging.getLogger(__name__)
     
     def log(self, message):
-        self.logger.info(message)
+        text = str(message)
+        lowered = text.lower()
+
+        if '❌' in text or lowered.startswith('error') or ' exception' in lowered:
+            self.logger.error(text)
+            return
+
+        if '⚠️' in text or '🚫' in text or ' warning' in lowered or ' failed' in lowered:
+            self.logger.warning(text)
+            return
+
+        self.logger.info(text)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -118,7 +198,7 @@ app.config['SECRET_KEY'] = 'quizngo_quiz_secret_key_2024'
 # Initialize SocketIO
 socketio = SocketIO(app, 
     cors_allowed_origins="*",
-    async_mode='eventlet',
+    async_mode=SOCKETIO_ASYNC_MODE,
     logger=False,
     engineio_logger=False
 )
@@ -134,6 +214,8 @@ CORS(app,
 connected_clients = set()
 client_rooms = {}  # maps session_id -> gamePin (room name)
 socket_to_player = {}  # maps socket_id -> uid
+addin_sockets_by_game = {}  # maps gamePin -> set of add-in socket ids
+player_sockets_by_game = {}  # maps gamePin -> set of player socket ids
 game_sessions = {}  # maps gamePin -> session info
 player_registry = {}  # maps uid -> player info
 game_timeout_controls = {}  # maps gamePin -> threading.Event for auto-close cancellation
@@ -144,12 +226,22 @@ game = GameLogger()
 # Register WebSocket handlers
 register_websocket_handlers(
     socketio, game, connected_clients, client_rooms,
-    socket_to_player, game_sessions, player_registry,
+    socket_to_player, addin_sockets_by_game, player_sockets_by_game,
+    game_sessions, player_registry,
     game_timeout_controls=game_timeout_controls
 )
 
 # Create and register blueprints
-player_bp = create_player_routes(socketio, game, game_sessions, player_registry, client_rooms, socket_to_player)
+player_bp = create_player_routes(
+    socketio,
+    game,
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game
+)
 game_bp = create_game_routes(
     socketio,
     game,
@@ -157,9 +249,11 @@ game_bp = create_game_routes(
     player_registry,
     client_rooms,
     socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
     game_timeout_controls=game_timeout_controls
 )
-navigation_bp = create_navigation_routes(socketio, game, game_sessions, client_rooms)
+navigation_bp = create_navigation_routes(socketio, game, game_sessions, addin_sockets_by_game)
 info_bp = create_info_routes(game, ADMIN_URL, GAME_URL)
 
 app.register_blueprint(player_bp)
@@ -297,7 +391,7 @@ def start_heartbeat():
     """Push stats to LB every 30 seconds. Re-registers if LB forgot us."""
     def heartbeat_worker():
         while True:
-            eventlet.sleep(30)
+            socketio.sleep(30)
             if not LB_URL or not lb_server_id:
                 break
             try:
@@ -316,7 +410,7 @@ def start_heartbeat():
                     register_with_lb()
             except Exception as e:
                 logging.getLogger(__name__).warning(f'Heartbeat failed: {e}')
-    eventlet.spawn(heartbeat_worker)
+    socketio.start_background_task(heartbeat_worker)
 
 
 def notify_lb_game_ended(game_pin):
@@ -341,6 +435,7 @@ if __name__ == '__main__':
     print(f"Load Balancer: {LB_URL}")
     print(f"Server Address: {SERVER_ADDRESS}")
     print(f"SSL: {'enabled' if USE_SSL else 'disabled'}")
+    print(f"Log verbosity: {LOG_VERBOSITY}")
     print("")
     print("⚠️  Server will register with LB in 2 seconds...")
     print("   If LB is not available, server will shut down.")
@@ -348,14 +443,30 @@ if __name__ == '__main__':
     print("Press Ctrl+C to stop the server")
     print("=" * 40)
 
+    if SOCKETIO_ASYNC_MODE == 'threading':
+        print("SocketIO async mode: threading (Windows-safe)")
+    else:
+        print("SocketIO async mode: eventlet")
+
+    def delayed_lb_registration():
+        socketio.sleep(2)
+        register_with_lb(True)
+
     # Register with LB after a short delay (let server start first)
-    eventlet.spawn_after(2, register_with_lb, True)
+    socketio.start_background_task(delayed_lb_registration)
+
+    run_kwargs = {
+        'debug': False,
+        'host': '0.0.0.0',
+        'port': PORT
+    }
 
     if USE_SSL:
         certfile = str(CERT_DIR / 'localhost.crt')
         keyfile = str(CERT_DIR / 'localhost.key')
         print(f"SSL enabled - certs from: {CERT_DIR}")
-        socketio.run(app, debug=False, host='0.0.0.0', port=PORT,
-                     certfile=certfile, keyfile=keyfile)
+        run_kwargs['certfile'] = certfile
+        run_kwargs['keyfile'] = keyfile
+        socketio.run(app, **run_kwargs)
     else:
-        socketio.run(app, debug=False, host='0.0.0.0', port=PORT)
+        socketio.run(app, **run_kwargs)

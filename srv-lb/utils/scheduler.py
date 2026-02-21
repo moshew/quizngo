@@ -6,7 +6,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def start_health_checker(server_registry, interval=60):
+def start_health_checker(server_registry, pin_registry=None, interval=60):
     """Background task: check server health every `interval` seconds."""
     def _worker():
         while True:
@@ -15,6 +15,12 @@ def start_health_checker(server_registry, interval=60):
                 downed = server_registry.check_health()
                 for sid in downed:
                     logger.warning(f"Server {sid} marked as DOWN (heartbeat timeout)")
+                    if pin_registry is not None:
+                        removed = pin_registry.remove_all_for_server(sid)
+                        if removed:
+                            logger.warning(
+                                f"Removed {removed} PIN mappings for down server {sid}"
+                            )
             except Exception as e:
                 logger.error(f"Health checker error: {e}")
 
@@ -44,6 +50,11 @@ def _cleanup_stale_pins(server_registry, pin_registry):
     servers = server_registry.get_all()
     for srv in servers:
         if srv['status'] == 'down':
+            removed = pin_registry.remove_all_for_server(srv['server_id'])
+            if removed:
+                logger.info(
+                    f"Removed {removed} PIN mappings for down server {srv['server_id']} during stale cleanup"
+                )
             continue
         try:
             resp = requests.get(f"{srv['address']}/sim_gamePIN", timeout=10, verify=False)

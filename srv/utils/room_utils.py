@@ -28,6 +28,87 @@ def check_game_active(game_sessions, game_pin):
     return game_sessions[game_pin].get('active', False)
 
 
+def _add_sid_to_index(index_by_game, game_pin, sid):
+    """Add a socket id to a room index map (gamePin -> set[sid])."""
+    if index_by_game is None:
+        return
+    index_by_game.setdefault(game_pin, set()).add(sid)
+
+
+def _remove_sid_from_index(index_by_game, game_pin, sid):
+    """Remove a socket id from a room index map and prune empty sets."""
+    if index_by_game is None:
+        return
+    sids = index_by_game.get(game_pin)
+    if not sids:
+        return
+    sids.discard(sid)
+    if not sids:
+        index_by_game.pop(game_pin, None)
+
+
+def register_addin_socket(
+    client_rooms,
+    socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
+    sid,
+    game_pin
+):
+    """Register/overwrite an add-in socket mapping and keep indexes in sync."""
+    previous_game = client_rooms.get(sid)
+    if previous_game is not None:
+        _remove_sid_from_index(addin_sockets_by_game, previous_game, sid)
+        _remove_sid_from_index(player_sockets_by_game, previous_game, sid)
+
+    socket_to_player.pop(sid, None)
+    client_rooms[sid] = game_pin
+    _add_sid_to_index(addin_sockets_by_game, game_pin, sid)
+
+
+def register_player_socket(
+    client_rooms,
+    socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
+    sid,
+    game_pin,
+    uid
+):
+    """Register/overwrite a player socket mapping and keep indexes in sync."""
+    previous_game = client_rooms.get(sid)
+    if previous_game is not None:
+        _remove_sid_from_index(addin_sockets_by_game, previous_game, sid)
+        _remove_sid_from_index(player_sockets_by_game, previous_game, sid)
+
+    client_rooms[sid] = game_pin
+    socket_to_player[sid] = uid
+    _add_sid_to_index(player_sockets_by_game, game_pin, sid)
+
+
+def unregister_socket(
+    client_rooms,
+    socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
+    sid
+):
+    """Remove a socket from all mappings and indexes. Returns (game_pin, uid)."""
+    game_pin = client_rooms.pop(sid, None)
+    uid = socket_to_player.pop(sid, None)
+
+    if game_pin is not None:
+        _remove_sid_from_index(addin_sockets_by_game, game_pin, sid)
+        _remove_sid_from_index(player_sockets_by_game, game_pin, sid)
+
+    return game_pin, uid
+
+
+def has_addin_socket(addin_sockets_by_game, game_pin):
+    """Fast O(1) check whether a game currently has at least one add-in socket."""
+    return bool(addin_sockets_by_game and addin_sockets_by_game.get(game_pin))
+
+
 def _cancel_game_timeout(game_timeout_controls, game_pin, logger):
     """Cancel and remove a scheduled timeout for the provided game pin."""
     if game_timeout_controls is None:
@@ -44,6 +125,8 @@ def schedule_game_timeout(
     player_registry,
     client_rooms,
     socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
     socketio,
     game_pin,
     logger,
@@ -78,6 +161,8 @@ def schedule_game_timeout(
                 player_registry,
                 client_rooms,
                 socket_to_player,
+                addin_sockets_by_game,
+                player_sockets_by_game,
                 socketio,
                 game_pin,
                 logger,
@@ -95,6 +180,8 @@ def close_game_and_cleanup(
     player_registry,
     client_rooms,
     socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
     socketio,
     game_pin,
     logger,
@@ -159,10 +246,16 @@ def close_game_and_cleanup(
             del player_registry[uid]
 
     # Remove ALL sockets (players + add-in sockets) associated with this game.
-    sockets_to_remove = [
-        sid for sid, pin in list(client_rooms.items())
-        if pin == game_pin
-    ]
+    sockets_to_remove = set()
+    if player_sockets_by_game is not None:
+        sockets_to_remove.update(player_sockets_by_game.get(game_pin, set()))
+    if addin_sockets_by_game is not None:
+        sockets_to_remove.update(addin_sockets_by_game.get(game_pin, set()))
+    if not sockets_to_remove:
+        sockets_to_remove = {
+            sid for sid, pin in list(client_rooms.items())
+            if pin == game_pin
+        }
 
     removed_player_sockets = 0
     removed_addin_sockets = 0
@@ -174,13 +267,19 @@ def close_game_and_cleanup(
             pass
 
         if sid in socket_to_player:
-            del socket_to_player[sid]
+            socket_to_player.pop(sid, None)
             removed_player_sockets += 1
         else:
             removed_addin_sockets += 1
 
-        if sid in client_rooms:
-            del client_rooms[sid]
+        client_rooms.pop(sid, None)
+        _remove_sid_from_index(player_sockets_by_game, game_pin, sid)
+        _remove_sid_from_index(addin_sockets_by_game, game_pin, sid)
+
+    if player_sockets_by_game is not None:
+        player_sockets_by_game.pop(game_pin, None)
+    if addin_sockets_by_game is not None:
+        addin_sockets_by_game.pop(game_pin, None)
 
     logger.info(
         f'Cleanup for {game_pin}: players={len(players_to_remove)}, '
@@ -213,14 +312,27 @@ def emit_to_room(socketio, client_rooms, logger, event, data, game_pin, skip_sid
         skip_sid: Optional socket ID to skip.
 
     Returns:
-        Number of tracked clients in the target game room.
+        None.
     """
-    tracked_count = sum(1 for pin in client_rooms.values() if pin == game_pin)
-
     try:
         socketio.emit(event, data, room=game_pin, skip_sid=skip_sid)
-        logger.info(f'WS -> {event} to room {game_pin} (~{tracked_count} tracked client(s))')
     except Exception as exc:
-        logger.info(f'Emit failed for {event} to {game_pin}: {exc}')
+        logger.warning(f'Emit failed for {event} to {game_pin}: {exc}')
 
-    return tracked_count
+
+def emit_to_addins(socketio, addin_sockets_by_game, logger, event, data, game_pin):
+    """
+    Emit a message only to add-in sockets in a specific game room.
+
+    Returns:
+        None.
+    """
+    if addin_sockets_by_game is None:
+        return
+
+    addin_sids = tuple(addin_sockets_by_game.get(game_pin, ()))
+    for sid in addin_sids:
+        try:
+            socketio.emit(event, data, to=sid)
+        except Exception as exc:
+            logger.warning(f'Emit failed for {event} to add-in {sid} in {game_pin}: {exc}')

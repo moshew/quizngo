@@ -128,25 +128,26 @@ function App() {
 
   const totals = useMemo(() => {
     const totalServers = servers.length
+    const liveServers = servers.filter((server) => server.status !== 'down')
     const activeServers = servers.filter((server) => server.status === 'active').length
     const drainingServers = servers.filter((server) => server.status === 'draining').length
     const downServers = servers.filter((server) => server.status === 'down').length
-    const totalWsConnections = servers.reduce(
+    const totalWsConnections = liveServers.reduce(
       (sum, server) => sum + Number(server.stats?.active_ws_connections || 0),
       0,
     )
-    const totalGames = servers.reduce(
+    const totalGames = liveServers.reduce(
       (sum, server) => sum + Number(server.stats?.active_games_count || 0),
       0,
     )
-    const totalMemory = servers.reduce(
+    const totalMemory = liveServers.reduce(
       (sum, server) => sum + Number(server.stats?.memory_mb || 0),
       0,
     )
     const avgCpu =
-      totalServers > 0
-        ? servers.reduce((sum, server) => sum + Number(server.stats?.cpu_percent || 0), 0) /
-          totalServers
+      liveServers.length > 0
+        ? liveServers.reduce((sum, server) => sum + Number(server.stats?.cpu_percent || 0), 0) /
+          liveServers.length
         : 0
 
     return {
@@ -186,25 +187,26 @@ function App() {
         setServers(sortedServers)
         setPins(pinsResponse)
         setLastUpdatedAt(new Date())
+        const liveServers = sortedServers.filter((server) => server.status !== 'down')
 
         const snapshot = {
           timestamp: Date.now(),
           avgCpu:
-            sortedServers.length > 0
-              ? sortedServers.reduce(
+            liveServers.length > 0
+              ? liveServers.reduce(
                   (sum, server) => sum + Number(server.stats?.cpu_percent || 0),
                   0,
-                ) / sortedServers.length
+                ) / liveServers.length
               : 0,
-          totalMemory: sortedServers.reduce(
+          totalMemory: liveServers.reduce(
             (sum, server) => sum + Number(server.stats?.memory_mb || 0),
             0,
           ),
-          totalWsConnections: sortedServers.reduce(
+          totalWsConnections: liveServers.reduce(
             (sum, server) => sum + Number(server.stats?.active_ws_connections || 0),
             0,
           ),
-          totalGames: sortedServers.reduce(
+          totalGames: liveServers.reduce(
             (sum, server) => sum + Number(server.stats?.active_games_count || 0),
             0,
           ),

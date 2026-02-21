@@ -100,6 +100,14 @@ class ServerRegistry:
             for sid, srv in self.servers.items():
                 if srv['status'] != 'down' and not self._is_healthy_at(srv, now):
                     srv['status'] = 'down'
+                    # Clear volatile metrics to avoid reporting stale load
+                    # for servers that are no longer reachable.
+                    srv['stats'] = {
+                        'active_ws_connections': 0,
+                        'cpu_percent': 0.0,
+                        'memory_mb': 0.0,
+                        'active_games_count': 0
+                    }
                     downed.append(sid)
         return downed
 
