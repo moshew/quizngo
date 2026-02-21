@@ -203,15 +203,20 @@ def mirror_stdio_to_log(log_file_path: str):
 async def _make_socket(server_url: str) -> sio_module.AsyncClient:
     """Connect a new socket.io client and return it.
 
-    Uses default transports (polling → websocket upgrade) for maximum
-    compatibility with Flask-SocketIO / eventlet backends.
+    Uses WebSocket-only transport (skips polling handshake) to minimise
+    ephemeral port usage under high concurrency.
     """
     sio = sio_module.AsyncClient(
         logger=False,
         engineio_logger=False,
         reconnection=False,   # Don't auto-reconnect; simplifies cleanup
     )
-    await sio.connect(server_url, transports=['websocket'])
+    try:
+        await sio.connect(server_url, transports=['websocket'])
+    except Exception:
+        with contextlib.suppress(Exception):
+            await sio.disconnect()  # close the internal aiohttp session
+        raise
     return sio
 
 

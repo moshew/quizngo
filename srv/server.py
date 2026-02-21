@@ -146,6 +146,26 @@ class HighVolumeLogFilter(logging.Filter):
         msg = record.getMessage()
         return not any(token in msg for token in HIGH_VOLUME_LOG_PATTERNS)
 
+
+class _WerkzeugWebSocketFilter(logging.Filter):
+    """Suppress the harmless AssertionError werkzeug logs after every WebSocket
+    session.  simple_websocket bypasses the normal WSGI start_response flow
+    (it sends the 101 directly on the socket); werkzeug then complains when it
+    tries to finalise the HTTP response.  The session itself completed fine.
+
+    Must be on the root logger's HANDLERS (not the werkzeug logger itself):
+    records from child loggers (e.g. werkzeug.serving) propagate directly to
+    the root handlers, bypassing parent-logger filters."""
+
+    def filter(self, record):
+        if record.exc_info:
+            exc_type, exc_val, _ = record.exc_info
+            if exc_type is not None and issubclass(exc_type, AssertionError):
+                if 'write() before start_response' in str(exc_val):
+                    return False
+        return True
+
+
 # Create log directory if it doesn't exist
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -159,10 +179,12 @@ logging.basicConfig(
     ]
 )
 
-# Suppress high-volume request/access logs and websocket chatter unless verbose.
-if LOG_VERBOSITY in ('quiet', 'normal'):
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers:
+# Attach filters to root handlers so they intercept all propagated records.
+_ws_filter = _WerkzeugWebSocketFilter()
+root_logger = logging.getLogger()
+for handler in root_logger.handlers:
+    handler.addFilter(_ws_filter)
+    if LOG_VERBOSITY in ('quiet', 'normal'):
         handler.addFilter(HighVolumeLogFilter())
 
 third_party_level = logging.INFO if LOG_VERBOSITY == 'verbose' else logging.WARNING
