@@ -6,10 +6,6 @@ add-in/npm-debug.log*
 add-in/yarn-debug.log*
 add-in/yarn-error.log*
 
-# Office Add-in certificates
-add-in/certs/
-add-in/assets/templates/
-
 # Python virtual environment
 srv/venv/
 venv/
