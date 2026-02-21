@@ -5,8 +5,10 @@ export default defineConfig({
   plugins: [react()],
   base: '/admin/',
   server: {
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     port: 3002,
+    strictPort: true,
+    allowedHosts: ['quizngo.online', 'admin.quizngo.online'],
     proxy: {
       '/api': {
         target: 'http://localhost:5000',

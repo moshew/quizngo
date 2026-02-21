@@ -10,11 +10,7 @@
  */
 
 import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './state.js';
-import { getServerUrl } from './api.js';
-
-// WebSocket URL - now dynamic, resolved via LB
-// Use getServerUrl() instead of this constant
-export const WEBSOCKET_URL = null; // Legacy - use getServerUrl() instead
+import { getServerUrl, getSrvId } from './api.js';
 
 // WebSocket instance
 let socket = null;
@@ -98,7 +94,8 @@ export function connectWebSocket(gamePin, config = {}) {
             transports: ['websocket', 'polling'],
             forceNew: true,
             timeout: 5000,
-            reconnection: false // We handle reconnection ourselves
+            reconnection: false, // We handle reconnection ourselves
+            query: { srv_id: getSrvId() }
         });
 
         // Setup event handlers
@@ -198,7 +195,8 @@ function handleReconnection() {
                     transports: ['websocket', 'polling'],
                     forceNew: true,
                     timeout: 5000,
-                    reconnection: false
+                    reconnection: false,
+                    query: { srv_id: getSrvId() }
                 });
                 
                 setupSocketEventHandlers(eventConfig, currentGamePin);
@@ -209,22 +207,6 @@ function handleReconnection() {
             }
         }
     }, delay);
-}
-
-/**
- * Initialize WebSocket connection (LEGACY - for backward compatibility)
- * Use connectWebSocket(gamePin, config) for new game-based connection
- */
-export function initializeWebSocket(config = {}) {
-    console.log('⚠️ initializeWebSocket called - storing config for later game start');
-    eventConfig = config;
-    
-    // Return a mock socket object for compatibility
-    // Actual connection happens when game starts
-    return {
-        connected: false,
-        id: null
-    };
 }
 
 /**

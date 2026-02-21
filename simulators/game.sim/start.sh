@@ -1,28 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "========================================"
-echo "   QuizNGO Simulator - Starting..."
-echo "========================================"
-echo ""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
-    echo "[1/2] Installing dependencies..."
-    npm install
-    echo ""
-else
-    echo "[1/2] Dependencies already installed"
-    echo ""
-fi
-
-echo "[2/2] Starting development server..."
-echo ""
-echo "Open browser at: http://localhost:3001"
-echo ""
-echo "Press Ctrl+C to stop"
-echo ""
-npm run dev
-
+exec npm run dev -- --host 127.0.0.1 --port 3001 --strictPort
 
 
 

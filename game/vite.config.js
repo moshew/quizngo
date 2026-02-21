@@ -6,7 +6,9 @@ export default defineConfig({
   base: '/game/',
   server: {
     port: 3003,
-    host: '0.0.0.0',
+    host: '127.0.0.1',
+    strictPort: true,
+    allowedHosts: ['quizngo.online', 'game.quizngo.online'],
     proxy: {
       '/api': {
         target: 'http://localhost:5000',

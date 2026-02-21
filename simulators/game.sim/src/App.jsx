@@ -38,7 +38,7 @@ const FAKE_PLAYERS = [
 ]
 
 // Load Balancer URL - used to resolve game PIN to server
-const LB_URL = import.meta.env.VITE_LB_URL || `http://${window.location.hostname}:5000`
+const LB_URL = import.meta.env.VITE_LB_URL || 'https://srv.quizngo.online'
 
 function App() {
   const [connectedPlayers, setConnectedPlayers] = useState(new Set())
@@ -975,7 +975,6 @@ function App() {
 }
 
 export default App
-
 
 
 

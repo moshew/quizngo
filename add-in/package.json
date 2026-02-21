@@ -4,16 +4,10 @@
   "description": "Office Add-in לניהול חידון טריוויה ב-PowerPoint עם שרת מרכזי",
   "main": "taskpane.html",
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
-    "start-https": "node server.js",
-    "start-http": "http-server . -p 3000 -c-1 --cors",
+    "dev": "bash ./start.sh",
+    "start": "bash ./start.sh",
     "build": "echo 'No build process required for basic add-in'",
-    "validate": "echo 'Validation requires office-addin-manifest package'",
-    "serve": "node server.js",
-    "sideload": "echo 'Starting HTTPS server for Office.com compatibility...' && start https://localhost:3000 && npm start",
-    "certs:install": "npx office-addin-dev-certs install",
-    "certs:verify": "npx office-addin-dev-certs verify"
+    "validate": "npx office-addin-manifest validate manifest.dev.xml && npx office-addin-manifest validate manifest.xml"
   },
   "keywords": [
     "office-add-in",
@@ -24,17 +18,10 @@
   ],
   "author": "QuizNGO Quiz Manager",
   "license": "MIT",
-  "devDependencies": {
-    "http-server": "^14.1.1",
-    "office-addin-debugging": "^6.0.3",
-    "office-addin-dev-certs": "^2.0.3"
-  },
+  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "."
   },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^5.1.0"
-  }
+  "dependencies": {}
 }

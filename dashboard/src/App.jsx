@@ -10,8 +10,14 @@ import {
 } from './api/lbApi'
 import './App.css'
 
-const DEFAULT_LB_URL =
-  normalizeBaseUrl(import.meta.env.VITE_LB_URL) || `http://${window.location.hostname}:5000`
+const DEFAULT_LB_URL = (() => {
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `http://${host}:5000`
+  }
+  return 'https://srv.quizngo.online'
+})()
+const INITIAL_LB_URL = normalizeBaseUrl(import.meta.env.VITE_LB_URL) || normalizeBaseUrl(DEFAULT_LB_URL)
 
 const AUTO_REFRESH_OPTIONS = [
   { label: 'כבוי', value: 0 },
@@ -105,8 +111,8 @@ function MetricChart({ title, value, suffix, points, color, maxHint }) {
 }
 
 function App() {
-  const [lbUrl, setLbUrl] = useState(DEFAULT_LB_URL)
-  const [lbUrlInput, setLbUrlInput] = useState(DEFAULT_LB_URL)
+  const [lbUrl, setLbUrl] = useState(INITIAL_LB_URL)
+  const [lbUrlInput, setLbUrlInput] = useState(INITIAL_LB_URL)
   const [viewMode, setViewMode] = useState('table')
   const [autoRefreshMs, setAutoRefreshMs] = useState(10000)
   const [servers, setServers] = useState([])

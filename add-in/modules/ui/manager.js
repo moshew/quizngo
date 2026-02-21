@@ -7,7 +7,7 @@
  * - Admin accesses via /:gamePin URL
  */
 
-import { getApiBase } from '../core/api.js';
+import { getApiBase, getSrvId } from '../core/api.js';
 import { 
     getGamePIN,
     getCurrentSlideNumber
@@ -28,7 +28,7 @@ function normalizeHost(host) {
 }
 
 async function resolveAdminUrl(gamePin) {
-    // Prefer explicit config if provided.
+    // Prefer explicit runtime config if provided.
     if (typeof window !== 'undefined' && window.QUIZNGO_ADMIN_HOST) {
         return `${normalizeHost(window.QUIZNGO_ADMIN_HOST)}/${gamePin}`;
     }
@@ -50,8 +50,7 @@ async function resolveAdminUrl(gamePin) {
         return `${window.location.origin}/admin/${gamePin}`;
     }
 
-    // Last fallback for local-only development.
-    return `http://localhost:3002/${gamePin}`;
+    return `https://quizngo.online/admin/${gamePin}`;
 }
 
 /**
@@ -136,14 +135,6 @@ export function updateDisplayedValues() {
 }
 
 /**
- * Update auto-save status indicator (deprecated - no longer used)
- * Kept as no-op for backward compatibility
- */
-export function updateAutoSaveStatus(status) {
-    // No-op: Auto-save UI removed, data saves directly to PowerPoint tags
-}
-
-/**
  * Show admin connection overlay with QR code and admin URL
  * @param {string} gamePin - The game PIN to display
  */
@@ -204,7 +195,8 @@ export async function showAdminConnectionScreen(gamePin) {
     }
 
     // Load QR code from server
-    const qrCodeUrl = `${getApiBase()}qr-code/${gamePin}?type=admin`;
+    const srvParam = getSrvId() ? `&srv_id=${getSrvId()}` : '';
+    const qrCodeUrl = `${getApiBase()}qr-code/${gamePin}?type=admin${srvParam}`;
     const errorLoadingQR = t('startScreen.errorLoadingQR', 'שגיאה בטעינת QR code');
 
     const qrArea = document.getElementById('adminOverlayQrArea');

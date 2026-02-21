@@ -3,7 +3,6 @@
 console.log('ðŸ“„ taskpane.js loaded (Tabbed Version with i18n)!');
 
 // Import modules - Core
-import { API_BASE } from './modules/core/api.js';
 import { 
     getSlideType, 
     loadGameData,
@@ -1036,4 +1035,3 @@ window.updateStartStopButton = updateStartStopButton;
 window.t = t;
 window.getLanguage = getLanguage;
 window.isRTL = isRTL;
-

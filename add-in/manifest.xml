@@ -12,12 +12,11 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="QuizNGO Quiz Manager" />
   <Description DefaultValue="Quiz trivia add-in with central server management" />
-  <IconUrl DefaultValue="https://quizngo.online/addin/assets/icon-32.png"/>
-<HighResolutionIconUrl DefaultValue="https://quizngo.online/addin/assets/icon-80.png"/>
-  <SupportUrl DefaultValue="https://din-online.co.il" />
+  <IconUrl DefaultValue="https://addin.quizngo.online/assets/icon-32.png"/>
+<HighResolutionIconUrl DefaultValue="https://addin.quizngo.online/assets/icon-80.png"/>
   <AppDomains>
-    <AppDomain>https://din-online.co.il</AppDomain>
-    <AppDomain>https://quizngo.online</AppDomain>
+    <AppDomain>https://addin.quizngo.online</AppDomain>
+    <AppDomain>https://srv.quizngo.online</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -31,7 +30,7 @@
   </Requirements>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://quizngo.online/addin/taskpane.html"/>
+    <SourceLocation DefaultValue="https://addin.quizngo.online/taskpane.html"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -83,13 +82,13 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://quizngo.online/addin/assets/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://quizngo.online/addin/assets/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://quizngo.online/addin/assets/icon-80.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://addin.quizngo.online/assets/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://addin.quizngo.online/assets/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://addin.quizngo.online/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://quizngo.online"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://quizngo.online/addin/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://addin.quizngo.online/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get Started with QuizNGO Quiz Manager"/>

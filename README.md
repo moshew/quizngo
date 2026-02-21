@@ -73,20 +73,23 @@ cd srv/
 ./install_python.sh    # Linux/Mac
 # או: install_python.bat  # Windows
 
-# הפעלה  
+# הפעלה
 ./start_python.sh       # Linux/Mac
 # או: start_python.bat   # Windows
 ```
 
-השרת יתחיל על: `http://localhost:5000`
+השרת יאזין פנימית על `http://127.0.0.1:5000` ומוגש חיצונית דרך `https://quizngo.online/lb/`.
 
 ### שלב 2: הגדרת Add-in
 ```bash
-# במחשב עם PowerPoint
+# על השרת המרוחק
 cd add-in/
-npm install
-npm start
+./start.sh start
 ```
+
+ה-Add-in dev נגיש דרך:
+- `https://quizngo.online/addin-dev/taskpane.html`
+- `https://quizngo.online/addin-dev/manifest.dev.xml` (אם אתה חושף את הקובץ דרך השרת)
 
 ### שלב 3: הסימולטור (אופציונלי) 🎮
 ```bash
@@ -96,7 +99,7 @@ npm install
 npm run dev
 ```
 
-הסימולטור יפתח על: `http://localhost:3001`
+הסימולטור יפתח על: `https://quizngo.online/game/`
 
 **מה זה הסימולטור?**
 - 10 משתתפים פיקטיביים
@@ -112,7 +115,7 @@ npm install
 npm run dev
 ```
 
-לוח הבקרה יפתח על: `http://localhost:3002`
+לוח הבקרה יפתח על: `https://quizngo.online/admin/`
 
 **מה זה לוח הבקרה?**
 - ניהול המשחק מרחוק דרך ממשק ויזואלי
@@ -123,10 +126,11 @@ npm run dev
 ### שלב 5: טעינה ב-PowerPoint
 1. פתח PowerPoint
 2. Insert → My Add-ins → Shared Folder
-3. בחר `add-in/manifest.xml`
-4. לחץ Add
+3. בפיתוח: בחר `add-in/manifest.dev.xml`
+4. בפרודקשן: בחר `add-in/manifest.xml`
+5. לחץ Add
 
-**💡 טיפ**: ה-Add-in כבר מוגדר להתחבר ל-`http://localhost:5000`
+**💡 טיפ**: בגרסת פיתוח ה-Add-in מוגדר לעבוד מול `https://quizngo.online/addin-dev`.
 
 ## 🎮 איך להשתמש
 
@@ -171,7 +175,7 @@ npm run dev
 - הם **לא** באותה תיקייה - זה **בכוונה**!
 
 📖 **למידע נוסף:** ראה `srv/HASH_ID_IMPLEMENTATION.md`  
-📍 **לבדיקה:** `http://localhost:5000/list_saved_files` או `http://localhost:5000/debug_save_location.html`
+📍 **לבדיקה:** `https://quizngo.online/list_saved_files` או `https://quizngo.online/debug_save_location.html`
 
 ### 3. הגדרת סוגי שקפים
 1. עבור לכל שקף במצגת
@@ -274,12 +278,12 @@ const slideTypeFiles = {
 ### משחק
 | Endpoint | תפקיד | דוגמה |
 |----------|--------|--------|
-| `/?init` | אתחול משחק | `http://localhost:5000/?init` |
-| `/?next_page` | מעבר לעמוד הבא | `http://localhost:5000/?next_page` |
-| `/?get_users` | קבלת מספר משתמשים | `http://localhost:5000/?get_users` |
-| `/?get_time` | קבלת זמן נותר | `http://localhost:5000/?get_time` |
-| `/?status` | סטטוס מלא | `http://localhost:5000/?status` |
-| `/?reset` | איפוס משחק | `http://localhost:5000/?reset` |
+| `/?init` | אתחול משחק | `https://quizngo.online/lb/?init` |
+| `/?next_page` | מעבר לעמוד הבא | `https://quizngo.online/lb/?next_page` |
+| `/?get_users` | קבלת מספר משתמשים | `https://quizngo.online/lb/?get_users` |
+| `/?get_time` | קבלת זמן נותר | `https://quizngo.online/lb/?get_time` |
+| `/?status` | סטטוס מלא | `https://quizngo.online/lb/?status` |
+| `/?reset` | איפוס משחק | `https://quizngo.online/lb/?reset` |
 
 ### שמירה וטעינה
 | Endpoint | שיטה | תפקיד |
@@ -317,9 +321,8 @@ POST /load
 ### Add-in
 ```bash
 cd add-in/
-npm run dev        # פיתוח
-npm run validate   # בדיקת manifest
-npm run sideload   # טעינה אוטומטית
+./start.sh         # הרצת add-in
+npm run validate   # בדיקת manifests
 ```
 
 ### שרת
@@ -335,8 +338,7 @@ tail -f /var/www/html/kahoot/logs/kahoot.log
 
 ### CORS
 השרת מוגדר לקבל בקשות מ:
-- `https://localhost:3000` (Add-in development)
-- כל מקור אחר (ניתן להגביל ב-`config.php`)
+- `https://quizngo.online`
 
 ### הרשאות קבצים
 ```bash
@@ -378,9 +380,9 @@ tail -20 /var/www/html/kahoot/logs/kahoot.log
 ## 🚨 פתרון בעיות
 
 ### Add-in לא נטען
-- ודא שהשרת רץ על פורט 3000
-- בדוק הגדרות CORS
-- ודא שה-manifest.xml תקין
+- ודא שהשירותים רצים: `cd add-in && ./start.sh status`
+- ודא שנטען `add-in/manifest.dev.xml` לפיתוח
+- בדוק גישה ל-`https://quizngo.online/addin-dev/taskpane.html`
 
 ### API לא עובד
 - בדוק הרשאות קבצים

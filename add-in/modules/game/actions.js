@@ -9,7 +9,7 @@
 
 /* global PowerPoint */
 
-import { API_BASE, getApiBase, registerRoom, createRoom, resolveServerForNewGame, resetServerUrl } from '../core/api.js';
+import { getApiBase, registerRoom, createRoom, resolveServerForNewGame, resetServerUrl } from '../core/api.js';
 import { 
     getSlideData,
     getPresentationSettings,

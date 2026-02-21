@@ -14,7 +14,7 @@ const DEFAULT_LB_URL = (() => {
   if (host === 'localhost' || host === '127.0.0.1') {
     return `http://${host}:5000`
   }
-  return `${window.location.origin}/lb`
+  return 'https://srv.quizngo.online'
 })()
 const LB_URL = (import.meta.env.VITE_LB_URL || DEFAULT_LB_URL).replace(/\/+$/, '')
 

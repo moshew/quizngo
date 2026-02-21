@@ -460,10 +460,7 @@ def notify_lb_game_ended(game_pin):
 if __name__ == '__main__':
     print("Starting QuizNGO Quiz Server (Python)")
     print("=" * 40)
-    print(f"Server will run on: {SERVER_ADDRESS}")
-    print(f"API Documentation: {SERVER_ADDRESS}/docs")
     print(f"Load Balancer: {LB_URL}")
-    print(f"Server Address: {SERVER_ADDRESS}")
     print(f"SSL: {'enabled' if USE_SSL else 'disabled'}")
     print(f"Log verbosity: {LOG_VERBOSITY}")
     print("")

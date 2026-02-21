@@ -1,7 +1,14 @@
 import logging
+from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify
 
 logger = logging.getLogger(__name__)
+
+
+def _get_srv_id(address):
+    """Extract srv_id from server address (e.g. https://srv-01.quizngo.online → srv-01)."""
+    hostname = urlparse(address).hostname or ''
+    return hostname.split('.')[0]
 
 
 def create_resolve_routes(server_registry, pin_registry):
@@ -26,7 +33,8 @@ def create_resolve_routes(server_registry, pin_registry):
                 return jsonify({
                     'status': 'success',
                     'game_pin': game_pin,
-                    'server_url': existing['server_address']
+                    'server_url': existing['server_address'],
+                    'srv_id': _get_srv_id(existing['server_address'])
                 })
             else:
                 # Server is down - remove stale mapping and assign new server
@@ -48,14 +56,16 @@ def create_resolve_routes(server_registry, pin_registry):
             return jsonify({
                 'status': 'success',
                 'game_pin': game_pin,
-                'server_url': existing['server_address']
+                'server_url': existing['server_address'],
+                'srv_id': _get_srv_id(existing['server_address'])
             })
 
         logger.info(f"Assigned PIN {game_pin} to server {server['server_id']} ({server['address']})")
         return jsonify({
             'status': 'success',
             'game_pin': game_pin,
-            'server_url': server['address']
+            'server_url': server['address'],
+            'srv_id': _get_srv_id(server['address'])
         })
 
     @bp.route('/api/resolve/<game_pin>', methods=['GET'])

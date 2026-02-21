@@ -35,14 +35,14 @@ modules/
 ### Core (`core/`)
 
 #### `api.js` - API Communication
-- `API_BASE` - Base URL for API calls
+- `LB_URL` - Load balancer base URL
 - `makeApiCall()` - Generic API calls
 - `makeJsonApiCall()` - API calls returning JSON
 - `registerRoom()` - Register WebSocket to room
 - `startAcceptingParticipants()` / `stopAcceptingParticipants()` - Control participant flow
 
 #### `websocket.js` - WebSocket & Real-time
-- `initializeWebSocket()` - Setup WebSocket with event handlers
+- `connectWebSocket()` - Setup WebSocket for a game PIN
 - `getSocket()` - Get current socket instance
 - `getParticipantsData()` / `getVisibleParticipantsData()` - Get participant info
 - `getCurrentQuestionAnswers()` - Get answers for current question
@@ -60,7 +60,6 @@ modules/
 #### `manager.js` - UI Management
 - `showStatus()` - Display status messages
 - `showError()` - Display error messages
-- `updateAutoSaveStatus()` - Update auto-save indicator
 - `loadStartScreen()` / `initializeStartScreen()` - Game start screen
 
 #### `slides-list.js` - Slides List
@@ -137,8 +136,8 @@ modules/
 
 ```javascript
 // Core modules
-import { API_BASE, registerRoom } from './modules/core/api.js';
-import { initializeWebSocket } from './modules/core/websocket.js';
+import { LB_URL, registerRoom } from './modules/core/api.js';
+import { connectWebSocket } from './modules/core/websocket.js';
 import { getGameHashId, triggerAutoSave } from './modules/core/state.js';
 
 // UI modules

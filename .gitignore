@@ -31,16 +31,11 @@ srv/logs/
 .idea/
 .dev/
 
-# Local add-in development configuration
-add-in/config.js
-add-in/manifest.dev.xml
+# Optional local overrides
+add-in/config.local.js
 
 # Generated game bundle assets
 game/dist/assets/
-
-# Local dev helper scripts
-scripts/dev_up.sh
-scripts/dev_down.sh
 
 # OS files
 .DS_Store

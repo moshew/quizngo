@@ -1,33 +1,26 @@
 // API Configuration and Utilities
 
-// Load Balancer URL - entry point for PIN assignment and resolution
-// Configure this via window.QUIZNGO_LB_URL or change for production deployment
+// Load Balancer URL - entry point for PIN assignment and resolution.
+// Remote-only mode: no localhost fallback.
 export const LB_URL = (() => {
     const normalizeBase = (value) => String(value || '').replace(/\/+$/, '') + '/';
 
-    // Try to get from window/global config first (can be set by manifest or build)
+    // Preferred source: explicit runtime config.
     if (typeof window !== 'undefined' && window.QUIZNGO_LB_URL) {
         return normalizeBase(window.QUIZNGO_LB_URL);
     }
 
-    if (typeof window !== 'undefined') {
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        if (isLocalhost) {
-            return 'http://localhost:5000/';
-        }
-        // Production default behind reverse proxy.
-        return normalizeBase(`${window.location.origin}/lb`);
-    }
-
-    return 'http://localhost:5000/';
+    return 'https://srv.quizngo.online/';
 })();
 
 // Dynamic server URL - set after LB assigns a server for the current game
 let currentServerUrl = null;
 
+// srv_id assigned by LB (e.g. 'srv-01') — used as ?srv_id= query param
+let currentSrvId = null;
+
 /**
- * Get the current API base URL.
- * Returns the assigned game server URL if set, otherwise falls back to LB_URL.
+ * Get the current API base URL (always srv.quizngo.online via LB_URL).
  */
 export function getApiBase() {
     return currentServerUrl || LB_URL;
@@ -41,10 +34,28 @@ export function getServerUrl() {
 }
 
 /**
- * Reset the server URL (e.g., when game ends).
+ * Get the current srv_id (e.g. 'srv-01') for routing via nginx.
+ */
+export function getSrvId() {
+    return currentSrvId;
+}
+
+/**
+ * Build a full API URL with ?srv_id= appended when a server is assigned.
+ */
+export function getApiUrl(endpoint) {
+    const base = getApiBase();
+    if (!currentSrvId) return `${base}${endpoint}`;
+    const sep = endpoint.includes('?') ? '&' : '?';
+    return `${base}${endpoint}${sep}srv_id=${currentSrvId}`;
+}
+
+/**
+ * Reset the server URL and srv_id (e.g., when game ends).
  */
 export function resetServerUrl() {
     currentServerUrl = null;
+    currentSrvId = null;
 }
 
 async function parseApiErrorMessage(response, fallbackCode = 'REQUEST_FAILED') {
@@ -86,10 +97,9 @@ export async function resolveServerForNewGame(gamePin) {
     });
     const data = await response.json();
     if (data.status === 'success') {
-        const serverUrl = data.server_url;
-        currentServerUrl = serverUrl.replace(/\/$/, '') + '/';
-        console.log('Server assigned by LB:', currentServerUrl);
-        return serverUrl;
+        currentSrvId = data.srv_id;
+        console.log('Server assigned by LB:', data.server_url, '→ srv_id:', currentSrvId);
+        return data.server_url;
     }
     const serverMessage = data.message || { code: 'FAILED_TO_RESOLVE_SERVER_FROM_LB' };
     const error = new Error(
@@ -99,13 +109,10 @@ export async function resolveServerForNewGame(gamePin) {
     throw error;
 }
 
-// Legacy constant for backward compatibility (now dynamic)
-export const API_BASE = LB_URL;
-
 // Generic API call function (uses dynamic server URL)
 export async function makeApiCall(endpoint, options = {}) {
     try {
-        const url = `${getApiBase()}${endpoint}`;
+        const url = getApiUrl(endpoint);
         const response = await fetch(url, {
             mode: 'cors',
             ...options
