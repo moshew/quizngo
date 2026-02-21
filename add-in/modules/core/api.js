@@ -45,9 +45,10 @@ export function getSrvId() {
  */
 export function getApiUrl(endpoint) {
     const base = getApiBase();
-    if (!currentSrvId) return `${base}${endpoint}`;
+    const normalizedBase = String(base).endsWith('/') ? String(base) : `${String(base)}/`;
+    if (!currentSrvId) return `${normalizedBase}${endpoint}`;
     const sep = endpoint.includes('?') ? '&' : '?';
-    return `${base}${endpoint}${sep}srv_id=${currentSrvId}`;
+    return `${normalizedBase}${endpoint}${sep}srv_id=${currentSrvId}`;
 }
 
 /**

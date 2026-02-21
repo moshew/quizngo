@@ -9,7 +9,7 @@
 
 /* global PowerPoint */
 
-import { getApiBase, registerRoom, createRoom, resolveServerForNewGame, resetServerUrl } from '../core/api.js';
+import { getApiUrl, registerRoom, createRoom, resolveServerForNewGame, resetServerUrl } from '../core/api.js';
 import { 
     getSlideData,
     getPresentationSettings,
@@ -630,7 +630,7 @@ function sendAnswerTimeStarted() {
         };
         
         // Send via REST API instead of WebSocket
-        const url = `${getApiBase()}answer_time_started`;
+        const url = getApiUrl('answer_time_started');
         console.log(`📡 Sending to: ${url}`);
         
         fetch(url, {

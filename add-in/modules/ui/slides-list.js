@@ -109,7 +109,7 @@ export async function refreshSlideList() {
 
         await PowerPoint.run(async (context) => {
             const slides = context.presentation.slides;
-            slides.load("items/id, items/tags");
+            slides.load("items/id");
             await context.sync();
 
             // Clear and rebuild index cache

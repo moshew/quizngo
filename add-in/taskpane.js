@@ -947,6 +947,9 @@ Office.onReady(async (info) => {
         // Set up slide change event listener
         setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs));
 
+        // Reveal the shell before slower PowerPoint operations (slide scan/list build).
+        markAppReady();
+
         // Route already decided above; continue with selected startup flow.
 
         if (!hasGameData) {

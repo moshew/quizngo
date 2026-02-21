@@ -5,7 +5,7 @@
 
 import { getParticipantsData, getCurrentQuestionAnswers } from '../core/websocket.js';
 import { getSlideData } from '../core/state.js';
-import { getApiBase } from '../core/api.js';
+import { getApiUrl } from '../core/api.js';
 
 /**
  * Calculate score based on answer time
@@ -151,7 +151,7 @@ export async function sendResultsToServer(gamePin, results) {
             return { status: 'success', message: 'No results to send' };
         }
         
-        const response = await fetch(`${getApiBase()}submit_results`, {
+        const response = await fetch(getApiUrl('submit_results'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
