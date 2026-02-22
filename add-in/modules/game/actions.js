@@ -23,7 +23,7 @@ import { showStatus, showError, showAdminConnectionScreen, hideAdminConnectionSc
 import { t, tServerError } from '../i18n/index.js';
 import { updateAllQuestionTimeElements } from '../elements/question_timer.js';
 import { processAnswersAndScores, sendResultsToServer } from './scoring.js';
-import { connectWebSocket, disconnectWebSocket, resetParticipantsList, resetCurrentQuestionAnswers } from '../core/websocket.js';
+import { disconnectWebSocket, resetParticipantsList, resetCurrentQuestionAnswers } from '../core/websocket.js';
 
 const QUESTION_WAIT_TIME_LIMITS = {
     min: 5,
@@ -183,7 +183,7 @@ async function connectWebSocketForGame(gamePin) {
     } = await import('../core/state.js');
     const { t } = await import('../i18n/index.js');
     
-    const socket = connectWebSocket(gamePin, {
+    const socket = await connectWebSocket(gamePin, {
         onConnect: async (socket, pin) => {
             console.log('✅ Connected to WebSocket for game:', pin);
             

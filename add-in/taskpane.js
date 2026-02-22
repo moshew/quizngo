@@ -1,6 +1,13 @@
 /* global Office, PowerPoint */
 
+const BOOT_T0 = performance.now();
+function logBootStep(step) {
+    const elapsedMs = Math.round(performance.now() - BOOT_T0);
+    console.log(`[BOOT] ${step} +${elapsedMs}ms`);
+}
+
 console.log('ðŸ“„ taskpane.js loaded (Tabbed Version with i18n)!');
+logBootStep('taskpane.js evaluated');
 
 // Import modules - Core
 import { 
@@ -69,6 +76,7 @@ import {
     LANGUAGES,
     isRTL
 } from './modules/i18n/index.js';
+import { loadScriptOnce } from './modules/core/external-libs.js';
 
 const TEMPLATE_CONFIG = {
     classic_black: {
@@ -315,6 +323,18 @@ async function fetchTemplateBase64(binUrl) {
     return new TextDecoder('utf-8').decode(buffer).trim();
 }
 
+async function ensureJsZipLoaded() {
+    if (window.JSZip) {
+        return window.JSZip;
+    }
+
+    await loadScriptOnce('vendor/jszip.min.js', 'JSZip');
+    if (!window.JSZip) {
+        throw new Error('JSZip failed to load');
+    }
+    return window.JSZip;
+}
+
 function decodeXmlEntities(value) {
     const textarea = document.createElement('textarea');
     textarea.innerHTML = value;
@@ -322,11 +342,8 @@ function decodeXmlEntities(value) {
 }
 
 async function extractTemplateGameData(base64Content) {
-    if (!window.JSZip) {
-        throw new Error('JSZip failed to load');
-    }
-
-    const zip = await window.JSZip.loadAsync(base64Content, { base64: true });
+    const JSZip = await ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(base64Content, { base64: true });
     let templateSlideOrderIds = [];
 
     try {
@@ -758,6 +775,9 @@ async function showOnboardingLang() {
         `<option value="${lang.code}" ${lang.code === defaultLang ? 'selected' : ''}>${lang.flag} ${lang.nativeName}</option>`
     ).join('');
 
+    // Reveal onboarding immediately, then hydrate translated labels.
+    document.getElementById('onboardingLang').classList.remove('hidden');
+
     // Set i18n to detected/default language (for button/label translations)
     await setLanguage(defaultLang);
 
@@ -775,8 +795,6 @@ async function showOnboardingLang() {
         showOnboardingTemplate();
     });
 
-    // Show the screen
-    document.getElementById('onboardingLang').classList.remove('hidden');
 }
 
 /**
@@ -908,15 +926,21 @@ async function selectCurrentSlideOnLoad() {
 // Initialize the add-in when Office is ready (boot-gated)
 Office.onReady(async (info) => {
     console.log('Office.onReady called!', info);
+    logBootStep('Office.onReady fired');
     try {
         if (info.host === Office.HostType.PowerPoint) {
         console.log('PowerPoint detected - initializing add-in...');
+        // Show shell immediately to reduce perceived startup delay.
+        markAppReady();
+        logBootStep('shell visible');
 
         // Initialize i18n with saved language (avoids direction-change flicker on reload)
         await initI18n();
+        logBootStep('i18n initialized');
 
         // Resolve startup route early so boot background already matches target screen.
         const hasGameData = await loadGameData();
+        logBootStep('game data loaded');
         setBootMode(hasGameData ? 'main' : 'onboarding');
 
         // Set up persistent UI (tabs, buttons, settings) â€” hidden behind onboarding if needed
@@ -926,6 +950,7 @@ Office.onReady(async (info) => {
         setupSettingsListeners();
         loadSettingsToTab();
         updateAllUI();
+        logBootStep('static UI ready');
 
         // Attach persistent button listeners
         document.getElementById('btnStartGame').onclick = async () => {
@@ -947,19 +972,18 @@ Office.onReady(async (info) => {
         // Set up slide change event listener
         setupSlideChangeListener((eventArgs) => onSlideChanged(eventArgs));
 
-        // Reveal the shell before slower PowerPoint operations (slide scan/list build).
-        markAppReady();
-
         // Route already decided above; continue with selected startup flow.
 
         if (!hasGameData) {
             // First time: show onboarding flow
             console.log('First time load - showing onboarding');
             await showOnboardingLang();
+            logBootStep('onboarding shown');
         } else {
             // Returning user: proceed directly
             console.log('Game data found - skipping onboarding');
             await initializeMainApp();
+            logBootStep('main app initialized');
         }
 
     } else {

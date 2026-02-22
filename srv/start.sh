@@ -36,4 +36,4 @@ if [ -z "$ADDRESS" ]; then
     esac
 fi
 
-exec .venv/bin/python server.py --port "$PORT" --lb-url "$LB_URL" --address "$ADDRESS" --admin-url https://quizngo.online/admin --game-url https://quizngo.online/game --log-verbosity normal --no-ssl
+exec .venv/bin/python server.py --port "$PORT" --lb-url "$LB_URL" --address "$ADDRESS" --admin-url https://quizngo.online/admin --game-url https://quizngo.online/game --no-ssl

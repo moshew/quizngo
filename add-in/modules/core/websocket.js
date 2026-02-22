@@ -11,6 +11,7 @@
 
 import { isParticipantHidden, resetHiddenParticipants, getHiddenParticipantIds, unhideParticipant } from './state.js';
 import { getServerUrl, getSrvId } from './api.js';
+import { loadScriptOnce } from './external-libs.js';
 
 // WebSocket instance
 let socket = null;
@@ -31,6 +32,18 @@ let currentQuestionAnswers = new Map(); // Map of userId -> { answerIndex, times
 
 // Event config reference for reconnection
 let eventConfig = null;
+
+async function ensureSocketIoLoaded() {
+    if (typeof io !== 'undefined') {
+        return io;
+    }
+
+    await loadScriptOnce('vendor/socket.io.min.js', 'io');
+    if (typeof io === 'undefined') {
+        throw new Error('Socket.io failed to load');
+    }
+    return io;
+}
 
 /**
  * Get the current socket instance
@@ -59,7 +72,7 @@ export function getCurrentGamePin() {
  * @param {string} gamePin - The 6-digit game PIN
  * @param {object} config - Event handlers configuration
  */
-export function connectWebSocket(gamePin, config = {}) {
+export async function connectWebSocket(gamePin, config = {}) {
     if (isConnecting) {
         console.log('⏳ Already connecting to WebSocket...');
         return null;
@@ -82,11 +95,7 @@ export function connectWebSocket(gamePin, config = {}) {
         currentGamePin = gamePin;
         eventConfig = config;
         
-        if (typeof io === 'undefined') {
-            console.error('Socket.io not loaded');
-            isConnecting = false;
-            throw new Error('Socket.io לא נטען');
-        }
+        await ensureSocketIoLoaded();
         
         const wsUrl = getServerUrl();
         console.log('WebSocket connecting to:', wsUrl);
