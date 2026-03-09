@@ -255,12 +255,12 @@ const SERVER_CODE_TRANSLATIONS = {
         en: 'Internal server error'
     },
     WEBSOCKET_CONNECTION_ERROR: {
-        he: '⚠️ שגיאה בחיבור WebSocket',
-        en: '⚠️ WebSocket connection error'
+        he: 'לא הצלחנו להתחבר למשחק. בדקו את החיבור ונסו שוב.',
+        en: 'Could not connect to the game. Check your connection and try again.'
     },
     WEBSOCKET_ERROR: {
-        he: '⚠️ שגיאת WebSocket',
-        en: '⚠️ WebSocket error'
+        he: 'אירעה שגיאת תקשורת עם שרת המשחק',
+        en: 'A communication error occurred with the game server'
     },
     MISSING_GAME_PIN: {
         he: 'חסר קוד משחק',
@@ -292,7 +292,7 @@ const SERVER_CODE_TRANSLATIONS = {
     },
     GAME_PIN_NOT_FOUND: {
         he: 'קוד משחק לא נמצא',
-        en: 'Game PIN not found'
+        en: 'Game code not found'
     },
     GAME_SERVER_IS_UNAVAILABLE: {
         he: 'שרת המשחק אינו זמין',
@@ -303,8 +303,8 @@ const SERVER_CODE_TRANSLATIONS = {
         en: 'No active servers available'
     },
     FAILED_TO_RESOLVE_SERVER_FROM_LB: {
-        he: 'שגיאה בפנייה למאזן העומסים',
-        en: 'Failed to resolve server from LB'
+        he: 'שגיאה בפנייה לשרת המשחק',
+        en: 'Error contacting game server'
     },
     NO_ACTIVE_GAME_FOUND_WITH_PIN: {
         he: 'לא נמצא משחק פעיל עם הקוד {{gamePin}}',

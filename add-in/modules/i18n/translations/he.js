@@ -120,8 +120,8 @@ export default {
     serverErrors: {
         'No active servers available': 'אין שרתים זמינים',
         'Game server is unavailable': 'שרת המשחק אינו זמין',
-        'Game PIN not found': 'PIN משחק לא נמצא',
-        'Failed to resolve server from LB': 'שגיאה בפנייה למאזן העומסים',
+        'Game PIN not found': 'קוד משחק לא נמצא',
+        'Failed to resolve server from LB': 'שגיאה בפנייה לשרת המשחק',
         'Room not found. Add-in must create room first.': 'חדר לא נמצא. יש ליצור חדר תחילה.',
         'Game already started': 'המשחק כבר התחיל',
         'Game session not found': 'משחק לא נמצא',
@@ -129,7 +129,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ שגיאה ביצירת חדר: {{message}}',
-        websocket: '⚠️ שגיאה בחיבור WebSocket',
+        websocket: 'לא הצלחנו להתחבר למשחק. בדקו את החיבור ונסו שוב.',
         startGame: 'שגיאה בהפעלת המשחק: {{message}}',
         gameClosed: 'המשחק נסגר: {{reason}}',
         connectionLost: 'החיבור אבד. המשחק נסגר.',
@@ -140,7 +140,7 @@ export default {
         addParticipantsCount: 'שגיאה בהוספת מספר המשתתפים',
         addParticipantsList: 'שגיאה בהוספת רשימת משתתפים',
         addAnswersDistribution: 'שגיאה בהוספת פילוג תשובות',
-        addLeaderboard: 'שגיאה בהוספת אלמנטים לטבלת מובילים',
+        addLeaderboard: 'שגיאה בהוספת טבלת מובילים',
         selectSlideFirst: 'אנא בחר שקף תחילה'
     },
 

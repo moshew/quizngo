@@ -53,7 +53,6 @@ export async function addQuestionTime() {
                 
                 await context.sync();
                 console.log('âœ… Question time added to slide');
-                showError(t('success.questionTimeAdded'));
             }
         });
     } catch (error) {
@@ -107,7 +106,6 @@ export async function addRespondentsCount() {
                 
                 await context.sync();
                 console.log('âœ… Respondents count added to slide');
-                showError(t('success.respondersCountAdded'));
             }
         });
     } catch (error) {

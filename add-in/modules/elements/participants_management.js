@@ -5,7 +5,7 @@
 
 /* global PowerPoint */
 
-import { showError, showStatus } from '../ui/manager.js';
+import { showError } from '../ui/manager.js';
 import { t } from '../i18n/index.js';
 import { getVisibleParticipantsData } from '../core/websocket.js';
 import { hideParticipants, getHiddenParticipantIds } from '../core/state.js';
@@ -281,7 +281,6 @@ export async function insertParticipantsNumButton() {
                 
                 await context.sync();
                 console.log('✅ Dynamic participants number added to slide');
-                showError(t('success.participantsCountAdded'));
             }
         });
     } catch (error) {

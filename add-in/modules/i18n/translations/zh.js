@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': '没有可用的服务器',
         'Game server is unavailable': '游戏服务器不可用',
-        'Game PIN not found': '未找到游戏PIN',
-        'Failed to resolve server from LB': '连接负载均衡器失败',
+        'Game PIN not found': '未找到游戏代码',
+        'Failed to resolve server from LB': '连接游戏服务器时出错',
         'Room not found. Add-in must create room first.': '未找到房间。请先创建房间。',
         'Game already started': '游戏已经开始',
         'Game session not found': '未找到游戏会话',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ 创建房间错误：{{message}}',
-        websocket: '⚠️ WebSocket连接错误',
+        websocket: '无法连接到游戏。请检查网络连接后重试。',
         startGame: '启动游戏错误：{{message}}',
         gameClosed: '游戏已关闭：{{reason}}',
         connectionLost: '连接丢失。游戏已关闭。',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: '添加参与者数量错误',
         addParticipantsList: '添加参与者列表错误',
         addAnswersDistribution: '添加答案分布错误',
-        addLeaderboard: '添加排行榜元素错误',
+        addLeaderboard: '添加排行榜错误',
         selectSlideFirst: '请先选择一张幻灯片',
     },
 

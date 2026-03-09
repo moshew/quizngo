@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': '사용 가능한 서버가 없습니다',
         'Game server is unavailable': '게임 서버를 사용할 수 없습니다',
-        'Game PIN not found': '게임 PIN을 찾을 수 없습니다',
-        'Failed to resolve server from LB': '로드 밸런서 연결 실패',
+        'Game PIN not found': '게임 코드를 찾을 수 없습니다',
+        'Failed to resolve server from LB': '게임 서버 연결 중 오류가 발생했습니다',
         'Room not found. Add-in must create room first.': '방을 찾을 수 없습니다. 먼저 방을 만드세요.',
         'Game already started': '게임이 이미 시작되었습니다',
         'Game session not found': '게임 세션을 찾을 수 없습니다',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ 방 생성 오류: {{message}}',
-        websocket: '⚠️ WebSocket 연결 오류',
+        websocket: '게임에 연결하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.',
         startGame: '게임 시작 오류: {{message}}',
         gameClosed: '게임 종료: {{reason}}',
         connectionLost: '연결이 끊어졌습니다. 게임이 종료되었습니다.',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: '참가자 수 추가 오류',
         addParticipantsList: '참가자 목록 추가 오류',
         addAnswersDistribution: '응답 분포 추가 오류',
-        addLeaderboard: '리더보드 요소 추가 오류',
+        addLeaderboard: '리더보드 추가 오류',
         selectSlideFirst: '먼저 슬라이드를 선택하세요',
     },
 

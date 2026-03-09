@@ -8,9 +8,9 @@ using REST API calls plus Socket.IO clients to mirror production lifecycle.
 
 Each game:
   - 5–200 players  (weighted towards smaller numbers)
-  - 5–10 questions (10 is rare)
+  - 5–18 questions (17–18 are now possible and somewhat more frequent)
   - 50–90 % correct-answer rate per game
-  - ~12 % of (player, question) pairs result in no answer (wait for timeout)
+  - ~24 % of (player, question) pairs result in no answer (wait for timeout)
 
 Usage:
     pip install -r requirements.txt
@@ -19,6 +19,7 @@ Usage:
 
 import asyncio
 import contextlib
+import logging
 import sys
 import time
 import random
@@ -29,6 +30,11 @@ from contextlib import contextmanager
 from pathlib import Path
 import aiohttp
 import socketio as sio_module
+
+# engine.io logs "packet queue is empty, aborting" at ERROR level whenever a
+# socket's write-loop times out while idle (normal during question/results
+# pauses).  Silence it — the simulation handles disconnects cleanly already.
+logging.getLogger("engineio.client").setLevel(logging.CRITICAL)
 
 # ── Windows asyncio policy ───────────────────────────────────────────────────
 # Selector loop on Windows uses select(), which has a low descriptor limit.
@@ -57,9 +63,15 @@ QUESTION_DUR_MAX    = 30          # Seconds
 RESULTS_PAUSE       = 7           # Seconds between end-of-question and next question
 LOBBY_WAIT          = 8           # Seconds between start_game and first question
 
-NON_ANSWER_RATE     = 0.18        # Fraction of (player, question) pairs with no answer
-ANSWER_ELAPSED_MIN  = 0.25        # Minimum simulated answer latency
-ANSWER_ELAPSED_MAX_RATIO = 0.80   # Players answer in the first ~80 % of the question window
+INTER_ARRIVAL_ZERO_PROB = 0.45    # Must stay <= 45% as requested
+INTER_ARRIVAL_MEAN      = 2.8     # Shorter delays on average
+INTER_ARRIVAL_CAP       = 24.0    # Keep a finite upper bound
+
+NON_ANSWER_RATE     = 0.24        # Slightly higher fraction of no-answer outcomes
+ANSWER_ELAPSED_MIN  = 0.40        # Minimum simulated answer latency
+ANSWER_ELAPSED_MAX_RATIO = 0.93   # Players answer in the first ~93 % of the question window
+ANSWER_ELAPSED_SHAPE_ALPHA = 1.70 # Beta distribution, gently biased to later answers
+ANSWER_ELAPSED_SHAPE_BETA  = 1.35
 
 # Retry transient connector/server errors under heavy concurrency.
 HTTP_REQUEST_RETRIES = 3          # total attempts = retries + 1
@@ -81,13 +93,15 @@ def random_player_count() -> int:
 
 
 def random_question_count() -> int:
-    """Weighted distribution with max 14 questions; 12-14 are rarer."""
+    """Weighted distribution with max 18 questions; high counts are more common."""
     r = random.random()
-    if r < 0.55:
-        return random.randint(5, 8)    # 55 %
-    if r < 0.90:
-        return random.randint(9, 11)   # 35 %
-    return random.randint(12, 14)      # 10 %
+    if r < 0.35:
+        return random.randint(5, 8)    # 35 %
+    if r < 0.65:
+        return random.randint(9, 12)   # 30 %
+    if r < 0.88:
+        return random.randint(13, 16)  # 23 %
+    return random.choice([17, 18, 18]) # 12 % (max count is more likely)
 
 
 def random_correct_rate() -> float:
@@ -98,13 +112,13 @@ def inter_arrival_delay() -> float:
     """Random wait between starting consecutive games.
 
     Distribution:
-      45 % -> 0 s  (immediate start)
-      55 % -> exponential(mean ~= 4 s), capped at 30 s
-              (~0.03 % of all games land on the 30 s cap)
+      45 % -> 0 s  (immediate start, unchanged upper bound requested)
+      55 % -> exponential(mean ~= 2.8 s), capped at 24 s
+              (~0.01 % of all games land on the 24 s cap)
     """
-    if random.random() < 0.45:
+    if random.random() < INTER_ARRIVAL_ZERO_PROB:
         return 0.0
-    return min(30.0, random.expovariate(1 / 4))
+    return min(INTER_ARRIVAL_CAP, random.expovariate(1 / INTER_ARRIVAL_MEAN))
 
 
 # ── Scoring ──────────────────────────────────────────────────────────────────
@@ -213,7 +227,7 @@ async def _make_socket(server_url: str) -> sio_module.AsyncClient:
         reconnection=False,   # Don't auto-reconnect; simplifies cleanup
     )
     try:
-        await sio.connect(server_url, transports=['websocket'])
+        await sio.connect(server_url, transports=['websocket'], wait_timeout=15)
     except Exception:
         with contextlib.suppress(Exception):
             await sio.disconnect()  # close the internal aiohttp session
@@ -385,23 +399,51 @@ async def simulate_game(
         # ── 3. Add-in mock WebSocket ──────────────────────────────────────
         # Must stay alive until close_game clears client_rooms; otherwise
         # the server's disconnect handler auto-closes the game.
+        # Reconnection is enabled so brief transport drops don't abort the game;
+        # on each reconnect the socket re-registers its new SID with the server.
         # Non-fatal: if the WS connection fails the game still runs.
-        try:
-            addin_sio = await _make_socket(server_url)
-            all_socks.append(addin_sio)
-            # python-socketio exposes both Engine.IO sid (`sio.sid`) and
-            # namespace Socket.IO sid (`sio.get_sid('/')`). The server's
-            # request.sid / enter_room expects the namespace sid.
-            addin_socket_id = addin_sio.get_sid("/") or addin_sio.sid
-            if not addin_socket_id:
-                raise RuntimeError("addin WS connected but no socket id is available")
+        addin_registered = [False]   # True after first successful register_room
+
+        async def _register_addin(addin_client):
+            """POST register_room with the addin's current socket id."""
+            sid = addin_client.get_sid('/') or addin_client.sid
+            if not sid:
+                return
             await _post_with_retries(
                 session,
                 f"{server_url}/register_room",
                 "register_room",
-                json_body={"socketId": addin_socket_id, "gamePin": pin},
+                json_body={"socketId": sid, "gamePin": pin},
                 timeout_seconds=15,
             )
+            addin_registered[0] = True
+
+        try:
+            addin_sio = sio_module.AsyncClient(
+                logger=False,
+                engineio_logger=False,
+                reconnection=True,
+                reconnection_attempts=5,
+                reconnection_delay=1,
+                reconnection_delay_max=5,
+            )
+
+            @addin_sio.event
+            async def connect():
+                # On reconnect (not the initial connect), re-register with server.
+                if addin_registered[0]:
+                    try:
+                        await _register_addin(addin_sio)
+                    except Exception as e:
+                        print(f"\n  [{pin}] add-in re-register failed: {e}", file=sys.stderr)
+
+            await addin_sio.connect(server_url, transports=['websocket'], wait_timeout=15)
+            all_socks.append(addin_sio)
+
+            addin_socket_id = addin_sio.get_sid('/') or addin_sio.sid
+            if not addin_socket_id:
+                raise RuntimeError("addin WS connected but no socket id is available")
+            await _register_addin(addin_sio)
         except Exception as e:
             print(f"\n  [{pin}] add-in WS failed: {type(e).__name__}: {e}", file=sys.stderr)
 
@@ -528,7 +570,17 @@ async def simulate_game(
                     return
 
                 upper_bound = min(duration - 0.25, duration * ANSWER_ELAPSED_MAX_RATIO)
-                elapsed = random.uniform(ANSWER_ELAPSED_MIN, max(ANSWER_ELAPSED_MIN, upper_bound))
+                lower_bound = ANSWER_ELAPSED_MIN
+                upper_bound = max(lower_bound, upper_bound)
+                if upper_bound == lower_bound:
+                    elapsed = lower_bound
+                else:
+                    # Slightly bias answer times later than a uniform draw.
+                    ratio = random.betavariate(
+                        ANSWER_ELAPSED_SHAPE_ALPHA,
+                        ANSWER_ELAPSED_SHAPE_BETA,
+                    )
+                    elapsed = lower_bound + (upper_bound - lower_bound) * ratio
                 await asyncio.sleep(elapsed)
 
                 is_correct = random.random() < rate
@@ -666,7 +718,11 @@ async def run(lb_url: str, total_games: int) -> None:
     print(f"  LB URL:      {lb_url}")
     print(f"  Games:       {total_games}")
     print("  Concurrency: unlimited")
-    print(f"  Start delay: 0 s (45 %) … 30 s (0.03 %), exponential")
+    print(
+        "  Start delay: "
+        f"0 s ({INTER_ARRIVAL_ZERO_PROB * 100:.0f} %) … {INTER_ARRIVAL_CAP:.0f} s "
+        f"(mean non-zero {INTER_ARRIVAL_MEAN:.1f} s), exponential"
+    )
     print()
 
     # Generate unique 6-digit PINs for all games (no collisions)
@@ -761,5 +817,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

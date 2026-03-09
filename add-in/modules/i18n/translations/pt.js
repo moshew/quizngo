@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': 'Nenhum servidor ativo disponível',
         'Game server is unavailable': 'Servidor de jogo indisponível',
-        'Game PIN not found': 'PIN do jogo não encontrado',
-        'Failed to resolve server from LB': 'Falha ao conectar ao balanceador de carga',
+        'Game PIN not found': 'Código do jogo não encontrado',
+        'Failed to resolve server from LB': 'Erro ao conectar com o servidor do jogo',
         'Room not found. Add-in must create room first.': 'Sala não encontrada. Crie uma sala primeiro.',
         'Game already started': 'O jogo já começou',
         'Game session not found': 'Sessão de jogo não encontrada',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ Erro ao criar sala: {{message}}',
-        websocket: '⚠️ Erro de conexão WebSocket',
+        websocket: 'Não foi possível conectar ao jogo. Verifique sua conexão e tente novamente.',
         startGame: 'Erro ao iniciar o jogo: {{message}}',
         gameClosed: 'Jogo encerrado: {{reason}}',
         connectionLost: 'Conexão perdida. Jogo encerrado.',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: 'Erro ao adicionar contagem de participantes',
         addParticipantsList: 'Erro ao adicionar lista de participantes',
         addAnswersDistribution: 'Erro ao adicionar distribuição de respostas',
-        addLeaderboard: 'Erro ao adicionar elementos do placar',
+        addLeaderboard: 'Erro ao adicionar placar',
         selectSlideFirst: 'Por favor, selecione um slide primeiro',
     },
 

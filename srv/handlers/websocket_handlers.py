@@ -1,66 +1,103 @@
 """
 WebSocket event handlers for QuizNGO Quiz Server.
-Handles Socket.IO events: connect, disconnect.
+Handles Socket.IO events: connect, disconnect, register_player_socket.
 Room registration is handled via REST API.
 
-NEW ARCHITECTURE:
-- gamePin is the PRIMARY identifier (6 digits, generated in Add-in)
-- hashId is REMOVED from the system
+- gamePin is the primary room/game identifier (6 digits, generated in Add-in)
 - WebSocket connects only when game starts, disconnects when game ends
 - Rooms are identified by gamePin
+- Handlers receive (sid, ...) via python-socketio AsyncServer
 """
 
+import asyncio
 import time
-from flask import request
-from flask_socketio import emit, leave_room
 
 from utils.room_utils import (
     emit_to_addins,
     register_player_socket,
     unregister_socket,
     has_addin_socket,
+    close_game_and_cleanup,
 )
+
+# Grace period before closing game when addin socket disconnects.
+# If the addin reconnects (register_room) within this window, the close is canceled.
+ADDIN_GRACE_SECONDS = 15
 
 
 def register_websocket_handlers(
-    socketio,
+    sio,
     game,
-    connected_clients,
     client_rooms,
     socket_to_player,
     addin_sockets_by_game,
     player_sockets_by_game,
     game_sessions,
     player_registry,
-    game_timeout_controls=None
-):
+    players_by_game=None,
+    game_timeout_controls=None,
+    addin_grace_timers=None,
+    ):
     """
-    Register all WebSocket event handlers.
-    
+    Register all WebSocket event handlers on the AsyncServer instance.
+
     Args:
-        socketio: Flask-SocketIO instance
-        game: GameManager instance
-        connected_clients: Set of connected client socket IDs
+        sio: python-socketio AsyncServer instance
+        game: GameLogger instance
         client_rooms: Dict mapping socket ID to gamePin
         socket_to_player: Dict mapping socket ID to player UID
         game_sessions: Dict of active game sessions (keyed by gamePin)
         player_registry: Dict of registered players
+        game_timeout_controls: Dict mapping gamePin to asyncio.Task
     """
-    
-    @socketio.on('connect')
-    def handle_connect():
-        """Handle client connection"""
-        try:
-            connected_clients.add(request.sid)
-            # Send connection acknowledgment
-            emit('status_update', {'connected': True})
-        except Exception as e:
-            game.log(f'❌ Error in connect handler: {e}')
-            import traceback
-            traceback.print_exc()
 
-    @socketio.on('register_player_socket')
-    def handle_register_player_socket(data):
+    def _log_addin_disconnect_before_game_end(game_pin, disconnect_reason, sid):
+        """Emit one error when add-in disconnects before game cleanup."""
+        session = game_sessions.get(game_pin)
+        if not session:
+            return
+
+        started = bool(session.get('gameStarted'))
+        active = bool(session.get('active'))
+        if not started and not active:
+            # Avoid noise from waiting rooms that never actually started.
+            return
+
+        game_uids = players_by_game.get(game_pin, set()) if players_by_game else set()
+        connected_count = sum(
+            1 for uid in game_uids
+            if player_registry.get(uid, {}).get('connected', False)
+        )
+        total_players = len(game_uids)
+
+        started_at = session.get('startedAt')
+        uptime_seconds = None
+        if isinstance(started_at, (int, float)):
+            uptime_seconds = max(0, int(time.time() - started_at))
+
+        game.log(
+            '❌ Add-in socket disconnected before game end: '
+            f'gamePin={game_pin}, '
+            f'sid={sid}, '
+            f'reason={disconnect_reason or "unknown"}, '
+            f'state={session.get("currentState", "unknown")}, '
+            f'started={started}, active={active}, '
+            f'connectedPlayers={connected_count}/{total_players}, '
+            f'uptime={uptime_seconds if uptime_seconds is not None else "n/a"}s. '
+            'Auto-closing game (addin_closed).'
+        )
+
+    @sio.event
+    async def connect(sid, environ):
+        """Handle client connection.
+
+        Returns immediately so the CONNECT ACK is sent without delay.
+        Any post-connect work is fire-and-forget to avoid blocking under load.
+        """
+        pass
+
+    @sio.on('register_player_socket')
+    async def handle_register_player_socket(sid, data):
         """Called by simulator player sockets after joining via HTTP join_player.
 
         Registers the socket to the game room and links it to the player UID
@@ -68,7 +105,6 @@ def register_websocket_handlers(
         rather than triggering the add-in auto-close logic.
         """
         try:
-            from flask_socketio import join_room
             uid      = (data.get('uid')      or '').strip()
             game_pin = (data.get('gamePin')  or '').strip()
 
@@ -81,29 +117,28 @@ def register_websocket_handlers(
             if player_registry[uid].get('gamePin') != game_pin:
                 return
 
-            join_room(game_pin)
+            await sio.enter_room(sid, game_pin)
             register_player_socket(
                 client_rooms,
                 socket_to_player,
                 addin_sockets_by_game,
                 player_sockets_by_game,
-                request.sid,
+                sid,
                 game_pin,
                 uid
             )
         except Exception as e:
             game.log(f'❌ Error in register_player_socket: {e}')
 
-    @socketio.on('disconnect')
-    def handle_disconnect():
-        """Handle client disconnection"""
-        connected_clients.discard(request.sid)
-        game_pin = client_rooms.get(request.sid)
-        user_id = socket_to_player.get(request.sid)
-        
+    @sio.event
+    async def disconnect(sid, reason=None):
+        """Handle client disconnection."""
+        game_pin = client_rooms.get(sid)
+        user_id = socket_to_player.get(sid)
+
         # Track socket type before mutating mappings.
         was_player_socket = user_id is not None
-        
+
         # Check if this socket belongs to a player (sim)
         if was_player_socket:
             # Mark player as disconnected in registry
@@ -111,39 +146,63 @@ def register_websocket_handlers(
                 player = player_registry[user_id]
                 player_name = player.get('nickname', 'Unknown')
                 game_pin = player.get('gamePin') or game_pin
-                
+
                 player['connected'] = False
                 player['disconnectedAt'] = time.time()
 
                 # Send remove update so UI updates
                 if game_pin in game_sessions:
-                    emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'participant_update', {
+                    await emit_to_addins(sio, addin_sockets_by_game, game.logger, 'participant_update', {
                         'nick': player_name,
                         'type': 'remove',
                         'user_id': user_id,
                         'timestamp': time.time()
                     }, game_pin)
-        
+
         # NOW leave Socket.IO room and remove from mapping
         if game_pin is not None:
-            leave_room(game_pin)
+            await sio.leave_room(sid, game_pin)
             unregister_socket(
                 client_rooms,
                 socket_to_player,
                 addin_sockets_by_game,
                 player_sockets_by_game,
-                request.sid
+                sid
             )
-            
-            # Check if this was an add-in socket (NOT a player socket)
-            # If add-in disconnects and no other add-in sockets exist for this game, close the game
+
+            # Check if this was an add-in socket (NOT a player socket).
+            # If add-in disconnects and no other add-in sockets remain, start a
+            # grace period instead of closing immediately – the addin may reconnect.
             if not was_player_socket:
                 if not has_addin_socket(addin_sockets_by_game, game_pin):
-                    # No more add-in sockets for this game - close it
-                    from utils.room_utils import close_game_and_cleanup
-                    close_game_and_cleanup(
-                        game_sessions, player_registry, client_rooms, socket_to_player,
-                        addin_sockets_by_game, player_sockets_by_game,
-                        socketio, game_pin, game.logger, reason='addin_closed',
-                        game_timeout_controls=game_timeout_controls
-                    )
+                    # Cancel any previous grace timer for this pin.
+                    if addin_grace_timers is not None:
+                        old_task = addin_grace_timers.pop(game_pin, None)
+                        if old_task and not old_task.done():
+                            old_task.cancel()
+
+                    async def _grace_worker(_pin=game_pin, _reason=reason, _sid=sid):
+                        try:
+                            await asyncio.sleep(ADDIN_GRACE_SECONDS)
+                        except asyncio.CancelledError:
+                            return
+                        # Clean up our own timer entry.
+                        if addin_grace_timers is not None:
+                            addin_grace_timers.pop(_pin, None)
+                        # Game may have been closed by other means during grace.
+                        if _pin not in game_sessions:
+                            return
+                        if not has_addin_socket(addin_sockets_by_game, _pin):
+                            _log_addin_disconnect_before_game_end(_pin, _reason, _sid)
+                            await close_game_and_cleanup(
+                                game_sessions, player_registry, client_rooms, socket_to_player,
+                                addin_sockets_by_game, player_sockets_by_game,
+                                sio, _pin, game.logger, reason='addin_closed',
+                                game_timeout_controls=game_timeout_controls,
+                                players_by_game=players_by_game,
+                            )
+
+                    task = asyncio.create_task(_grace_worker())
+                    if addin_grace_timers is not None:
+                        addin_grace_timers[game_pin] = task
+                    game.log(f'Addin grace period started for {game_pin} ({ADDIN_GRACE_SECONDS}s)')

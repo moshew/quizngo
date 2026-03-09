@@ -120,8 +120,8 @@ export default {
     serverErrors: {
         'No active servers available': 'No active servers available',
         'Game server is unavailable': 'Game server is unavailable',
-        'Game PIN not found': 'Game PIN not found',
-        'Failed to resolve server from LB': 'Failed to resolve server',
+        'Game PIN not found': 'Game code not found',
+        'Failed to resolve server from LB': 'Error contacting game server',
         'Room not found. Add-in must create room first.': 'Room not found. Create room first.',
         'Game already started': 'Game already started',
         'Game session not found': 'Game session not found',
@@ -129,7 +129,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ Error creating room: {{message}}',
-        websocket: '⚠️ WebSocket connection error',
+        websocket: 'Could not connect to the game. Check your connection and try again.',
         startGame: 'Error starting game: {{message}}',
         gameClosed: 'Game closed: {{reason}}',
         connectionLost: 'Connection lost. Game closed.',
@@ -140,7 +140,7 @@ export default {
         addParticipantsCount: 'Error adding participants count',
         addParticipantsList: 'Error adding participants list',
         addAnswersDistribution: 'Error adding answers distribution',
-        addLeaderboard: 'Error adding leaderboard elements',
+        addLeaderboard: 'Error adding leaderboard',
         selectSlideFirst: 'Please select a slide first'
     },
 

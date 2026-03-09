@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': 'لا توجد خوادم متاحة',
         'Game server is unavailable': 'خادم اللعبة غير متاح',
-        'Game PIN not found': 'لم يتم العثور على PIN اللعبة',
-        'Failed to resolve server from LB': 'فشل الاتصال بموزع الحمل',
+        'Game PIN not found': 'لم يتم العثور على رمز اللعبة',
+        'Failed to resolve server from LB': 'خطأ في الاتصال بخادم اللعبة',
         'Room not found. Add-in must create room first.': 'الغرفة غير موجودة. يجب إنشاء غرفة أولاً.',
         'Game already started': 'اللعبة بدأت بالفعل',
         'Game session not found': 'جلسة اللعبة غير موجودة',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ خطأ في إنشاء الغرفة: {{message}}',
-        websocket: '⚠️ خطأ في اتصال WebSocket',
+        websocket: 'تعذر الاتصال باللعبة. تحقق من الاتصال وحاول مرة أخرى.',
         startGame: 'خطأ في بدء اللعبة: {{message}}',
         gameClosed: 'تم إغلاق اللعبة: {{reason}}',
         connectionLost: 'فقد الاتصال. تم إغلاق اللعبة.',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: 'خطأ في إضافة عدد المشاركين',
         addParticipantsList: 'خطأ في إضافة قائمة المشاركين',
         addAnswersDistribution: 'خطأ في إضافة توزيع الإجابات',
-        addLeaderboard: 'خطأ في إضافة عناصر لوحة المتصدرين',
+        addLeaderboard: 'خطأ في إضافة لوحة المتصدرين',
         selectSlideFirst: 'يرجى اختيار شريحة أولاً',
     },
 

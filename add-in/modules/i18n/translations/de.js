@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': 'Keine aktiven Server verfügbar',
         'Game server is unavailable': 'Spielserver nicht verfügbar',
-        'Game PIN not found': 'Spiel-PIN nicht gefunden',
-        'Failed to resolve server from LB': 'Verbindung zum Load Balancer fehlgeschlagen',
+        'Game PIN not found': 'Spielcode nicht gefunden',
+        'Failed to resolve server from LB': 'Fehler bei der Verbindung mit dem Spielserver',
         'Room not found. Add-in must create room first.': 'Raum nicht gefunden. Bitte zuerst einen Raum erstellen.',
         'Game already started': 'Spiel bereits gestartet',
         'Game session not found': 'Spielsitzung nicht gefunden',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ Fehler beim Erstellen des Raums: {{message}}',
-        websocket: '⚠️ WebSocket-Verbindungsfehler',
+        websocket: 'Verbindung zum Spiel fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
         startGame: 'Fehler beim Starten des Spiels: {{message}}',
         gameClosed: 'Spiel geschlossen: {{reason}}',
         connectionLost: 'Verbindung verloren. Spiel geschlossen.',

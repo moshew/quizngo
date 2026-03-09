@@ -5,7 +5,7 @@
 
 /* global PowerPoint */
 
-import { showError, showStatus } from '../ui/manager.js';
+import { showError } from '../ui/manager.js';
 import { t } from '../i18n/index.js';
 
 /**
@@ -234,7 +234,6 @@ export async function addAnswersDistribution() {
             }
             
             console.log('✅ Answers distribution bar chart added to slide');
-            showStatus('פילוג תשובות נוסף לשקף!', 'success');
         });
     } catch (error) {
         console.error('Error adding answers distribution:', error);
@@ -553,7 +552,6 @@ export async function addLeaderboardElements() {
             }
             
             console.log('✅ Leaderboard elements added');
-            showStatus('אלמנטים לטבלת מובילים נוספו בהצלחה!', 'success');
         });
     } catch (error) {
         console.error('Error adding leaderboard elements:', error);

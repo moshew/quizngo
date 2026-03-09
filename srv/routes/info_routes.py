@@ -1,17 +1,14 @@
 """
 Info routes for QuizNGO Quiz Server.
 Handles game info, QR codes, documentation, status, and widgets.
-
-NEW ARCHITECTURE:
-- gamePin is the PRIMARY identifier (6 digits, generated in Add-in)
-- hashId is REMOVED from the system
+gamePin is the primary identifier for all room operations.
 """
 
 import re
 import json
 from io import BytesIO
 from datetime import datetime
-from flask import Blueprint, request, jsonify, send_from_directory, send_file
+from quart import Blueprint, request, jsonify, send_from_directory, send_file
 import qrcode
 
 
@@ -30,12 +27,12 @@ def create_info_routes(game, admin_url=None, game_url=None):
     info_bp = Blueprint('info', __name__)
 
     @info_bp.route('/debug_save_location.html')
-    def debug_save_location():
+    async def debug_save_location():
         """Serve the save location debug page"""
-        return send_from_directory('.', 'debug_save_location.html')
+        return await send_from_directory('.', 'debug_save_location.html')
 
     @info_bp.route('/game-info/<game_pin>', methods=['GET'])
-    def get_game_info(game_pin):
+    async def get_game_info(game_pin):
         """Get game information including QR code for a specific game PIN."""
         try:
             print("=" * 50)
@@ -78,7 +75,7 @@ def create_info_routes(game, admin_url=None, game_url=None):
             }), 500
 
     @info_bp.route('/qr-code/<game_pin>', methods=['GET'])
-    def get_qr_code(game_pin):
+    async def get_qr_code(game_pin):
         """Generate and return QR code image for admin (uses gamePin)."""
         try:
             # Validate and sanitize game PIN
@@ -110,14 +107,14 @@ def create_info_routes(game, admin_url=None, game_url=None):
             
             game.log(f'✅ Generated QR code for admin with game PIN: {game_pin}')
             
-            return send_file(img_io, mimetype='image/png', as_attachment=False)
-            
+            return await send_file(img_io, mimetype='image/png', as_attachment=False)
+
         except Exception as e:
             game.log(f'❌ Error generating QR code: {str(e)}')
             return f"Error generating QR code: {str(e)}", 500
 
     @info_bp.route('/qr-code-player/<game_pin>', methods=['GET'])
-    def get_qr_code_player(game_pin):
+    async def get_qr_code_player(game_pin):
         """Generate and return QR code image for players (uses game_pin)."""
         try:
             # Validate and sanitize game PIN
@@ -149,14 +146,14 @@ def create_info_routes(game, admin_url=None, game_url=None):
             
             game.log(f'✅ Generated player QR code for game PIN: {game_pin_clean}')
             
-            return send_file(img_io, mimetype='image/png', as_attachment=False)
-            
+            return await send_file(img_io, mimetype='image/png', as_attachment=False)
+
         except Exception as e:
             game.log(f'❌ Error generating player QR code: {str(e)}')
             return f"Error generating QR code: {str(e)}", 500
 
     @info_bp.route('/participants_widget')
-    def serve_participants_widget():
+    async def serve_participants_widget():
         """Serve the participants widget HTML for embedding in PowerPoint slides"""
         html_content = """
         <!DOCTYPE html>
@@ -326,7 +323,7 @@ def create_info_routes(game, admin_url=None, game_url=None):
         return html_content
 
     @info_bp.route('/docs')
-    def docs():
+    async def docs():
         """API documentation page"""
         html = f"""
         <!DOCTYPE html>

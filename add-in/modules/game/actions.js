@@ -466,8 +466,6 @@ export async function startTimer() {
                 // Process scores and send results
                 handleQuestionEnd();
                 
-                // Optional: Play sound or show notification
-                showStatus('⏰ זמן התשובה הסתיים!', 'warning');
             } else {
                 // Update display
                 updateQuestionTimeDisplay(timerRemaining);

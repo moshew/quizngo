@@ -168,12 +168,10 @@ export async function insertGameIdButton() {
                 textRange.font.bold = true;
                 
                 await context.sync();
-                showError(t('success.gameIdAdded'));
             }
         });
     } catch (error) {
         console.error('Error adding game ID:', error);
-        showError(t('errors.addGameId'));
     }
 }
 
@@ -431,8 +429,6 @@ export async function insertQrCodeButton() {
                 } catch (styleError) {
                 // Border/fill styling is not critical - continue without it
             }
-            
-            showError(t('success.qrCodeAdded'));
         });
     } catch (error) {
         console.error('Error adding QR code placeholder:', error);

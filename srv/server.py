@@ -1,38 +1,30 @@
 #!/usr/bin/env python3
 """
-QuizNGO Quiz Server - Python Flask Implementation
+QuizNGO Quiz Server – Python Quart/asyncio Implementation
 
-Server-side component for the PowerPoint QuizNGO Add-in
-Run locally for testing: python server.py
-Deploy to server: see deployment instructions
+Server-side component for the PowerPoint QuizNGO Add-in.
+Deploy to server: see deployment instructions.
 """
 
-import os
-
-# On Windows, eventlet uses select(), which has a low FD cap and can crash
-# under high WebSocket connection counts.
-SOCKETIO_ASYNC_MODE = 'threading'
-if os.name != 'nt':
-    try:
-        # IMPORTANT: if enabled, monkey patch should happen before other imports.
-        import eventlet
-        eventlet.monkey_patch()
-        SOCKETIO_ASYNC_MODE = 'eventlet'
-    except Exception as exc:
-        print(f"WARNING: eventlet unavailable, falling back to threading mode: {exc}")
-
+import asyncio
 import sys
 import random
 import logging
 import argparse
 from pathlib import Path
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from flask_socketio import SocketIO
-import socket
-import requests as http_requests
-import urllib3
+
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass  # fall back to stdlib asyncio loop
+
+import socketio as sio_module
 import psutil
+import urllib3
+from quart import Quart, request, jsonify
+from quart_cors import cors as quart_cors
+import socket
 
 # Suppress SSL warnings for self-signed cert (internal srv→LB communication)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -45,7 +37,6 @@ def get_local_ip():
     """Detect the machine's LAN IP address by connecting to an external target.
     Falls back to localhost if detection fails."""
     try:
-        # Connect to a public DNS address (no data is actually sent)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(1)
         s.connect(('8.8.8.8', 80))
@@ -66,7 +57,7 @@ parser.add_argument('--game-url', type=str, default=None, help='Game client base
 parser.add_argument(
     '--log-verbosity',
     choices=['quiet', 'normal', 'verbose'],
-    default=os.getenv('QUIZNGO_LOG_VERBOSITY', 'quiet'),
+    default='quiet',
     help='Logging verbosity: quiet=warnings/errors only, normal=important info, verbose=debug'
 )
 parser.add_argument('--ssl', action='store_true', default=False, help='Enable HTTPS (default: disabled)')
@@ -151,25 +142,6 @@ class HighVolumeLogFilter(logging.Filter):
         return not any(token in msg for token in HIGH_VOLUME_LOG_PATTERNS)
 
 
-class _WerkzeugWebSocketFilter(logging.Filter):
-    """Suppress the harmless AssertionError werkzeug logs after every WebSocket
-    session.  simple_websocket bypasses the normal WSGI start_response flow
-    (it sends the 101 directly on the socket); werkzeug then complains when it
-    tries to finalise the HTTP response.  The session itself completed fine.
-
-    Must be on the root logger's HANDLERS (not the werkzeug logger itself):
-    records from child loggers (e.g. werkzeug.serving) propagate directly to
-    the root handlers, bypassing parent-logger filters."""
-
-    def filter(self, record):
-        if record.exc_info:
-            exc_type, exc_val, _ = record.exc_info
-            if exc_type is not None and issubclass(exc_type, AssertionError):
-                if 'write() before start_response' in str(exc_val):
-                    return False
-        return True
-
-
 # Create log directory if it doesn't exist
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -184,25 +156,23 @@ logging.basicConfig(
 )
 
 # Attach filters to root handlers so they intercept all propagated records.
-_ws_filter = _WerkzeugWebSocketFilter()
 root_logger = logging.getLogger()
 for handler in root_logger.handlers:
-    handler.addFilter(_ws_filter)
     if LOG_VERBOSITY in ('quiet', 'normal'):
         handler.addFilter(HighVolumeLogFilter())
 
 third_party_level = logging.INFO if LOG_VERBOSITY == 'verbose' else logging.WARNING
-logging.getLogger('werkzeug').setLevel(third_party_level)
 logging.getLogger('engineio').setLevel(third_party_level)
 logging.getLogger('socketio').setLevel(third_party_level)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('hypercorn').setLevel(third_party_level)
 
 
 class GameLogger:
-    """Simple logger wrapper to replace GameManager"""
+    """Game-aware logger that routes messages by severity based on emoji/keyword hints."""
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-    
+
     def log(self, message):
         text = str(message)
         lowered = text.lower()
@@ -217,59 +187,92 @@ class GameLogger:
 
         self.logger.info(text)
 
-# Initialize Flask app
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'quizngo_quiz_secret_key_2024'
 
-# Initialize SocketIO
-socketio = SocketIO(app, 
-    cors_allowed_origins="*",
-    async_mode=SOCKETIO_ASYNC_MODE,
+# Initialize python-socketio AsyncServer
+sio = sio_module.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins='*',
     logger=False,
-    engineio_logger=False
+    engineio_logger=False,
+    ping_interval=60,   # default 25; halve app-level ping overhead at thousands of connections
+    ping_timeout=120,   # > ping_interval so client write-loop timeout (max(60,120)+5=125s) gives
+                        # a 65s buffer vs the 5s we had with 45; dead-socket detection within 180s
 )
 
-# Configure CORS
-CORS(app, 
-     origins="*",
-     allow_headers=["Content-Type", "access_token"],
-     expose_headers=["Content-Type"]
-)
+# Initialize Quart app
+quart_app = Quart(__name__)
+quart_app.config['SECRET_KEY'] = 'quizngo_quiz_secret_key_2024'
+
+# Apply CORS to Quart app
+quart_app = quart_cors(quart_app, allow_origin='*', allow_headers=['Content-Type', 'access_token'])
+
+# ASGI-level CORS middleware: ensures CORS headers are present on ALL responses,
+# including 500 errors generated before Quart's after_request hooks can run.
+class CORSMiddleware:
+    CORS_HEADERS = [
+        (b'access-control-allow-origin', b'*'),
+        (b'access-control-allow-headers', b'Content-Type, access_token'),
+        (b'access-control-allow-methods', b'GET, POST, OPTIONS'),
+    ]
+
+    def __init__(self, asgi_app):
+        self.app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+
+        # Handle preflight OPTIONS at ASGI level immediately
+        if scope['method'] == 'OPTIONS':
+            await send({
+                'type': 'http.response.start',
+                'status': 204,
+                'headers': self.CORS_HEADERS,
+            })
+            await send({'type': 'http.response.body', 'body': b''})
+            return
+
+        async def send_with_cors(message):
+            if message['type'] == 'http.response.start':
+                existing_names = {h[0].lower() for h in message.get('headers', [])}
+                extra = [(k, v) for k, v in self.CORS_HEADERS if k not in existing_names]
+                message = {**message, 'headers': list(message.get('headers', [])) + extra}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
+
+
+# Wrap with ASGI middleware (SocketIO handles /socket.io/ paths, Quart handles the rest)
+app = CORSMiddleware(sio_module.ASGIApp(sio, quart_app))
 
 # Global state containers
-connected_clients = set()
-client_rooms = {}  # maps session_id -> gamePin (room name)
-socket_to_player = {}  # maps socket_id -> uid
-addin_sockets_by_game = {}  # maps gamePin -> set of add-in socket ids
+client_rooms = {}        # maps session_id -> gamePin (room name)
+socket_to_player = {}    # maps socket_id -> uid
+addin_sockets_by_game = {}   # maps gamePin -> set of add-in socket ids
 player_sockets_by_game = {}  # maps gamePin -> set of player socket ids
-game_sessions = {}  # maps gamePin -> session info
-player_registry = {}  # maps uid -> player info
-game_timeout_controls = {}  # maps gamePin -> threading.Event for auto-close cancellation
+game_sessions = {}       # maps gamePin -> session info
+player_registry = {}     # maps uid -> player info
+players_by_game = {}     # maps gamePin -> set of uids (O(1) per-game player lookup)
+game_timeout_controls = {}   # maps gamePin -> asyncio.Task for auto-close cancellation
+addin_grace_timers = {}      # maps gamePin -> asyncio.Task for addin-disconnect grace period
 
-# Initialize logger (replaces GameManager)
+# Initialize logger
 game = GameLogger()
 
 # Register WebSocket handlers
 register_websocket_handlers(
-    socketio, game, connected_clients, client_rooms,
+    sio, game, client_rooms,
     socket_to_player, addin_sockets_by_game, player_sockets_by_game,
     game_sessions, player_registry,
-    game_timeout_controls=game_timeout_controls
+    players_by_game=players_by_game,
+    game_timeout_controls=game_timeout_controls,
+    addin_grace_timers=addin_grace_timers,
 )
 
 # Create and register blueprints
 player_bp = create_player_routes(
-    socketio,
-    game,
-    game_sessions,
-    player_registry,
-    client_rooms,
-    socket_to_player,
-    addin_sockets_by_game,
-    player_sockets_by_game
-)
-game_bp = create_game_routes(
-    socketio,
+    sio,
     game,
     game_sessions,
     player_registry,
@@ -277,25 +280,38 @@ game_bp = create_game_routes(
     socket_to_player,
     addin_sockets_by_game,
     player_sockets_by_game,
-    game_timeout_controls=game_timeout_controls
+    players_by_game=players_by_game,
 )
-navigation_bp = create_navigation_routes(socketio, game, game_sessions, addin_sockets_by_game)
+game_bp = create_game_routes(
+    sio,
+    game,
+    game_sessions,
+    player_registry,
+    client_rooms,
+    socket_to_player,
+    addin_sockets_by_game,
+    player_sockets_by_game,
+    players_by_game=players_by_game,
+    game_timeout_controls=game_timeout_controls,
+    addin_grace_timers=addin_grace_timers,
+)
+navigation_bp = create_navigation_routes(sio, game, game_sessions, addin_sockets_by_game)
 info_bp = create_info_routes(game, ADMIN_URL, GAME_URL)
 
-app.register_blueprint(player_bp)
-app.register_blueprint(game_bp)
-app.register_blueprint(navigation_bp)
-app.register_blueprint(info_bp)
+quart_app.register_blueprint(player_bp)
+quart_app.register_blueprint(game_bp)
+quart_app.register_blueprint(navigation_bp)
+quart_app.register_blueprint(info_bp)
 
 
-@app.after_request
-def normalize_message_fields(response):
+@quart_app.after_request
+async def normalize_message_fields(response):
     """Ensure API responses expose message/reason as structured objects."""
     return normalize_flask_json_response(response)
 
 
-@app.route('/', methods=['GET', 'POST'])
-def api_handler():
+@quart_app.route('/', methods=['GET', 'POST'])
+async def api_handler():
     """Handle API requests via query parameters"""
     try:
         # Determine action from query parameters
@@ -324,48 +340,47 @@ def api_handler():
         elif 'reset_animations' in request.args:
             action = 'reset_animations'
         else:
-            # Default: return a lightweight status payload.
             return jsonify({
                 'status': 'ok',
                 'service': 'quizngo-srv',
                 'docs': '/docs'
             })
-        
+
         # Route to appropriate handler
         if action == 'init':
             game_id = random.randint(100000, 999999)
             return jsonify({'game_id': game_id})
-        
+
         elif action == 'join_player':
-            return player_bp.handle_join_player()
-        
+            return await player_bp.handle_join_player()
+
         elif action == 'leave_player':
-            return player_bp.handle_leave_player()
-        
+            return await player_bp.handle_leave_player()
+
         elif action == 'register_session':
-            return game_bp.handle_register_session()
-        
+            return await game_bp.handle_register_session()
+
         elif action == 'check_active_game':
-            return game_bp.handle_check_active_game()
-        
+            return await game_bp.handle_check_active_game()
+
         elif action == 'create_room':
-            return game_bp.handle_create_room()
-        
+            return await game_bp.handle_create_room()
+
         elif action == 'start_game':
-            return game_bp.handle_start_game()
-        
+            return await game_bp.handle_start_game()
+
         elif action == 'close_game':
-            return game_bp.handle_close_game()
-        
+            return await game_bp.handle_close_game()
+
         elif action == 'next_page' or action == 'next_slide':
-            return navigation_bp.handle_next_slide()
-        
+            return await navigation_bp.handle_next_slide()
+
         elif action == 'click_action':
-            return navigation_bp.handle_click_action()
-        
+            return await navigation_bp.handle_click_action()
+
         elif action == 'reset_animations':
-            return navigation_bp.handle_reset_animations()
-    
+            return await navigation_bp.handle_reset_animations()
+
     except Exception as e:
         game.log(f'Error: {str(e)}')
         return jsonify({
@@ -376,7 +391,7 @@ def api_handler():
 
 # --- Load Balancer Integration ---
 
-def register_with_lb(initial=False):
+async def register_with_lb(initial=False):
     """Register this server with the load balancer.
 
     Args:
@@ -386,21 +401,15 @@ def register_with_lb(initial=False):
     global lb_server_id
     logger = logging.getLogger(__name__)
     try:
+        from utils.lb_client import lb_post, init_lb
         logger.info(f'Attempting to register with Load Balancer at {LB_URL}...')
-        resp = http_requests.post(f'{LB_URL}/api/servers/register', json={
-            'address': SERVER_ADDRESS
-        }, timeout=5, verify=False)
-        data = resp.json()
+        data = await lb_post(f'{LB_URL}/api/servers/register', {'address': SERVER_ADDRESS})
         if data.get('status') == 'success':
             lb_server_id = data['server_id']
             logger.info(f'✅ Successfully registered with LB as {lb_server_id}')
-
-            # Initialize lb_client module with LB info
-            from utils.lb_client import init_lb
             init_lb(LB_URL, lb_server_id)
-
             if initial:
-                start_heartbeat()
+                asyncio.create_task(heartbeat_loop())
         else:
             logger.error(f'❌ LB registration failed: {data}')
             if initial:
@@ -417,48 +426,47 @@ def register_with_lb(initial=False):
             sys.exit(1)
 
 
-def start_heartbeat():
+async def heartbeat_loop():
     """Push stats to LB every 30 seconds. Re-registers if LB forgot us."""
-    def heartbeat_worker():
-        while True:
-            socketio.sleep(30)
-            if not LB_URL or not lb_server_id:
-                break
-            try:
-                stats = {
-                    'active_ws_connections': len(connected_clients),
-                    'cpu_percent': psutil.cpu_percent(),
-                    'memory_mb': round(psutil.Process().memory_info().rss / (1024 * 1024), 1),
-                    'active_games_count': len(game_sessions)
-                }
-                resp = http_requests.post(
-                    f'{LB_URL}/api/servers/{lb_server_id}/heartbeat',
-                    json=stats, timeout=5, verify=False
-                )
-                if resp.status_code == 404:
-                    logging.getLogger(__name__).warning('LB does not recognize us — re-registering...')
-                    register_with_lb()
-            except Exception as e:
-                logging.getLogger(__name__).warning(f'Heartbeat failed: {e}')
-    socketio.start_background_task(heartbeat_worker)
+    logger = logging.getLogger(__name__)
+    from utils.lb_client import lb_post
+    while True:
+        await asyncio.sleep(30)
+        if not LB_URL or not lb_server_id:
+            break
+        try:
+            stats = {
+                'active_ws_connections': len(sio.eio.sockets),
+                'cpu_percent': psutil.cpu_percent(),
+                'memory_mb': round(psutil.Process().memory_info().rss / (1024 * 1024), 1),
+                'active_games_count': len(game_sessions)
+            }
+            data = await lb_post(
+                f'{LB_URL}/api/servers/{lb_server_id}/heartbeat',
+                stats
+            )
+            if data.get('status') == 'error':
+                logger.warning('LB does not recognize us — re-registering...')
+                await register_with_lb()
+        except Exception as e:
+            logger.warning(f'Heartbeat failed: {e}')
 
 
-def notify_lb_game_ended(game_pin):
-    """Notify LB that a game PIN is no longer active. Best-effort."""
-    if not LB_URL or not lb_server_id:
-        return
-    try:
-        http_requests.post(
-            f'{LB_URL}/api/servers/{lb_server_id}/game-ended',
-            json={'game_pin': game_pin},
-            timeout=5, verify=False
-        )
-    except Exception:
-        pass  # Best effort - stale cleanup will handle it
+@quart_app.before_serving
+async def startup():
+    """Start background tasks after the server starts listening."""
+    async def delayed_lb_registration():
+        await asyncio.sleep(2)
+        await register_with_lb(True)
+
+    asyncio.create_task(delayed_lb_registration())
 
 
 if __name__ == '__main__':
-    print("Starting QuizNGO Quiz Server (Python)")
+    import hypercorn.asyncio
+    from hypercorn.config import Config
+
+    print("Starting QuizNGO Quiz Server (Python / asyncio)")
     print("=" * 40)
     print(f"Load Balancer: {LB_URL}")
     print(f"SSL: {'enabled' if USE_SSL else 'disabled'}")
@@ -470,30 +478,21 @@ if __name__ == '__main__':
     print("Press Ctrl+C to stop the server")
     print("=" * 40)
 
-    if SOCKETIO_ASYNC_MODE == 'threading':
-        print("SocketIO async mode: threading (Windows-safe)")
-    else:
-        print("SocketIO async mode: eventlet")
-
-    def delayed_lb_registration():
-        socketio.sleep(2)
-        register_with_lb(True)
-
-    # Register with LB after a short delay (let server start first)
-    socketio.start_background_task(delayed_lb_registration)
-
-    run_kwargs = {
-        'debug': False,
-        'host': '0.0.0.0',
-        'port': PORT
-    }
+    config = Config()
+    config.bind = [f"0.0.0.0:{PORT}"]
+    config.backlog = 2048
+    config.keep_alive_timeout = 120
+    # Hypercorn transport-level WS pings are cheap (handled outside Python event
+    # loop) and keep TCP connections alive through nginx.  Engine.IO's app-level
+    # pings (60 s) are the ones that go through the event loop.
+    config.websocket_ping_interval = 30
+    config.websocket_ping_timeout = 20
 
     if USE_SSL:
         certfile = str(CERT_DIR / 'localhost.crt')
         keyfile = str(CERT_DIR / 'localhost.key')
         print(f"SSL enabled - certs from: {CERT_DIR}")
-        run_kwargs['certfile'] = certfile
-        run_kwargs['keyfile'] = keyfile
-        socketio.run(app, **run_kwargs)
-    else:
-        socketio.run(app, **run_kwargs)
+        config.certfile = certfile
+        config.keyfile = keyfile
+
+    asyncio.run(hypercorn.asyncio.serve(app, config))

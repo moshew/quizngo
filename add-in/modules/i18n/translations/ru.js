@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': 'Нет доступных серверов',
         'Game server is unavailable': 'Сервер игры недоступен',
-        'Game PIN not found': 'PIN игры не найден',
-        'Failed to resolve server from LB': 'Ошибка подключения к балансировщику нагрузки',
+        'Game PIN not found': 'Код игры не найден',
+        'Failed to resolve server from LB': 'Ошибка при обращении к игровому серверу',
         'Room not found. Add-in must create room first.': 'Комната не найдена. Сначала создайте комнату.',
         'Game already started': 'Игра уже началась',
         'Game session not found': 'Сессия игры не найдена',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ Ошибка создания комнаты: {{message}}',
-        websocket: '⚠️ Ошибка подключения WebSocket',
+        websocket: 'Не удалось подключиться к игре. Проверьте подключение и попробуйте снова.',
         startGame: 'Ошибка запуска игры: {{message}}',
         gameClosed: 'Игра закрыта: {{reason}}',
         connectionLost: 'Соединение потеряно. Игра закрыта.',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: 'Ошибка добавления количества участников',
         addParticipantsList: 'Ошибка добавления списка участников',
         addAnswersDistribution: 'Ошибка добавления распределения ответов',
-        addLeaderboard: 'Ошибка добавления элементов таблицы лидеров',
+        addLeaderboard: 'Ошибка добавления таблицы лидеров',
         selectSlideFirst: 'Пожалуйста, сначала выберите слайд',
     },
 

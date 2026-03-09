@@ -1,14 +1,12 @@
 """
 Room utilities for managing game sessions and WebSocket rooms.
 
-NEW ARCHITECTURE:
-- gamePin is the PRIMARY identifier (6 digits, generated in Add-in)
-- hashId is REMOVED from the system
-- All rooms are identified by gamePin
+gamePin is the primary room/game identifier (6 digits, generated in Add-in).
+All rooms are identified by gamePin.
 """
 
+import asyncio
 import time
-import threading
 
 
 _REASON_CODE_MAP = {
@@ -110,83 +108,90 @@ def has_addin_socket(addin_sockets_by_game, game_pin):
 
 
 def _cancel_game_timeout(game_timeout_controls, game_pin, logger):
-    """Cancel and remove a scheduled timeout for the provided game pin."""
+    """Cancel and remove a scheduled timeout task for the provided game pin."""
     if game_timeout_controls is None:
         return
 
-    timeout_event = game_timeout_controls.pop(game_pin, None)
-    if timeout_event:
-        timeout_event.set()
+    task = game_timeout_controls.pop(game_pin, None)
+    if task and not task.done():
+        task.cancel()
         logger.info(f'Canceled auto-close timer for game {game_pin}')
 
 
-def schedule_game_timeout(
+async def schedule_game_timeout(
     game_sessions,
     player_registry,
     client_rooms,
     socket_to_player,
     addin_sockets_by_game,
     player_sockets_by_game,
-    socketio,
+    sio,
     game_pin,
     logger,
     timeout_seconds=3600,
-    game_timeout_controls=None
+    game_timeout_controls=None,
+    players_by_game=None,
 ):
-    """Schedule automatic game closure after timeout (default: 1 hour)."""
-    timeout_event = threading.Event()
+    """Schedule automatic game closure after timeout (default: 1 hour).
 
-    if game_timeout_controls is not None:
-        # Replace previous timer for the same pin (if any) to avoid leaks.
-        previous_event = game_timeout_controls.pop(game_pin, None)
-        if previous_event:
-            previous_event.set()
-        game_timeout_controls[game_pin] = timeout_event
-
-    def timeout_worker():
-        canceled = timeout_event.wait(timeout_seconds)
-        if canceled:
+    Stores an asyncio.Task in game_timeout_controls instead of a threading.Event.
+    Cancel by calling task.cancel() or _cancel_game_timeout().
+    """
+    async def timeout_worker():
+        try:
+            await asyncio.sleep(timeout_seconds)
+        except asyncio.CancelledError:
             logger.info(f'Auto-close worker stopped for game {game_pin} (canceled)')
             return
 
-        # If the session still exists (active or waiting), close it.
         if game_pin in game_sessions:
             session = game_sessions[game_pin]
             logger.info(
                 f'Auto-closing game {game_pin} after {timeout_seconds}s '
                 f'(active={session.get("active", False)}, started={session.get("gameStarted", False)})'
             )
-            close_game_and_cleanup(
+            await close_game_and_cleanup(
                 game_sessions,
                 player_registry,
                 client_rooms,
                 socket_to_player,
                 addin_sockets_by_game,
                 player_sockets_by_game,
-                socketio,
+                sio,
                 game_pin,
                 logger,
                 reason='timeout',
-                game_timeout_controls=game_timeout_controls
+                game_timeout_controls=game_timeout_controls,
+                players_by_game=players_by_game,
             )
 
-    timeout_thread = threading.Thread(target=timeout_worker, daemon=True)
-    timeout_thread.start()
+    if game_timeout_controls is not None:
+        # Cancel previous timer for the same pin (if any) to avoid leaks.
+        previous_task = game_timeout_controls.pop(game_pin, None)
+        if previous_task and not previous_task.done():
+            previous_task.cancel()
+
+    task = asyncio.create_task(timeout_worker())
+
+    if game_timeout_controls is not None:
+        game_timeout_controls[game_pin] = task
+
     logger.info(f'Scheduled auto-close for game {game_pin} in {timeout_seconds}s')
 
 
-def close_game_and_cleanup(
+async def close_game_and_cleanup(
     game_sessions,
     player_registry,
     client_rooms,
     socket_to_player,
     addin_sockets_by_game,
     player_sockets_by_game,
-    socketio,
+    sio,
     game_pin,
     logger,
     reason='manual',
-    game_timeout_controls=None
+    game_timeout_controls=None,
+    players_by_game=None,
 ):
     """
     Close a game session and remove all associated players and sockets.
@@ -196,14 +201,12 @@ def close_game_and_cleanup(
         player_registry: Dict of player registrations.
         client_rooms: Dict mapping socket ID to gamePin.
         socket_to_player: Dict mapping socket ID to player UID.
-        socketio: SocketIO instance.
+        sio: python-socketio AsyncServer instance.
         game_pin: The game PIN to close.
         logger: Logger instance.
         reason: Reason for closure (e.g., manual, timeout, addin_closed).
-        game_timeout_controls: Optional dict of game_pin -> threading.Event.
+        game_timeout_controls: Optional dict of game_pin -> asyncio.Task.
     """
-    from flask_socketio import leave_room
-
     # Stop any background timer tied to this game first.
     _cancel_game_timeout(game_timeout_controls, game_pin, logger)
 
@@ -213,8 +216,8 @@ def close_game_and_cleanup(
 
     # Notify clients BEFORE cleanup, to maximize delivery success.
     try:
-        emit_to_room(
-            socketio,
+        await emit_to_room(
+            sio,
             client_rooms,
             logger,
             'game_closed',
@@ -236,11 +239,8 @@ def close_game_and_cleanup(
     except Exception as exc:
         logger.info(f'Error sending game_closed event for {game_pin}: {exc}')
 
-    # Remove all players from this session.
-    players_to_remove = [
-        uid for uid, player in list(player_registry.items())
-        if player.get('gamePin') == game_pin
-    ]
+    # Remove all players from this session using per-game index.
+    players_to_remove = list(players_by_game.pop(game_pin, set()))
     for uid in players_to_remove:
         if uid in player_registry:
             del player_registry[uid]
@@ -260,12 +260,13 @@ def close_game_and_cleanup(
     removed_player_sockets = 0
     removed_addin_sockets = 0
 
-    for sid in sockets_to_remove:
-        try:
-            leave_room(game_pin, sid=sid)
-        except Exception:
-            pass
+    # Leave rooms in parallel to avoid sequential await storm.
+    await asyncio.gather(*[
+        sio.leave_room(sid, game_pin)
+        for sid in sockets_to_remove
+    ], return_exceptions=True)
 
+    for sid in sockets_to_remove:
         if sid in socket_to_player:
             socket_to_player.pop(sid, None)
             removed_player_sockets += 1
@@ -287,52 +288,50 @@ def close_game_and_cleanup(
     )
 
     # Delete the game session itself.
-    del game_sessions[game_pin]
+    game_sessions.pop(game_pin, None)
     logger.info(f'Game {game_pin} deleted. Reason: {reason}')
 
-    # Notify load balancer that this PIN is done.
-    try:
-        from utils.lb_client import notify_game_ended
-        notify_game_ended(game_pin)
-    except Exception as exc:
-        logger.debug(f'Could not notify LB about game {game_pin}: {exc}')
+    # Notify load balancer that this PIN is done (best-effort, fire-and-forget).
+    from utils.lb_client import notify_game_ended
+
+    async def _safe_notify():
+        try:
+            await notify_game_ended(game_pin)
+        except Exception as exc:
+            logger.debug(f'Could not notify LB about game {game_pin}: {exc}')
+
+    asyncio.create_task(_safe_notify())
 
 
-def emit_to_room(socketio, client_rooms, logger, event, data, game_pin, skip_sid=None):
+async def emit_to_room(sio, client_rooms, logger, event, data, game_pin, skip_sid=None):
     """
-    Emit a message only to clients in a specific room (gamePin).
+    Emit a message to all clients in a specific room (gamePin).
 
     Args:
-        socketio: SocketIO instance.
+        sio: python-socketio AsyncServer instance.
         client_rooms: Dict mapping socket ID to gamePin.
         logger: Logger instance.
         event: The event name.
         data: The data payload.
         game_pin: The room to emit to.
         skip_sid: Optional socket ID to skip.
-
-    Returns:
-        None.
     """
     try:
-        socketio.emit(event, data, room=game_pin, skip_sid=skip_sid)
+        await sio.emit(event, data, room=game_pin, skip_sid=skip_sid)
     except Exception as exc:
         logger.warning(f'Emit failed for {event} to {game_pin}: {exc}')
 
 
-def emit_to_addins(socketio, addin_sockets_by_game, logger, event, data, game_pin):
-    """
-    Emit a message only to add-in sockets in a specific game room.
-
-    Returns:
-        None.
-    """
-    if addin_sockets_by_game is None:
+async def emit_to_addins(sio, addin_sockets_by_game, logger, event, data, game_pin):
+    """Emit a message only to add-in sockets in a specific game room."""
+    addin_sids = tuple(addin_sockets_by_game.get(game_pin, ()))
+    if not addin_sids:
         return
 
-    addin_sids = tuple(addin_sockets_by_game.get(game_pin, ()))
-    for sid in addin_sids:
+    async def _safe_emit(sid):
         try:
-            socketio.emit(event, data, to=sid)
+            await sio.emit(event, data, to=sid)
         except Exception as exc:
             logger.warning(f'Emit failed for {event} to add-in {sid} in {game_pin}: {exc}')
+
+    await asyncio.gather(*[_safe_emit(sid) for sid in addin_sids])

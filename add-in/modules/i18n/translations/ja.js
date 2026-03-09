@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': '利用可能なサーバーがありません',
         'Game server is unavailable': 'ゲームサーバーが利用できません',
-        'Game PIN not found': 'ゲームPINが見つかりません',
-        'Failed to resolve server from LB': 'ロードバランサーへの接続に失敗しました',
+        'Game PIN not found': 'ゲームコードが見つかりません',
+        'Failed to resolve server from LB': 'ゲームサーバーへの接続中にエラーが発生しました',
         'Room not found. Add-in must create room first.': 'ルームが見つかりません。先にルームを作成してください。',
         'Game already started': 'ゲームは既に開始されています',
         'Game session not found': 'ゲームセッションが見つかりません',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ ルーム作成エラー: {{message}}',
-        websocket: '⚠️ WebSocket接続エラー',
+        websocket: 'ゲームに接続できませんでした。接続を確認してもう一度お試しください。',
         startGame: 'ゲーム開始エラー: {{message}}',
         gameClosed: 'ゲームが閉じられました: {{reason}}',
         connectionLost: '接続が切断されました。ゲームが閉じられました。',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: '参加者数追加エラー',
         addParticipantsList: '参加者リスト追加エラー',
         addAnswersDistribution: '回答分布追加エラー',
-        addLeaderboard: 'リーダーボード要素追加エラー',
+        addLeaderboard: 'リーダーボード追加エラー',
         selectSlideFirst: '先にスライドを選択してください',
     },
 

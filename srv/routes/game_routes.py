@@ -2,16 +2,15 @@
 Game management routes for QuizNGO Quiz Server.
 Handles session registration, game lifecycle, and participant acceptance.
 
-NEW ARCHITECTURE:
-- gamePin is the PRIMARY identifier (6 digits, generated in Add-in)
-- hashId is REMOVED from the system
+- gamePin is the primary room/game identifier (6 digits, generated in Add-in)
 - WebSocket connects only when game starts, disconnects when game ends
 - 30-second reconnection timeout (handled client-side)
 """
 
+import asyncio
 import re
 import time
-from flask import Blueprint, request, jsonify
+from quart import Blueprint, request, jsonify
 
 from utils.room_utils import (
     emit_to_room,
@@ -34,7 +33,7 @@ GUARDIAN_LESS_TIMEOUT_SECONDS = 600
 
 
 def create_game_routes(
-    socketio,
+    sio,
     game,
     game_sessions,
     player_registry,
@@ -42,60 +41,63 @@ def create_game_routes(
     socket_to_player,
     addin_sockets_by_game,
     player_sockets_by_game,
-    game_timeout_controls=None
+    players_by_game=None,
+    game_timeout_controls=None,
+    addin_grace_timers=None,
 ):
     """
     Create game management routes blueprint.
-    
+
     Args:
-        socketio: Flask-SocketIO instance
-        game: GameManager instance
+        sio: python-socketio AsyncServer instance
+        game: GameLogger instance
         game_sessions: Dict of active game sessions (keyed by gamePin)
         player_registry: Dict of registered players
         client_rooms: Dict mapping socket ID to gamePin
         socket_to_player: Dict mapping socket ID to player UID
-    
+
     Returns:
         Blueprint with game routes
     """
     game_bp = Blueprint('game', __name__)
 
     @game_bp.route('/answer_time_started', methods=['POST'])
-    def answer_time_started():
+    async def answer_time_started():
         """Handle answer time started via REST API."""
         try:
-            data = request.get_json()
+            data = await request.get_json()
             game_pin = data.get('gamePin', 'N/A')
-            
+
             if game_pin and game_pin != 'N/A':
                 # Update session state
                 if game_pin in game_sessions:
                     game_sessions[game_pin]['currentState'] = 'answering'
                     game_sessions[game_pin]['currentQuestion'] = data
                     game_sessions[game_pin]['answerStartedAt'] = time.time()
-                
-                # Find all players in this game
-                players_in_game = [
-                    (uid, player) for uid, player in player_registry.items() 
-                    if player.get('gamePin') == game_pin and player.get('connected', False)
-                ]
-                
-                if not players_in_game:
+
+                # Count connected players using per-game index (O(players in game)).
+                game_uids = players_by_game.get(game_pin, set())
+                connected_count = sum(
+                    1 for uid in game_uids
+                    if player_registry.get(uid, {}).get('connected', False)
+                )
+
+                if not connected_count:
                     game.log(f'⚠️ No connected players found in game {game_pin}')
                     return jsonify({
                         'status': 'warning',
                         'message': 'No connected players in game',
                         'gamePin': game_pin
                     })
-                
+
                 # Send to each player via room broadcast
-                emit_to_room(socketio, client_rooms, game.logger, 'answer_time_started', data, game_pin)
-                
+                await emit_to_room(sio, client_rooms, game.logger, 'answer_time_started', data, game_pin)
+
                 return jsonify({
                     'status': 'success',
-                    'message': f'Sent to {len(players_in_game)} player(s)',
+                    'message': f'Sent to {connected_count} player(s)',
                     'gamePin': game_pin,
-                    'playerCount': len(players_in_game)
+                    'playerCount': connected_count
                 })
             else:
                 game.log(f'⚠️ Warning: No gamePin for answer_time_started')
@@ -103,7 +105,7 @@ def create_game_routes(
                     'status': 'error',
                     'message': 'Missing gamePin'
                 }), 400
-            
+
         except Exception as e:
             game.log(f'❌ Error handling answer_time_started: {e}')
             return jsonify({
@@ -112,21 +114,21 @@ def create_game_routes(
             }), 500
 
     @game_bp.route('/submit_results', methods=['POST'])
-    def submit_results():
+    async def submit_results():
         """Receive question results from add-in and broadcast to each player."""
         try:
-            data = request.get_json()
-            
+            data = await request.get_json()
+
             if not data:
                 game.log('❌ No JSON data received')
                 return jsonify({
                     'status': 'error',
                     'message': 'No JSON data provided'
                 }), 400
-            
+
             game_pin = data.get('gamePin')
             results = data.get('results', [])
-            
+
             # Clear current question state (answer time ended)
             if game_pin in game_sessions:
                 game_sessions[game_pin]['currentState'] = 'results'
@@ -134,14 +136,14 @@ def create_game_routes(
                     del game_sessions[game_pin]['currentQuestion']
                 if 'answerStartedAt' in game_sessions[game_pin]:
                     del game_sessions[game_pin]['answerStartedAt']
-            
+
             if not game_pin:
                 game.log('❌ Missing gamePin in request')
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing gamePin'
                 }), 400
-            
+
             if not results:
                 game.log('❌ Missing or empty results in request')
                 return jsonify({
@@ -150,36 +152,38 @@ def create_game_routes(
                 }), 400
 
             # Build once per request: O(number_of_sockets).
-            # Prevents O(results * sockets) scans under heavy load.
             sid_by_uid = {uid: sid for sid, uid in socket_to_player.items()}
-            
-            # Send individual results to each player's own socket (not broadcast)
-            for result in results:
+
+            # Send individual results to each player in parallel.
+            ts = data.get('timestamp')
+
+            async def _send_one(result):
                 user_id = result.get('userId')
-                
-                player_data = {
-                    'userId': user_id,
-                    'nickname': result.get('nickname'),
-                    'questionScore': result.get('questionScore'),
-                    'cumulativeScore': result.get('cumulativeScore'),
-                    'rank': result.get('rank'),
-                    'isCorrect': result.get('isCorrect'),
-                    'answered': result.get('answered'),
-                    'timestamp': data.get('timestamp')
-                }
-                
-                # Resolve socket in O(1) from prebuilt mapping.
                 target_sid = sid_by_uid.get(user_id)
-                
-                if target_sid:
-                    socketio.emit('player_results', player_data, to=target_sid)
-            
+                if not target_sid:
+                    return
+                try:
+                    await sio.emit('player_results', {
+                        'userId': user_id,
+                        'nickname': result.get('nickname'),
+                        'questionScore': result.get('questionScore'),
+                        'cumulativeScore': result.get('cumulativeScore'),
+                        'rank': result.get('rank'),
+                        'isCorrect': result.get('isCorrect'),
+                        'answered': result.get('answered'),
+                        'timestamp': ts,
+                    }, to=target_sid)
+                except Exception:
+                    pass
+
+            await asyncio.gather(*[_send_one(r) for r in results])
+
             return jsonify({
                 'status': 'success',
                 'message': f'Results sent to {len(results)} player(s)',
                 'gamePin': game_pin
             })
-            
+
         except Exception as e:
             game.log(f'❌ Error handling submit_results: {e}')
             import traceback
@@ -190,7 +194,7 @@ def create_game_routes(
             }), 500
 
     @game_bp.route('/sim_gamePIN', methods=['GET'])
-    def get_active_game_pins():
+    async def get_active_game_pins():
         """Get list of all game PINs (including those not started yet) for the simulator and LB cleanup"""
         try:
             all_pins = []
@@ -210,7 +214,7 @@ def create_game_routes(
                 'count': len(all_pins),
                 'games': all_pins
             })
-            
+
         except Exception as e:
             game.log(f'❌ Error getting active game PINs: {str(e)}')
             return jsonify({
@@ -218,42 +222,43 @@ def create_game_routes(
                 'message': f'Error: {str(e)}'
             }), 500
 
-    def handle_register_session():
+    async def handle_register_session():
         """Handle session registration - called from main API handler.
-        
+
         NEW: gamePin is the primary identifier. hashId is no longer used.
         The Add-in generates the gamePin and registers the session.
         """
         try:
             game_pin = request.args.get('game_pin')
-            
+
             game.log(f'📨 POST /register_session - game_pin: {game_pin}')
-            
+
             if not game_pin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing game_pin'
                 }), 400
-            
+
             # Validate and sanitize
             game_pin = re.sub(r'[^0-9]', '', game_pin)
-            
+
             if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
                     'message': 'Game PIN must be 6 digits'
                 }), 400
-            
+
             # Clean up previous game session if exists
             if game_pin in game_sessions:
                 game.log(f'🧹 Cleaning up previous game session: {game_pin}')
-                close_game_and_cleanup(
+                await close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
                     addin_sockets_by_game, player_sockets_by_game,
-                    socketio, game_pin, game.logger, reason='new_session',
-                    game_timeout_controls=game_timeout_controls
+                    sio, game_pin, game.logger, reason='new_session',
+                    game_timeout_controls=game_timeout_controls,
+                    players_by_game=players_by_game,
                 )
-            
+
             # Store session with gamePin as the key
             game_sessions[game_pin] = {
                 'gamePin': game_pin,
@@ -261,24 +266,25 @@ def create_game_routes(
                 'active': True,
                 'gameStarted': False
             }
-            
+
             # Schedule auto-close while waiting for room creation/start.
-            schedule_game_timeout(
+            await schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 addin_sockets_by_game, player_sockets_by_game,
-                socketio, game_pin, game.logger,
+                sio, game_pin, game.logger,
                 timeout_seconds=WAITING_ROOM_TIMEOUT_SECONDS,
-                game_timeout_controls=game_timeout_controls
+                game_timeout_controls=game_timeout_controls,
+                players_by_game=players_by_game,
             )
-            
+
             game.log(f'✅ Session registered: PIN={game_pin}')
-            
+
             return jsonify({
                 'status': 'success',
                 'message': 'Session registered successfully',
                 'gamePin': game_pin
             })
-            
+
         except Exception as e:
             game.log(f'❌ Error in register_session: {str(e)}')
             return jsonify({
@@ -286,33 +292,31 @@ def create_game_routes(
                 'message': str(e)
             }), 500
 
-    def handle_check_active_game():
+    async def handle_check_active_game():
         """Handle check active game - called from main API handler"""
         try:
             game_pin = request.args.get('game_pin')
-            
+
             if not game_pin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing game_pin'
                 }), 400
-            
+
             # Validate and sanitize game_pin
             game_pin = re.sub(r'[^0-9]', '', game_pin)
-            
+
             if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
                     'message': 'Invalid game PIN length'
                 }), 400
-            
+
             # Check if session exists
-            # Returns active=true if session exists (admin needs this to connect)
-            # The gameStarted field tells whether players can join
             if game_pin in game_sessions:
                 session = game_sessions[game_pin]
                 game.log(f'✅ Game session found for PIN {game_pin} (started: {session.get("gameStarted", False)})')
-                
+
                 return jsonify({
                     'status': 'success',
                     'active': True,
@@ -328,7 +332,7 @@ def create_game_routes(
                     'active': False,
                     'gamePin': game_pin
                 })
-                
+
         except Exception as e:
             game.log(f'❌ Error in check_active_game: {str(e)}')
             return jsonify({
@@ -337,27 +341,36 @@ def create_game_routes(
             }), 500
 
     @game_bp.route('/register_room', methods=['POST'])
-    def register_room():
+    async def register_room():
         """REST endpoint to register a socket to a room by gamePin (for add-in).
-        
+
         This registers the socket to the room for receiving events.
         gamePin is the primary identifier.
         """
         try:
-            data = request.get_json()
+            data = await request.get_json()
             socket_id = data.get('socketId')
             game_pin = data.get('gamePin')
-            
+
             game.log(f'📨 POST /register_room - socketId: {socket_id}, gamePin: {game_pin}')
-            
+
             if not socket_id or not game_pin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing socketId or gamePin'
                 }), 400
-            
+
+            # Reject stale SIDs (race: socket dropped before this POST was processed).
+            if not sio.manager.is_connected(socket_id, '/'):
+                game.log(f'⚠️ register_room: socket {socket_id} is no longer connected')
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Socket is no longer connected',
+                    'gamePin': game_pin,
+                }), 409
+
             # Join Socket.IO room using gamePin as room name
-            socketio.server.enter_room(socket_id, game_pin, namespace='/')
+            await sio.enter_room(socket_id, game_pin)
             register_addin_socket(
                 client_rooms,
                 socket_to_player,
@@ -366,22 +379,27 @@ def create_game_routes(
                 socket_id,
                 game_pin
             )
-            
+
+            # Cancel grace period if the addin reconnected in time.
+            if addin_grace_timers is not None:
+                grace_task = addin_grace_timers.pop(game_pin, None)
+                if grace_task and not grace_task.done():
+                    grace_task.cancel()
+                    game.log(f'Addin grace period canceled for {game_pin} (addin reconnected)')
+
             # Check if there's an active game session
             has_active_game = game_pin in game_sessions and game_sessions[game_pin].get('active', False)
-            
+
             game.log(f'✅ Client {socket_id} joined room: {game_pin} via REST')
             game.log(f'   Active game: {has_active_game}')
-            
-            response_data = {
+
+            return jsonify({
                 'status': 'success',
                 'gamePin': game_pin,
                 'socketId': socket_id,
                 'hasActiveGame': has_active_game
-            }
-            
-            return jsonify(response_data)
-            
+            })
+
         except Exception as e:
             game.log(f'❌ Error in register_room: {str(e)}')
             return jsonify({
@@ -389,26 +407,26 @@ def create_game_routes(
                 'message': str(e)
             }), 500
 
-    def handle_close_game():
+    async def handle_close_game():
         """Handle close game - called from main API handler"""
         try:
             game_pin = request.args.get('game_pin')
-            
+
             if not game_pin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing game_pin'
                 }), 400
-            
+
             # Validate and sanitize game_pin
             game_pin = re.sub(r'[^0-9]', '', game_pin)
-            
+
             if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
                     'message': 'Invalid game PIN length'
                 }), 400
-            
+
             # Check if session exists
             if game_pin not in game_sessions:
                 game.log(f'⚠️ Cannot close game - session {game_pin} not found')
@@ -416,21 +434,22 @@ def create_game_routes(
                     'status': 'error',
                     'message': 'Game session not found'
                 }), 404
-            
+
             # Use centralized cleanup function
-            close_game_and_cleanup(
+            await close_game_and_cleanup(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 addin_sockets_by_game, player_sockets_by_game,
-                socketio, game_pin, game.logger, reason='manual',
-                game_timeout_controls=game_timeout_controls
+                sio, game_pin, game.logger, reason='manual',
+                game_timeout_controls=game_timeout_controls,
+                players_by_game=players_by_game,
             )
-            
+
             return jsonify({
                 'status': 'success',
                 'message': 'Game closed successfully and all players removed',
                 'gamePin': game_pin
             })
-            
+
         except Exception as e:
             game.log(f'❌ Error in close_game: {str(e)}')
             return jsonify({
@@ -438,7 +457,7 @@ def create_game_routes(
                 'message': str(e)
             }), 500
 
-    def handle_create_room():
+    async def handle_create_room():
         """Create a room with a game PIN.
 
         This is called from the Add-in when "Activate Game" is clicked.
@@ -446,34 +465,35 @@ def create_game_routes(
         """
         try:
             game_pin = request.args.get('game_pin')
-            
+
             game.log(f'📨 GET /create_room - game_pin: {game_pin}')
-            
+
             if not game_pin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing game_pin'
                 }), 400
-            
+
             # Validate and sanitize
             game_pin = re.sub(r'[^0-9]', '', game_pin)
-            
+
             if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
                     'message': 'Game PIN must be 6 digits'
                 }), 400
-            
+
             # Clean up previous game session if exists
             if game_pin in game_sessions:
                 game.log(f'🧹 Cleaning up previous game session: {game_pin}')
-                close_game_and_cleanup(
+                await close_game_and_cleanup(
                     game_sessions, player_registry, client_rooms, socket_to_player,
                     addin_sockets_by_game, player_sockets_by_game,
-                    socketio, game_pin, game.logger, reason='new_session',
-                    game_timeout_controls=game_timeout_controls
+                    sio, game_pin, game.logger, reason='new_session',
+                    game_timeout_controls=game_timeout_controls,
+                    players_by_game=players_by_game,
                 )
-            
+
             # Get optional language parameter
             language = request.args.get('language', 'en')
 
@@ -486,25 +506,26 @@ def create_game_routes(
                 'gameStarted': False,
                 'language': language
             }
-            
+
             # Schedule auto-close after 5 minutes while waiting for admin to start.
-            schedule_game_timeout(
+            await schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 addin_sockets_by_game, player_sockets_by_game,
-                socketio, game_pin, game.logger,
+                sio, game_pin, game.logger,
                 timeout_seconds=WAITING_ROOM_TIMEOUT_SECONDS,
-                game_timeout_controls=game_timeout_controls
+                game_timeout_controls=game_timeout_controls,
+                players_by_game=players_by_game,
             )
-            
+
             game.log(f'✅ Room created: PIN={game_pin} (waiting for admin to start game)')
-            
+
             return jsonify({
                 'status': 'success',
                 'message': 'Room created successfully',
                 'gamePin': game_pin,
                 'gameStarted': False
             })
-            
+
         except Exception as e:
             game.log(f'❌ Error in create_room: {str(e)}')
             return jsonify({
@@ -512,7 +533,7 @@ def create_game_routes(
                 'message': str(e)
             }), 500
 
-    def handle_start_game():
+    async def handle_start_game():
         """Start the game - called from Admin when "Start Game" button is clicked.
 
         This performs:
@@ -521,33 +542,33 @@ def create_game_routes(
         """
         try:
             game_pin = request.args.get('game_pin')
-            
+
             game.log(f'📨 GET /start_game - game_pin: {game_pin}')
-            
+
             if not game_pin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing game_pin'
                 }), 400
-            
+
             # Validate and sanitize
             game_pin = re.sub(r'[^0-9]', '', game_pin)
-            
+
             if len(game_pin) != 6:
                 return jsonify({
                     'status': 'error',
                     'message': 'Game PIN must be 6 digits'
                 }), 400
-            
+
             # Check if room exists
             if game_pin not in game_sessions:
                 return jsonify({
                     'status': 'error',
                     'message': 'Room not found. Add-in must create room first.'
                 }), 404
-            
+
             session = game_sessions[game_pin]
-            
+
             # Check if already started
             if session.get('gameStarted', False):
                 return jsonify({
@@ -555,7 +576,7 @@ def create_game_routes(
                     'message': 'Game already started',
                     'gamePin': game_pin
                 })
-            
+
             # Mark game as started AND active (players can now join)
             session['gameStarted'] = True
             session['active'] = True
@@ -571,28 +592,29 @@ def create_game_routes(
             )
 
             # Replace waiting-room timeout with guardian-aware started timeout.
-            schedule_game_timeout(
+            await schedule_game_timeout(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 addin_sockets_by_game, player_sockets_by_game,
-                socketio, game_pin, game.logger,
+                sio, game_pin, game.logger,
                 timeout_seconds=timeout_seconds,
-                game_timeout_controls=game_timeout_controls
+                game_timeout_controls=game_timeout_controls,
+                players_by_game=players_by_game,
             )
-            
+
             game.log(f'✅ Game started and activated: PIN={game_pin}')
-            
+
             # Emit event to Add-in to initialize game state
-            emit_to_addins(socketio, addin_sockets_by_game, game.logger, 'game_started', {
+            await emit_to_addins(sio, addin_sockets_by_game, game.logger, 'game_started', {
                 'gamePin': game_pin,
                 'action': 'initialize_game'
             }, game_pin)
-            
+
             return jsonify({
                 'status': 'success',
                 'message': 'Game started successfully',
                 'gamePin': game_pin
             })
-            
+
         except Exception as e:
             game.log(f'❌ Error in start_game: {str(e)}')
             return jsonify({

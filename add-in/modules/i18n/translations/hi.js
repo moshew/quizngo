@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': 'कोई सक्रिय सर्वर उपलब्ध नहीं',
         'Game server is unavailable': 'गेम सर्वर अनुपलब्ध है',
-        'Game PIN not found': 'गेम PIN नहीं मिला',
-        'Failed to resolve server from LB': 'लोड बैलेंसर से कनेक्शन विफल',
+        'Game PIN not found': 'गेम कोड नहीं मिला',
+        'Failed to resolve server from LB': 'गेम सर्वर से कनेक्ट करते समय त्रुटि',
         'Room not found. Add-in must create room first.': 'कमरा नहीं मिला। पहले कमरा बनाएं।',
         'Game already started': 'गेम पहले से शुरू हो चुका है',
         'Game session not found': 'गेम सेशन नहीं मिला',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ कमरा बनाने में त्रुटि: {{message}}',
-        websocket: '⚠️ WebSocket कनेक्शन त्रुटि',
+        websocket: 'गेम से कनेक्ट नहीं हो पाया। कृपया अपना कनेक्शन जांचें और फिर से प्रयास करें।',
         startGame: 'गेम शुरू करने में त्रुटि: {{message}}',
         gameClosed: 'गेम बंद: {{reason}}',
         connectionLost: 'कनेक्शन खो गया। गेम बंद।',
@@ -130,7 +130,7 @@ export default {
         addParticipantsCount: 'प्रतिभागियों की संख्या जोड़ने में त्रुटि',
         addParticipantsList: 'प्रतिभागियों की सूची जोड़ने में त्रुटि',
         addAnswersDistribution: 'उत्तर वितरण जोड़ने में त्रुटि',
-        addLeaderboard: 'लीडरबोर्ड तत्व जोड़ने में त्रुटि',
+        addLeaderboard: 'लीडरबोर्ड जोड़ने में त्रुटि',
         selectSlideFirst: 'कृपया पहले एक स्लाइड चुनें',
     },
 

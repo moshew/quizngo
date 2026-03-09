@@ -110,8 +110,8 @@ export default {
     serverErrors: {
         'No active servers available': 'Aucun serveur actif disponible',
         'Game server is unavailable': 'Le serveur de jeu est indisponible',
-        'Game PIN not found': 'PIN du jeu introuvable',
-        'Failed to resolve server from LB': 'Échec de connexion au répartiteur de charge',
+        'Game PIN not found': 'Code du jeu introuvable',
+        'Failed to resolve server from LB': 'Erreur lors de la communication avec le serveur de jeu',
         'Room not found. Add-in must create room first.': 'Salle introuvable. Veuillez créer une salle d\'abord.',
         'Game already started': 'Le jeu a déjà commencé',
         'Game session not found': 'Session de jeu introuvable',
@@ -119,7 +119,7 @@ export default {
     // Errors
     errors: {
         createRoom: '⚠️ Erreur lors de la création de la salle : {{message}}',
-        websocket: '⚠️ Erreur de connexion WebSocket',
+        websocket: 'Impossible de se connecter au jeu. Vérifiez votre connexion et réessayez.',
         startGame: 'Erreur lors du démarrage du jeu : {{message}}',
         gameClosed: 'Jeu fermé : {{reason}}',
         connectionLost: 'Connexion perdue. Jeu fermé.',
