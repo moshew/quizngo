@@ -25,7 +25,7 @@ const MAX_RECONNECTION_TIME_MS = 30000; // 30 seconds total
 let reconnectionStartTime = null;
 
 // Participants management - enhanced with scoring data
-let participantsData = new Map(); // Map of userId -> { userId, nickname, score, lastAnswerTime, lastAnswerCorrect }
+let participantsData = new Map(); // Map of userId -> { userId, nickname, score, correctStreak, lastAnswerTime, lastAnswerCorrect }
 
 // Current question answer tracking
 let currentQuestionAnswers = new Map(); // Map of userId -> { answerIndex, timestamp }
@@ -416,6 +416,10 @@ function handleParticipantUpdate(data, callback) {
                 nickname: nick,
                 icon: icon || '👤', // Default icon if missing
                 score: 0,
+                correctStreak: 0,
+                correctAnswers: 0,
+                questionsAnswered: 0,
+                bestStreak: 0,
                 lastAnswerTime: null,
                 lastAnswerCorrect: null
             });

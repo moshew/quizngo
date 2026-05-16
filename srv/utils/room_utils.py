@@ -11,6 +11,7 @@ import time
 
 _REASON_CODE_MAP = {
     'manual': 'MANUAL',
+    'completed': 'COMPLETED',
     'timeout': 'TIMEOUT',
     'addin_closed': 'ADDIN_CLOSED',
     'new_session': 'NEW_SESSION',

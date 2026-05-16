@@ -32,6 +32,19 @@ STARTED_GAME_TIMEOUT_SECONDS = 3600
 GUARDIAN_LESS_TIMEOUT_SECONDS = 600
 
 
+def normalize_correct_answer(value):
+    """Return a valid 1-4 correct-answer index, or None."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+
+    if 1 <= parsed <= 4:
+        return parsed
+
+    return None
+
+
 def create_game_routes(
     sio,
     game,
@@ -128,6 +141,7 @@ def create_game_routes(
 
             game_pin = data.get('gamePin')
             results = data.get('results', [])
+            request_correct_answer = normalize_correct_answer(data.get('correctAnswer'))
 
             # Clear current question state (answer time ended)
             if game_pin in game_sessions:
@@ -162,6 +176,9 @@ def create_game_routes(
                 target_sid = sid_by_uid.get(user_id)
                 if not target_sid:
                     return
+                correct_answer = normalize_correct_answer(result.get('correctAnswer')) or request_correct_answer
+                if correct_answer is None:
+                    game.log(f'⚠️ Missing valid correctAnswer for result userId={user_id} gamePin={game_pin}')
                 try:
                     await sio.emit('player_results', {
                         'userId': user_id,
@@ -170,6 +187,11 @@ def create_game_routes(
                         'cumulativeScore': result.get('cumulativeScore'),
                         'rank': result.get('rank'),
                         'isCorrect': result.get('isCorrect'),
+                        'correctAnswer': correct_answer,
+                        'streakCount': result.get('streakCount'),
+                        'correctAnswers': result.get('correctAnswers'),
+                        'totalQuestions': result.get('totalQuestions'),
+                        'bestStreak': result.get('bestStreak'),
                         'answered': result.get('answered'),
                         'timestamp': ts,
                     }, to=target_sid)
@@ -420,6 +442,9 @@ def create_game_routes(
 
             # Validate and sanitize game_pin
             game_pin = re.sub(r'[^0-9]', '', game_pin)
+            close_reason = request.args.get('reason', 'manual')
+            if close_reason not in {'manual', 'completed'}:
+                close_reason = 'manual'
 
             if len(game_pin) != 6:
                 return jsonify({
@@ -439,7 +464,7 @@ def create_game_routes(
             await close_game_and_cleanup(
                 game_sessions, player_registry, client_rooms, socket_to_player,
                 addin_sockets_by_game, player_sockets_by_game,
-                sio, game_pin, game.logger, reason='manual',
+                sio, game_pin, game.logger, reason=close_reason,
                 game_timeout_controls=game_timeout_controls,
                 players_by_game=players_by_game,
             )

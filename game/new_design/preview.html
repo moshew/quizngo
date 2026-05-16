@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>QuizNGO · Magenta Party — preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    h1 { font-family: 'Bricolage Grotesque', system-ui; font-weight: 800; font-size: 40px; letter-spacing: -1px; margin: 0 0 6px; color: #1a0a2e; }
+    .sub { color: #666; font-size: 14px; max-width: 720px; line-height: 1.5; }
+    .wrap { padding: 40px 32px 80px; max-width: 1400px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 32px 28px; margin-top: 32px; }
+    .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .cell-label { font-size: 12px; font-weight: 600; color: #1a0a2e; letter-spacing: 0.4px; }
+    .cell-sub { font-size: 11px; color: #888; margin-top: -6px; }
+    hr { border: 0; border-top: 1px solid rgba(0,0,0,0.08); margin: 28px 0 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>QuizNGO · Magenta Party</h1>
+    <div class="sub">12 player-facing screens, sized to a 320×640 mobile-browser viewport. The frame around each screen is a slim browser URL bar — strip it when porting; in your real app these are full-bleed pages.</div>
+    <hr />
+    <div id="root" class="grid"></div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="src/screens-shared.jsx"></script>
+  <script type="text/babel" src="src/screens-magenta.jsx"></script>
+  <script type="text/babel">
+    const { MagentaPin, MagentaName, MagentaLobby,
+            MagentaAnswer, MagentaAnswered,
+            MagentaResultCorrect, MagentaResultWrong, MagentaResultTimeout,
+            MagentaGameOver, MagentaGameTimeout, MagentaDisconnected } = window.MagentaScreens;
+
+    const SCREENS = [
+      { id: "01",  label: "01 · PIN entry",          sub: "Enter game PIN to join",                       node: <MagentaPin /> },
+      { id: "02",  label: "02 · Name + sidekick",    sub: "Pick a display name and emoji avatar",         node: <MagentaName /> },
+      { id: "03",  label: "03 · Lobby",              sub: "You're in — waiting for host to start",        node: <MagentaLobby /> },
+      { id: "04a", label: "04a · Question (24s)",    sub: "Pick one of four answers — normal timer",      node: <MagentaAnswer time={24} /> },
+      { id: "04b", label: "04b · Question (3s)",     sub: "Last seconds — timer flips danger + pulses",   node: <MagentaAnswer time={3} urgent /> },
+      { id: "04c", label: "04c · Locked-in",         sub: "After answering — waiting for others",         node: <MagentaAnswered /> },
+      { id: "05a", label: "05a · Result · Correct",  sub: "Right answer — points + streak update",        node: <MagentaResultCorrect /> },
+      { id: "05b", label: "05b · Result · Incorrect",sub: "Wrong answer — shows the correct one",         node: <MagentaResultWrong /> },
+      { id: "05c", label: "05c · Result · Timeout",  sub: "Didn't answer in time — zero points",          node: <MagentaResultTimeout /> },
+      { id: "06",  label: "06 · Game over",          sub: "Final standing + total score",                 node: <MagentaGameOver /> },
+      { id: "07",  label: "07 · Disconnected",       sub: "Lost connection to game server",               node: <MagentaDisconnected /> },
+      { id: "08",  label: "08 · Game ended (timeout)", sub: "Server force-closed the session — no activity", node: <MagentaGameTimeout /> },
+    ];
+
+    function App() {
+      return SCREENS.map(s => (
+        <div className="cell" key={s.id}>
+          {s.node}
+          <div className="cell-label">{s.label}</div>
+          <div className="cell-sub">{s.sub}</div>
+        </div>
+      ));
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

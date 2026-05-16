@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizNGO – תדריך עיצוב למשחק</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f6fa;
+    color: #222;
+    direction: rtl;
+  }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 100%);
+    color: #fff;
+    padding: 40px 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 30px;
+  }
+  .page-header h1 { font-size: 36px; font-weight: 800; color: #ff8c00; }
+  .page-header p  { font-size: 16px; color: rgba(255,255,255,0.75); margin-top: 8px; max-width: 600px; line-height: 1.6; }
+  .page-header .badge { background: rgba(255,140,0,0.2); border: 1px solid #ff8c00; color: #ff8c00; padding: 6px 14px; border-radius: 20px; font-size: 13px; white-space: nowrap; }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    background: #fff;
+    border-right: 5px solid #0078d4;
+    margin: 40px 40px 24px;
+    padding: 18px 20px;
+    border-radius: 0 8px 8px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .section-header h2 { font-size: 22px; font-weight: 700; color: #0f3460; }
+  .section-header p  { font-size: 14px; color: #555; margin-top: 6px; line-height: 1.5; }
+
+  /* ── SCREEN CARDS ── */
+  .screens-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    padding: 0 40px 40px;
+  }
+
+  .screen-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.09);
+    overflow: hidden;
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .screen-card.wide { width: 460px; }
+  .screen-card.full-width { width: 100%; }
+
+  .card-label {
+    background: #0f3460;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-label .num {
+    background: #ff8c00;
+    color: #fff;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; flex-shrink: 0;
+  }
+
+  .mock-wrapper {
+    padding: 20px;
+    background: #f9f9f9;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .mock-wrapper.dark { background: #1a1a2e; }
+  .mock-wrapper.white { background: #ffffff; }
+  .mock-wrapper.gray  { background: #f0f0f0; }
+
+  .desc-box {
+    padding: 16px 18px;
+    border-top: 1px solid #eee;
+    flex: 1;
+  }
+  .desc-box h4 { font-size: 14px; font-weight: 700; color: #0f3460; margin-bottom: 6px; }
+  .desc-box p  { font-size: 13px; color: #555; line-height: 1.6; }
+  .desc-box ul { font-size: 13px; color: #555; line-height: 1.8; padding-right: 18px; margin-top: 6px; }
+
+  .note {
+    background: #fff8e1;
+    border: 1px solid #ffd54f;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #7a5c00;
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
+  /* ── GAME APP MOCKS (dark theme) ── */
+  .phone-frame {
+    width: 260px;
+    height: 480px;
+    background: linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+    border-radius: 28px;
+    border: 3px solid rgba(255,255,255,0.15);
+    padding: 24px 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    justify-content: center;
+    position: relative;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  }
+
+  /* PIN Screen */
+  .g-title  { font-size: 26px; font-weight: 800; color: #ff8c00; text-align: center; text-shadow: 0 0 16px rgba(255,140,0,0.4); }
+  .g-input  {
+    width: 100%; padding: 14px; font-size: 24px; text-align: center;
+    background: rgba(255,255,255,0.1); border: 2px solid rgba(255,140,0,0.5);
+    color: #fff; font-weight: 700; letter-spacing: 5px; font-family: monospace;
+  }
+  .g-input-green {
+    width: 100%; padding: 12px; font-size: 18px; text-align: center;
+    background: rgba(255,255,255,0.1); border: 2px solid rgba(0,255,136,0.5);
+    color: #fff; font-weight: 600;
+  }
+  .g-btn {
+    width: 100%; padding: 14px; font-size: 17px; font-weight: 700;
+    background: linear-gradient(135deg, #ff8c00, #ffa500);
+    color: #1a1a2e; border: none; cursor: pointer; text-align: center;
+  }
+  .g-btn-out {
+    width: 100%; padding: 12px; font-size: 15px; font-weight: 700;
+    background: transparent; color: #00ff88; border: 2px solid #00ff88; cursor: pointer; text-align: center;
+  }
+  .g-subtitle { font-size: 15px; color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.3); text-align: center; }
+  .g-label   { font-size: 12px; color: rgba(255,255,255,0.4); text-align: center; }
+  .g-score   { font-size: 52px; font-weight: 800; color: #ff8c00; }
+  .g-rank    { font-size: 20px; font-weight: 700; color: #00ff88; padding: 8px 22px; background: rgba(0,255,136,0.1); border-radius: 20px; }
+  .g-cumul   { font-size: 13px; color: rgba(255,255,255,0.4); }
+
+  /* Icon grid */
+  .icon-grid {
+    display: grid; grid-template-columns: repeat(6,1fr); gap: 6px; width: 100%;
+  }
+  .icon-btn {
+    aspect-ratio: 1; font-size: 18px;
+    background: rgba(255,255,255,0.08); border: 2px solid transparent;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .icon-btn.sel { border-color: #00ff88; background: rgba(0,255,136,0.15); }
+
+  /* Answer grid fullscreen — raw class (unused in mocks, kept for reference) */
+  .answer-fullscreen {
+    width: 260px; height: 360px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    border-radius: 12px; overflow: hidden;
+    position: relative;
+  }
+  /* Phone-shaped answer screen mock */
+  .phone-frame-answer {
+    width: 260px; height: 480px;
+    background: #1a1a2e;
+    border-radius: 28px;
+    border: 3px solid rgba(255,255,255,0.15);
+    padding: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 6px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    position: relative;
+  }
+  .ans-btn {
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border: none;
+  }
+  .ans-red    { background: #e74c3c; }
+  .ans-blue   { background: #3498db; }
+  .ans-yellow { background: #f1c40f; }
+  .ans-green  { background: #2ecc71; }
+  .shape-triangle { width:0; height:0; border-left:22px solid transparent; border-right:22px solid transparent; border-bottom:38px solid rgba(255,255,255,0.9); }
+  .shape-diamond  { width:28px; height:28px; background:rgba(255,255,255,0.9); transform:rotate(45deg); }
+  .shape-circle   { width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,0.9); }
+  .shape-square   { width:30px; height:30px; background:rgba(255,255,255,0.9); }
+
+  .timer-badge {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.55); color: #fff; font-size: 20px; font-weight: 800;
+    padding: 4px 16px; border-radius: 20px; backdrop-filter: blur(4px);
+  }
+  .timer-badge.urgent { background: rgba(200,0,0,0.7); animation: pulse 0.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% {transform:translateX(-50%) scale(1);} 50% {transform:translateX(-50%) scale(1.1);} }
+
+  /* Answered overlay */
+  .answered-overlay {
+    width: 260px; min-height: 360px; background: rgba(26,26,46,0.98);
+    border-radius: 12px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+  }
+  .answered-icon { font-size: 80px; }
+  .answered-text { font-size: 24px; font-weight: 700; color: #00ff88; }
+  .answered-timer { font-size: 48px; font-weight: 800; color: rgba(255,255,255,0.7); }
+  .spinner-small {
+    width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2);
+    border-top: 3px solid #ff8c00; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Disconnected overlay */
+  .disco-overlay {
+    width: 260px; min-height: 400px; background: rgba(26,26,46,0.97);
+    border-radius: 12px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; padding: 20px;
+    text-align: center;
+  }
+  .disco-icon  { font-size: 64px; }
+  .disco-title { font-size: 28px; font-weight: 700; color: #ff6b6b; text-shadow: 0 0 20px rgba(255,107,107,0.4); text-align: center; }
+  .disco-sub   { font-size: 16px; color: rgba(255,255,255,0.6); text-align: center; margin-bottom: 12px; }
+
+  /* Lobby */
+  .lobby-avatar { font-size: 80px; }
+  .lobby-name   { font-size: 28px; font-weight: 700; color: #ff8c00; text-shadow: 0 0 15px rgba(255,140,0,0.4); }
+  .lobby-wait   { font-size: 18px; color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
+
+  /* Lang badge */
+  .lang-btn {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.8); font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 16px;
+  }
+
+  /* ── ADDIN MOCK (white theme) ── */
+  .addin-frame {
+    width: 300px;
+    min-height: 500px;
+    background: #fff;
+    border: 1px solid #e1dfdd;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    direction: rtl;
+  }
+  .addin-tabs {
+    display: flex; background: #fff; border-bottom: 1px solid #e1dfdd;
+  }
+  .addin-tab {
+    flex: 1; padding: 10px 4px; text-align: center; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; color: #323130; cursor: pointer;
+  }
+  .addin-tab.active { border-bottom-color: #0078d4; color: #0078d4; background: #eff6fc; }
+  .addin-content { flex: 1; overflow-y: auto; }
+
+  /* slide list */
+  .slide-list { list-style: none; }
+  .slide-item {
+    padding: 10px 12px; border-bottom: 1px dashed #e1dfdd;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; cursor: pointer;
+  }
+  .slide-item.selected { background: #eff6fc; box-shadow: inset -3px 0 0 #0078d4; }
+  .slide-item .type-badge {
+    font-size: 10px; color: #0078d4; background: #eff6fc;
+    border: 1px solid #c7e0f4; border-radius: 3px; padding: 1px 5px; font-weight: 600;
+  }
+  .slide-item .ans-badge {
+    font-size: 10px; color: #107c10; background: #dff6dd;
+    border: 1px solid #a7d7a3; border-radius: 3px; padding: 1px 5px; font-weight: 700; margin-right: 4px;
+  }
+
+  /* actions grid */
+  .addin-actions-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px;
+  }
+  .action-card {
+    border: 1px solid #e1dfdd; border-radius: 4px; padding: 12px 8px;
+    text-align: center; cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; gap: 6px;
+  }
+  .action-card:hover { border-color: #0078d4; }
+  .action-card .icon { font-size: 20px; color: #0078d4; }
+  .action-card .lbl  { font-size: 11px; font-weight: 600; color: #323130; }
+
+  /* settings */
+  .settings-container { padding: 14px; }
+  .settings-title { font-size: 14px; font-weight: 700; color: #0f3460; margin-bottom: 14px; }
+  .setting-group { margin-bottom: 14px; }
+  .setting-label { font-size: 12px; font-weight: 600; color: #323130; display: block; margin-bottom: 4px; }
+  .setting-input { width: 100%; padding: 7px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+  .setting-select { width: 100%; padding: 7px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background: #fff; }
+  .setting-divider { border: none; border-top: 1px solid #e1dfdd; margin: 12px 0; }
+  .checkbox-group { margin-top: 8px; }
+  .checkbox-item { margin-bottom: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+
+  /* addin bottom */
+  .addin-bottom {
+    padding: 8px; border-top: 1px solid #e1dfdd; background: #fff;
+  }
+  .btn-start {
+    width: 100%; padding: 9px; background: #0078d4; color: #fff; border: none;
+    border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-stop {
+    width: 100%; padding: 9px; background: #d13438; color: #fff; border: none;
+    border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+
+  /* addin status bar */
+  .status-bar {
+    background: #0078d4; color: #fff; padding: 6px 10px;
+    font-size: 11px; display: flex; justify-content: space-between;
+  }
+
+  /* admin overlay inside addin */
+  .admin-overlay {
+    width: 300px; background: #1a1a2e; border-radius: 4px;
+    overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); direction: rtl;
+  }
+  .admin-topbar {
+    background: #0f3460; padding: 10px 14px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .admin-topbar-title { color: #fff; font-size: 13px; font-weight: 700; }
+  .admin-topbar-x    { color: rgba(255,255,255,0.6); font-size: 16px; cursor: pointer; }
+  .admin-pin         { text-align: center; padding: 16px; }
+  .admin-pin-label   { font-size: 11px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; }
+  .admin-pin-value   { font-size: 40px; font-weight: 800; color: #ff8c00; letter-spacing: 6px; display: block; margin-top: 4px; }
+  .admin-section     { padding: 10px 14px; }
+  .admin-section-label { font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
+  .admin-qr          {
+    width: 100%; height: 90px; background: #fff; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .admin-url-box {
+    display: flex; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 4px; overflow: hidden;
+  }
+  .admin-url-input { flex:1; background: transparent; border: none; color: rgba(255,255,255,0.7); font-size: 11px; padding: 6px 10px; font-family: monospace; }
+  .admin-url-copy  { background: rgba(255,255,255,0.1); border: none; color: rgba(255,255,255,0.6); padding: 6px 10px; cursor: pointer; }
+  .admin-footer    { padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 6px; }
+  .admin-dot       { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; }
+  .admin-footer-text { font-size: 12px; color: #999; }
+
+  /* onboarding addin */
+  .onboarding-frame {
+    width: 300px; min-height: 480px; background: #fff;
+    border: 1px solid #e1dfdd; border-radius: 4px;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    direction: ltr;
+  }
+  .onb-body {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 20px; gap: 10px;
+  }
+  .onb-logo-area {
+    background: #f0f6ff; border-radius: 8px; padding: 16px 30px;
+    font-size: 22px; font-weight: 800; color: #0078d4; letter-spacing: 2px;
+  }
+  .onb-label { font-size: 14px; font-weight: 600; color: #323130; margin-top: 12px; }
+  .onb-select { width: 100%; padding: 9px 10px; border: 1px solid #c8c6c4; border-radius: 4px; font-size: 13px; }
+  .onb-btn { width: 100%; padding: 11px; background: #0078d4; color: #fff; border: none; border-radius: 4px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; text-align: center; }
+  .onb-tpl-title { font-size: 15px; font-weight: 700; color: #323130; text-align: center; }
+  .onb-tpl-grid  { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .onb-tpl-card  { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 3px solid transparent; border-radius: 8px; padding: 6px; cursor: pointer; }
+  .onb-tpl-card.sel { border-color: #0078d4; }
+  .onb-tpl-img   { width: 120px; height: 68px; border-radius: 4px; object-fit: cover; }
+  .onb-tpl-blank { width: 120px; height: 68px; background: #fff; border: 1px solid #c8c6c4; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; }
+  .onb-tpl-lbl   { font-size: 12px; font-weight: 600; color: #323130; }
+  .onb-footer    { padding: 10px 14px; border-top: 1px solid #e1dfdd; }
+
+  /* ── ADMIN PANEL MOCK ── */
+  .admin-app-frame {
+    width: 320px; min-height: 400px;
+    background: linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+    border-radius: 12px; padding: 30px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4); direction: rtl;
+  }
+  .admin-app-title { font-size: 22px; font-weight: 800; color: #ff8c00; }
+  .admin-app-sub   { font-size: 14px; color: rgba(255,255,255,0.6); }
+  .admin-pin-input { width: 100%; padding: 12px; font-size: 22px; text-align: center; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,140,0,0.4); color: #fff; font-weight: 700; letter-spacing: 4px; font-family: monospace; }
+  .admin-connect-btn { width: 100%; padding: 13px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #ff8c00, #ffa500); color: #1a1a2e; border: none; cursor: pointer; text-align: center; }
+  .admin-chip { background: rgba(255,140,0,0.15); border: 1px solid #ff8c00; border-radius: 8px; padding: 12px 24px; text-align: center; }
+  .admin-chip-label { font-size: 11px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; }
+  .admin-chip-pin   { font-size: 34px; font-weight: 800; color: #ff8c00; letter-spacing: 5px; display: block; margin-top: 2px; }
+  .admin-next-btn   { width: 100%; padding: 13px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #00b894, #00cec9); color: #fff; border: none; cursor: pointer; border-radius: 4px; text-align: center; }
+  .admin-start-btn  { width: 100%; padding: 13px; font-size: 16px; font-weight: 700; background: linear-gradient(135deg, #ff8c00, #ffa500); color: #1a1a2e; border: none; cursor: pointer; border-radius: 4px; text-align: center; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow-section { padding: 0 40px 40px; }
+  .flow-box {
+    background: #fff; border-radius: 12px; padding: 28px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+  }
+  .flow-title { font-size: 16px; font-weight: 700; color: #0f3460; margin-bottom: 20px; }
+  .flow-row   { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+  .flow-step  {
+    background: #eff6fc; border: 2px solid #c7e0f4; border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; font-weight: 600; color: #0f3460;
+    text-align: center; min-width: 90px;
+  }
+  .flow-arrow { font-size: 20px; color: #0078d4; margin: 0 6px; }
+
+  /* ── COLOR PALETTE ── */
+  .palette-section { padding: 0 40px 40px; }
+  .palette-box {
+    background: #fff; border-radius: 12px; padding: 28px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+  }
+  .palette-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+  .swatch { width: 80px; text-align: center; }
+  .swatch-color { width: 80px; height: 56px; border-radius: 8px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.08); }
+  .swatch-name  { font-size: 11px; font-weight: 700; color: #333; }
+  .swatch-hex   { font-size: 10px; color: #888; font-family: monospace; }
+
+  /* ── QR placeholder ── */
+  .qr-placeholder {
+    width: 70px; height: 70px;
+    background: repeating-conic-gradient(#000 0% 25%, #fff 0% 50%) 0 0 / 8px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── Misc ── */
+  .tag { display: inline-block; background: #eff6fc; border: 1px solid #c7e0f4; color: #0078d4; border-radius: 12px; font-size: 11px; font-weight: 600; padding: 2px 8px; margin: 2px; }
+  .tag.green { background: #dff6dd; border-color: #a7d7a3; color: #107c10; }
+  .tag.red   { background: #fde7e9; border-color: #f4abb0; color: #a52729; }
+  .tag.orange{ background: #fff4e6; border-color: #ffd59d; color: #a55c00; }
+
+  hr.divider { border: none; border-top: 2px dashed #ddd; margin: 0 40px 0; }
+
+  footer {
+    background: #0f3460; color: rgba(255,255,255,0.5); text-align: center;
+    padding: 20px; font-size: 12px; margin-top: 60px;
+  }
+
+  /* inline edit in slide list */
+  .inline-edit { display: flex; align-items: center; gap: 4px; width: 100%; }
+  .inline-select-mock { flex:1; padding:4px; border:none; border-bottom:2px solid #0078d4; background:transparent; font-size:13px; color:#323130; }
+  .inline-ok { background:#107c10; color:#fff; border:none; border-radius:3px; padding:3px 7px; font-size:11px; cursor:pointer; }
+  .inline-x  { background:#d13438; color:#fff; border:none; border-radius:3px; padding:3px 7px; font-size:11px; cursor:pointer; }
+
+  /* slide item answer nums */
+  .ans-links { display:inline-flex; gap:1px; }
+  .ans-link  { color:#0078d4; font-size:12px; font-weight:500; padding:0 2px; cursor:pointer; }
+  .ans-link.sel { color:#107c10; font-weight:700; text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE HEADER
+═══════════════════════════════════════════════ -->
+<div class="page-header">
+  <div>
+    <h1>QuizNGO!</h1>
+    <p>תדריך עיצוב מלא לחברת העיצוב — כולל כל מסכי המשחק כפי שהם כיום, עם הסברים על פונקציונליות, זרימת משתמש ואלמנטים ויזואליים.</p>
+    <p style="margin-top:10px;font-size:13px;color:rgba(255,255,255,0.5);">תאריך: מאי 2026 · גרסה עדכנית</p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;">
+    <div class="badge">📱 אפליקציית שחקנים</div>
+    <div class="badge">🎮 תוסף PowerPoint</div>
+    <div class="badge">🖥️ פאנל אדמין</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     PLAYER FLOW DIAGRAM
+═══════════════════════════════════════════════ -->
+<div class="section-header">
+  <h2>📋 תרשים זרימה — מסלול שחקן</h2>
+  <p>כל שחקן עובר את המסכים הבאים בסדר הזה. חזרה למסך הראשי (PIN) אפשרית בכל עת דרך "Play Again".</p>
+</div>
+
+<div class="flow-section">
+  <div class="flow-box">
+    <div class="flow-title">זרימת מסכי השחקן:</div>
+    <div class="flow-row">
+      <div class="flow-step">1. PIN<br><small style="font-weight:400;color:#555;">הכנסת קוד</small></div>
+      <div class="flow-arrow">←</div>
+      <div class="flow-step">2. שם וסמל<br><small style="font-weight:400;color:#555;">בחירת זהות</small></div>
+      <div class="flow-arrow">←</div>
+      <div class="flow-step">3. לובי<br><small style="font-weight:400;color:#555;">המתנה</small></div>
+      <div class="flow-arrow">←</div>
+      <div class="flow-step">4. תשובות<br><small style="font-weight:400;color:#555;">4 כפתורים</small></div>
+      <div class="flow-arrow">←</div>
+      <div class="flow-step">5. תוצאה<br><small style="font-weight:400;color:#555;">ניקוד ודירוג</small></div>
+      <div class="flow-arrow">↩</div>
+      <div class="flow-step">6. סיום<br><small style="font-weight:400;color:#555;">דירוג סופי</small></div>
+    </div>
+    <p style="font-size:12px;color:#888;margin-top:14px;">* מסכים 4–5 חוזרים על עצמם לכל שאלה. מסך 6 מוצג פעם אחת בסוף המשחק.</p>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 1 — PLAYER APP
+═══════════════════════════════════════════════ -->
+<div class="section-header">
+  <h2>📱 אפליקציית שחקנים (Game App)</h2>
+  <p>אפליקציית ווב רספונסיבית. רקע: גרדיאנט כהה (#1a1a2e → #0f3460). גופן: Segoe UI. כל מסך מוצג בדיוק על כל המסך (full viewport). תמיכה ב-RTL/LTR.</p>
+</div>
+
+<div class="screens-row">
+
+  <!-- 1. PIN SCREEN -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">1</span> מסך PIN – כניסה למשחק</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="g-title">QuizNGO!</div>
+        <div class="g-input">321-</div>
+        <div class="g-btn" style="opacity:0.5;">כניסה</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>תיאור</h4>
+      <p>המסך הראשון שמוצג לשחקן. השחקן מקליד קוד PIN בן 6 ספרות.</p>
+      <ul>
+        <li>הכותרת "QuizNGO!" בצבע כתום (#ff8c00)</li>
+        <li>שדה קלט גדול עם letter-spacing רחב, פורמט אוטומטי XXX-XXX</li>
+        <li>כפתור "כניסה" מושבת עד שמוקלדות 6 ספרות</li>
+        <li>שגיאה (PIN שגוי) מוצגת כ-strip אדום בתחתית המסך</li>
+        <li>מחליף שפה <strong>לא מוצג</strong> במסך זה</li>
+      </ul>
+      <div class="note">⚠️ בלחיצה על "כניסה" — מתבצעת בדיקת API מול שרת. כפתור עובר למצב "בודק..." עם spinner.</div>
+    </div>
+  </div>
+
+  <!-- 2. PIN ERROR STATE -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">1b</span> מסך PIN – שגיאה</div>
+    <div class="mock-wrapper dark" style="position:relative;">
+      <div class="phone-frame" style="position:relative;overflow:hidden;">
+        <div class="g-title">QuizNGO!</div>
+        <div class="g-input">999-999</div>
+        <div class="g-btn">כניסה</div>
+        <!-- error strip at bottom -->
+        <div style="position:absolute;bottom:0;left:0;right:0;background:#c62828;color:#fff;text-align:center;font-size:12px;font-weight:700;padding:8px;">לא נמצא חדר עם PIN זה</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>מצב שגיאה</h4>
+      <p>כשה-PIN לא תקין מוצג strip אדום קבוע (#c62828) בתחתית המסך (position: fixed, bottom: 0).</p>
+      <ul>
+        <li>רוחב מלא</li>
+        <li>טקסט: "לא נמצא חדר עם PIN זה"</li>
+        <li>נעלם אוטומטית אחרי 3 שניות</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 3. NAME SCREEN -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">2</span> מסך שם וסמל</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="lang-btn">EN ▾</div>
+        <div class="g-title" style="font-size:20px;">בחר שם</div>
+        <div style="font-size:48px;">🐔</div>
+        <div class="g-input-green" style="font-size:16px;padding:10px;">שם הניקנאם שלך</div>
+        <div class="g-subtitle" style="font-size:13px;">בחר סמל:</div>
+        <div class="icon-grid">
+          <div class="icon-btn">🤨</div><div class="icon-btn">🥳</div><div class="icon-btn sel">🐔</div>
+          <div class="icon-btn">🦁</div><div class="icon-btn">🐸</div><div class="icon-btn">🐮</div>
+          <div class="icon-btn">🥰</div><div class="icon-btn">🦝</div><div class="icon-btn">🐱</div>
+          <div class="icon-btn">🐯</div><div class="icon-btn">🐻</div><div class="icon-btn">🐰</div>
+        </div>
+        <div class="g-btn" style="font-size:15px;padding:12px;opacity:0.5;">יאללה!</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>תיאור</h4>
+      <p>השחקן בוחר שם ניקנאם וסמל אמוג'י לזהות שלו במשחק.</p>
+      <ul>
+        <li>הסמל הנבחר מוצג גדול (64px) מעל שדה הטקסט</li>
+        <li>גריד של 18 אמוג'ים (6 עמודות × 3 שורות) — ניתן לשנות</li>
+        <li>הסמל הנבחר מודגש עם גבול ירוק (#00ff88)</li>
+        <li>שדה שם: border ירוק, עד 20 תווים</li>
+        <li>כפתור "יאללה!" מושבת כשהשם ריק</li>
+        <li>מחליף שפה מוצג (פינה שמאלית עליונה ב-LTR, ימנית ב-RTL)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 4. LOBBY SCREEN -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">3</span> מסך לובי – המתנה</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="lang-btn">EN ▾</div>
+        <div class="lobby-avatar">🐔</div>
+        <div class="lobby-name">Moshe</div>
+        <div class="lobby-wait">ממתין<span style="animation:none;">...</span></div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:20px;">אתה בפנים! ממתין להתחלה</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>תיאור</h4>
+      <p>השחקן ממתין בלובי לפתיחת השאלה הבאה.</p>
+      <ul>
+        <li>הסמל הנבחר מוצג גדול (80px)</li>
+        <li>שם השחקן בכתום</li>
+        <li>"ממתין..." עם אנימציית נקודות מתחלפות</li>
+        <li>הודעת סטטוס קטנה בהיר (opacity 0.5) בתחתית</li>
+        <li>שני מצבים: לפני התחלה / בין שאלות</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 5. ANSWER SCREEN -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">4</span> מסך תשובות – 4 כפתורים</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame-answer">
+        <div class="timer-badge">24</div>
+        <div class="ans-btn ans-red"><div class="shape-triangle"></div></div>
+        <div class="ans-btn ans-blue"><div class="shape-diamond"></div></div>
+        <div class="ans-btn ans-yellow"><div class="shape-circle"></div></div>
+        <div class="ans-btn ans-green"><div class="shape-square"></div></div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>תיאור</h4>
+      <p>המסך המרכזי של המשחק — מוצג <strong>כ-fullscreen</strong> (position: fixed, מכסה את כל המסך).</p>
+      <ul>
+        <li>גריד 2×2, כל כפתור תופס רבע מסך</li>
+        <li>🔴 אדום — משולש | 🔵 כחול — מעוין | 🟡 צהוב — עיגול | 🟢 ירוק — ריבוע</li>
+        <li>טיימר בחלק עליון (badge עגול, מספר שניות)</li>
+        <li>כשנותרות ≤5 שניות — הטיימר אדום ומבצע pulse</li>
+        <li>אין שאלה/טקסט במסך השחקן — הטקסט רק בשקף PowerPoint המוקרן</li>
+      </ul>
+      <div class="note">⚠️ גובה מינימלי של כפתור: 120px. גריד: gap 12px.</div>
+    </div>
+  </div>
+
+  <!-- 5b. ANSWER URGENT -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">4b</span> מסך תשובות – טיימר דחוף</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame-answer">
+        <div class="timer-badge urgent">3</div>
+        <div class="ans-btn ans-red"><div class="shape-triangle"></div></div>
+        <div class="ans-btn ans-blue"><div class="shape-diamond"></div></div>
+        <div class="ans-btn ans-yellow"><div class="shape-circle"></div></div>
+        <div class="ans-btn ans-green"><div class="shape-square"></div></div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>מצב דחוף (≤5 שניות)</h4>
+      <p>כשהטיימר יורד ל-5 שניות ומטה, ה-badge משנה צבע ומבצע אנימציית pulse.</p>
+      <ul>
+        <li>רקע badge: rgba(200,0,0,0.7)</li>
+        <li>אנימציית scale 1→1.1→1 בקצב 0.8s</li>
+        <li>כפתורי התשובות אינם משתנים</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 6. ANSWERED OVERLAY -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">4c</span> תשובה נשלחה</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="answered-icon" style="color:#3498db;">◆</div>
+        <div class="answered-text">התשובה נשלחה!</div>
+        <div class="answered-timer">22</div>
+        <div class="spinner-small"></div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>מצב לאחר בחירה</h4>
+      <p>מיד לאחר שהשחקן בוחר תשובה — הגריד נעלם ומוחלף ב-overlay כהה.</p>
+      <ul>
+        <li>הצורה הנבחרת מוצגת גדולה בצבע הכפתור</li>
+        <li>"התשובה נשלחה!" בירוק</li>
+        <li>טיימר של השניות שנותרו ממשיך לרוץ</li>
+        <li>spinner כתום מציין "ממתין לתוצאה"</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 7. RESULT SCREEN — CORRECT -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">5a</span> מסך תוצאה – נכון</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="lang-btn">EN ▾</div>
+        <div style="font-size:72px;">✅</div>
+        <div style="font-size:28px;font-weight:700;color:#00ff88;text-shadow:0 0 16px rgba(0,255,136,0.4);">נכון!</div>
+        <div class="g-score">+850</div>
+        <div class="g-label">נקודות</div>
+        <div class="g-rank">מקום #3</div>
+        <div class="g-cumul">סה"כ: 2,350 נקודות</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>תשובה נכונה</h4>
+      <ul>
+        <li>אייקון ✅ (72px), אנימציית popIn</li>
+        <li>"נכון!" בירוק (#00ff88)</li>
+        <li>ניקוד השאלה בכתום גדול (+850)</li>
+        <li>דירוג נוכחי בתוך badge עגול ירוק</li>
+        <li>ניקוד מצטבר קטן ועמום בתחתית</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 8. RESULT — INCORRECT -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">5b</span> מסך תוצאה – שגוי</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="lang-btn">EN ▾</div>
+        <div style="font-size:72px;">❌</div>
+        <div style="font-size:28px;font-weight:700;color:#ff6b6b;text-shadow:0 0 16px rgba(255,107,107,0.4);">שגוי</div>
+        <div class="g-score" style="color:#ff6b6b;">+0</div>
+        <div class="g-label">נקודות</div>
+        <div class="g-rank">מקום #7</div>
+        <div class="g-cumul">סה"כ: 1,500 נקודות</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>תשובה שגויה</h4>
+      <ul>
+        <li>אייקון ❌, הכיתוב "שגוי" באדום (#ff6b6b)</li>
+        <li>ניקוד +0</li>
+        <li>דירוג עדיין מוצג (עלול לרדת)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 9. RESULT — TIMEOUT -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">5c</span> מסך תוצאה – פג זמן</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="lang-btn">EN ▾</div>
+        <div style="font-size:72px;">⏰</div>
+        <div style="font-size:28px;font-weight:700;color:#f1c40f;text-shadow:0 0 16px rgba(241,196,15,0.4);">הזמן פג!</div>
+        <div class="g-score" style="color:#f1c40f;">+0</div>
+        <div class="g-label">נקודות</div>
+        <div class="g-rank">מקום #10</div>
+        <div class="g-cumul">סה"כ: 900 נקודות</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>פג זמן (לא ענה)</h4>
+      <ul>
+        <li>אייקון ⏰, "הזמן פג!" בצהוב (#f1c40f)</li>
+        <li>מוצג כשהשחקן לא ענה בזמן</li>
+        <li>ניקוד +0</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 10. GAME OVER -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">6</span> מסך סיום משחק</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="lang-btn">EN ▾</div>
+        <div class="g-title" style="font-size:40px;">המשחק הסתיים!</div>
+        <div style="font-size:72px;font-weight:800;color:#00ff88;text-shadow:0 0 30px rgba(0,255,136,0.5);">#2</div>
+        <div class="g-subtitle">הדירוג הסופי שלך</div>
+        <div style="font-size:28px;color:#ff8c00;text-shadow:0 0 15px rgba(255,140,0,0.4);">3,200 נקודות</div>
+        <div class="g-btn" style="margin-top:16px;font-size:16px;padding:12px;">שחק שוב</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>סיום משחק</h4>
+      <p>מוצג כשמארח המשחק סוגר את המשחק.</p>
+      <ul>
+        <li>כותרת "המשחק הסתיים!" בכתום</li>
+        <li>מספר הדירוג הסופי (#N) גדול, בירוק</li>
+        <li>ניקוד מצטבר סופי בכתום</li>
+        <li>כפתור "שחק שוב" — מחזיר למסך PIN</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 11. DISCONNECTED -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">7</span> Overlay – אבד חיבור</div>
+    <div class="mock-wrapper dark">
+      <div class="phone-frame">
+        <div class="disco-icon">⚠️</div>
+        <div class="disco-title">החיבור אבד</div>
+        <div class="disco-sub">השרת לא זמין. המשחק נסגר.</div>
+        <div class="g-btn" style="margin-top:8px;font-size:14px;padding:10px;">חזרה למסך הראשי</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>ניתוק WebSocket</h4>
+      <p>overlay שמכסה את כל המסך (z-index: 1000) כשהחיבור לשרת נותק בזמן משחק.</p>
+      <ul>
+        <li>רקע: rgba(26,26,46,0.97)</li>
+        <li>אייקון ⚠️, כותרת אדומה</li>
+        <li>כפתור חזרה — מאפס ל-PIN</li>
+        <li><em>לא</em> מוצג אם הניתוק נבע מסגירת משחק תקינה</li>
+      </ul>
+    </div>
+  </div>
+
+</div><!-- /screens-row -->
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 2 — LANGUAGE SWITCHER
+═══════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="section-header">
+  <h2>🌐 מחליף שפה (Language Switcher)</h2>
+  <p>מוצג בכל המסכים <em>חוץ ממסך PIN</em>. מיקום: פינה עליונה ימנית (LTR) / שמאלית (RTL). <strong>מדיניות RTL/LTR</strong>: השפה קובעת את כיוון הממשק הגלובלי.</p>
+</div>
+
+<div class="screens-row">
+  <div class="screen-card wide">
+    <div class="card-label"><span class="num">⊕</span> מחליף שפה – סגור ופתוח</div>
+    <div class="mock-wrapper dark" style="gap:40px;justify-content:space-around;align-items:flex-start;padding:30px;">
+      <!-- Closed -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <p style="color:rgba(255,255,255,0.5);font-size:11px;">סגור</p>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;display:flex;align-items:center;gap:6px;">
+          🌐 EN ▾
+        </div>
+      </div>
+      <!-- Open -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <p style="color:rgba(255,255,255,0.5);font-size:11px;">פתוח</p>
+        <div style="background:#1e1e3a;border:1px solid rgba(255,255,255,0.15);border-radius:8px;min-width:160px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;background:rgba(255,140,0,0.2);color:#ff8c00;font-size:13px;">
+            <span style="font-size:11px;font-weight:700;color:rgba(255,140,0,0.6);width:24px;">EN</span> English
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;color:#fff;font-size:13px;">
+            <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.45);width:24px;">HE</span> עברית
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;color:#fff;font-size:13px;">
+            <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.45);width:24px;">AR</span> العربية
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;color:#fff;font-size:13px;">
+            <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.45);width:24px;">ES</span> Español
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>פירוט</h4>
+      <ul>
+        <li>כפתור: border-radius 20px, backdrop-filter blur</li>
+        <li>תפריט נפתח: רקע #1e1e3a, border-radius 8px, min-width 180px</li>
+        <li>שפה פעילה: צבע כתום, רקע rgba(255,140,0,0.2)</li>
+        <li>קוד השפה (EN/HE וכו') בטיפוגרפיה קטנה ועמומה</li>
+        <li><strong>13 שפות נתמכות</strong> כולל ערבית, עברית, אנגלית, ספרדית ועוד</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 3 — POWERPOINT ADD-IN
+═══════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="section-header">
+  <h2>🎮 תוסף PowerPoint (Add-in)</h2>
+  <p>פאנל צד ב-PowerPoint (רוחב ~320px). עיצוב: Fluent UI / Office Style. צבע ראשי: #0078d4. רקע: #ffffff. תמיכה ב-RTL/LTR לפי שפה.</p>
+</div>
+
+<div class="screens-row">
+
+  <!-- ONBOARDING: LANGUAGE -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">A</span> Onboarding – בחירת שפה</div>
+    <div class="mock-wrapper white">
+      <div class="onboarding-frame" style="direction:ltr;">
+        <div class="onb-body" style="padding:0 24px 120px;gap:2px;">
+          <!-- Logo: image fills ~125% width -->
+          <div style="width:125%;background:#f0f6ff;border-radius:6px;padding:16px;text-align:center;font-size:22px;font-weight:800;color:#0078d4;letter-spacing:2px;">
+            QuizNGO
+            <div style="font-size:10px;font-weight:400;color:#888;margin-top:2px;">[assets/logo.png]</div>
+          </div>
+          <div class="onb-label" style="margin-top:30px;margin-bottom:5px;font-size:15px;font-weight:600;color:#323130;">Select Language</div>
+          <select class="onb-select" style="padding:10px 12px;font-size:14px;border:1px solid #c8c6c4;">
+            <option>🇺🇸 English</option>
+            <option>🇮🇱 עברית</option>
+            <option>🇸🇦 العربية</option>
+          </select>
+          <div class="onb-btn" style="margin-top:20px;padding:12px;font-size:15px;">Enter</div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>מסך ראשון — בחירת שפה</h4>
+      <p>מוצג רק בפעם הראשונה. מסך בכיוון LTR קבוע. הלוגו הוא <strong>תמונה</strong> (assets/logo.png) ברוחב 125%. כפתור "Enter" (מתורגם).</p>
+      <ul>
+        <li>זיהוי שפה אוטומטי לפי שפת Office / navigator.language</li>
+        <li>13 שפות בתפריט עם דגל + שם native</li>
+        <li>לחיצה → עובר למסך תבנית</li>
+        <li>כל הטקסטים משתנים לשפה הנבחרת בזמן אמת</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ONBOARDING: TEMPLATE -->
+  <div class="screen-card wide">
+    <div class="card-label"><span class="num">B</span> Onboarding – בחירת תבנית</div>
+    <div class="mock-wrapper white">
+      <div class="onboarding-frame" style="width:340px;direction:ltr;">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:20px 16px;gap:16px;overflow-y:auto;">
+          <div style="font-size:16px;font-weight:700;color:#323130;margin:0;text-align:center;">Choose a Game Template</div>
+          <div style="display:flex;flex-direction:column;gap:12px;width:100%;align-items:center;">
+            <!-- Blank card: 280px wide -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;border:3px solid #c8c6c4;border-radius:8px;padding:6px;cursor:pointer;width:fit-content;">
+              <div style="width:280px;height:158px;background:#fff;border:1px solid #c8c6c4;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#aaa;">Blank</div>
+              <span style="font-size:13px;font-weight:600;color:#323130;">Blank Template</span>
+            </div>
+            <!-- Classic Black card: 280px wide, selected state -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;border:3px solid #0078d4;border-radius:8px;padding:6px;cursor:pointer;box-shadow:0 0 0 2px rgba(0,120,212,0.2);width:fit-content;">
+              <div style="width:280px;height:158px;background:linear-gradient(135deg,#0f3460,#1a1a2e);border-radius:4px;display:flex;align-items:center;justify-content:center;color:#ff8c00;font-weight:800;font-size:16px;">Classic Black<br><span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.5);">[assets/black_template.jpeg]</span></div>
+              <span style="font-size:13px;font-weight:600;color:#323130;">Classic Black</span>
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid #e1dfdd;background:#fff;">
+          <div class="onb-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;">✓ Apply Template</div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>מסך שני — בחירת תבנית</h4>
+      <p>השלב האחרון לפני הכניסה לאפליקציה. הקלפים <strong>רחבים (280px)</strong> ומסודרים אנכית.</p>
+      <ul>
+        <li><strong>ריק</strong>: PowerPoint ריק, המשתמש יוסיף שקפים בעצמו</li>
+        <li><strong>Classic Black</strong>: תמונה מ-assets/black_template.jpeg, כולל שקפי שאלות מוכנים</li>
+        <li>כפתור "Apply Template" מושבת עד לבחירת קלף (disabled → כחול)</li>
+        <li>בחירה: border #0078d4 + glow, class: <code>selected</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- MAIN: SLIDES TAB -->
+  <div class="screen-card wide">
+    <div class="card-label"><span class="num">C</span> אפליקציה ראשית – לשונית שקפים</div>
+    <div class="mock-wrapper white">
+      <div class="addin-frame" style="width:340px;height:520px;">
+        <div class="addin-tabs">
+          <div class="addin-tab active">שקפים</div>
+          <div class="addin-tab">פעולות</div>
+          <div class="addin-tab">הגדרות</div>
+        </div>
+        <div class="addin-content" style="flex:1;">
+          <ul class="slide-list">
+            <li class="slide-item selected">
+              <div>
+                <div style="font-weight:600;font-size:13px;">שקף 1</div>
+                <div style="font-size:11px;color:#605e5c;">מה הבירה של גרמניה?</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span class="type-badge">שאלה</span>
+                <span class="ans-badge">✓2</span>
+              </div>
+            </li>
+            <li class="slide-item">
+              <div>
+                <div style="font-weight:600;font-size:13px;">שקף 2</div>
+                <div style="font-size:11px;color:#605e5c;">מה הבירה של צרפת?</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span class="type-badge">שאלה</span>
+                <span class="ans-badge">✓3</span>
+              </div>
+            </li>
+            <li class="slide-item">
+              <div>
+                <div style="font-weight:600;font-size:13px;">שקף 3</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span class="type-badge" style="color:#605e5c;background:#f3f2f1;border-color:#e1dfdd;">תוצאות</span>
+              </div>
+            </li>
+            <!-- Inline edit example -->
+            <li class="slide-item">
+              <div class="inline-edit" style="width:100%;">
+                <div class="inline-select-mock">שאלה ▾</div>
+                <span style="font-size:12px;color:#605e5c;margin-right:auto;">תשובה נכונה:</span>
+                <div class="ans-links">
+                  <span class="ans-link">1</span>
+                  <span class="ans-link sel">2</span>
+                  <span class="ans-link">3</span>
+                  <span class="ans-link">4</span>
+                </div>
+                <button class="inline-ok">✓</button>
+                <button class="inline-x">✕</button>
+              </div>
+            </li>
+            <li class="slide-item">
+              <div>
+                <div style="font-weight:600;font-size:13px;">שקף 5</div>
+              </div>
+              <span class="type-badge" style="color:#a52729;background:#fde7e9;border-color:#f4abb0;">לוח תוצאות</span>
+            </li>
+          </ul>
+        </div>
+        <div class="addin-bottom">
+          <div class="btn-start" style="border-radius:4px;">
+            <i style="font-size:12px;">▶</i> <span>התחל משחק</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>לשונית שקפים</h4>
+      <p>הלשונית הראשית. מציגה את כל השקפים במצגת עם סוגם ותשובה נכונה.</p>
+      <ul>
+        <li>לחיצה על שקף — עובר לשקף ב-PowerPoint</li>
+        <li>שקף נבחר: רקע #eff6fc, box-shadow כחול מהצד</li>
+        <li><strong>עריכה inline</strong> (שורה 4): לחיצה על סמל עריכה → מציג dropdown לסוג + לינקי 1/2/3/4 לתשובה נכונה</li>
+        <li>badge ירוק "✓N" = תשובה נכונה שנקבעה</li>
+        <li>כפתור "התחל משחק" ← כחול בתחתית (נשאר קבוע)</li>
+      </ul>
+      <div class="note">⚠️ כפתור "התחל משחק" הופך ל"עצור משחק" (אדום) כשמשחק פעיל.</div>
+    </div>
+  </div>
+
+  <!-- MAIN: ACTIONS TAB -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">D</span> לשונית פעולות</div>
+    <div class="mock-wrapper white">
+      <div class="addin-frame" style="height:520px;">
+        <div class="addin-tabs">
+          <div class="addin-tab">שקפים</div>
+          <div class="addin-tab active">פעולות</div>
+          <div class="addin-tab">הגדרות</div>
+        </div>
+        <div class="addin-content">
+          <!-- Actions grid: 2 columns, Fluent UI icons (ms-Icon font) -->
+          <div class="addin-actions-grid">
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ Game</div>
+              <div class="lbl">מזהה משחק</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ PeopleAdd</div>
+              <div class="lbl">מספר משתתפים</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ ContactList</div>
+              <div class="lbl">רשימת משתתפים</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ QRCode</div>
+              <div class="lbl">QR קוד</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ Clock</div>
+              <div class="lbl">זמן שאלה</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ People</div>
+              <div class="lbl">ספירת עונים</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ BarChart4</div>
+              <div class="lbl">פיזור תשובות</div>
+            </div>
+            <div class="action-card">
+              <div class="icon" style="font-family:monospace;font-size:11px;color:#0078d4;background:#eff6fc;padding:4px 6px;border-radius:3px;">⊞ Trophy</div>
+              <div class="lbl">לוח מובילים</div>
+            </div>
+          </div>
+        </div>
+        <div class="addin-bottom">
+          <div class="btn-stop" style="border-radius:4px;">⏹ עצור משחק</div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>לשונית פעולות</h4>
+      <p>גריד 2×4 של כרטיסי פעולה — כל לחיצה מוסיפה אלמנט לשקף הנוכחי ב-PowerPoint. האייקונים הם <strong>Fluent UI (ms-Icon)</strong>, לא emoji.</p>
+      <ul>
+        <li><code>ms-Icon--Game</code>: מזהה משחק (PIN box)</li>
+        <li><code>ms-Icon--PeopleAdd</code>: מספר משתתפים (counter זמן אמת)</li>
+        <li><code>ms-Icon--ContactList</code>: רשימת משתתפים</li>
+        <li><code>ms-Icon--QRCode</code>: QR לקישור המשחק</li>
+        <li><code>ms-Icon--Clock</code>: טיימר ספירה לאחור</li>
+        <li><code>ms-Icon--People</code>: ספירת עונים עד כה</li>
+        <li><code>ms-Icon--BarChart4</code>: גרף עמודות פיזור תשובות</li>
+        <li><code>ms-Icon--Trophy</code>: לוח מובילים (top 10)</li>
+      </ul>
+      <div class="note">⚠️ כרטיס פעולה: padding 15px, gap 10px, hover: border כחול + shadow + translateY(-2px).</div>
+    </div>
+  </div>
+
+  <!-- MAIN: SETTINGS TAB -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">E</span> לשונית הגדרות</div>
+    <div class="mock-wrapper white">
+      <div class="addin-frame" style="height:520px;">
+        <div class="addin-tabs">
+          <div class="addin-tab">שקפים</div>
+          <div class="addin-tab">פעולות</div>
+          <div class="addin-tab active">הגדרות</div>
+        </div>
+        <div class="addin-content">
+          <div class="settings-container">
+            <div class="settings-title">הגדרות משחק</div>
+            <div class="setting-group">
+              <label class="setting-label">שפה</label>
+              <select class="setting-select"><option>עברית</option></select>
+            </div>
+            <hr class="setting-divider">
+            <div class="setting-group">
+              <label class="setting-label">זמן תגובה (שניות)</label>
+              <input type="number" class="setting-input" value="30">
+            </div>
+            <div class="setting-group">
+              <label class="setting-label">עיכוב הפעלת שעון (שניות)</label>
+              <input type="number" class="setting-input" value="5">
+            </div>
+            <div class="setting-group">
+              <label class="setting-label">מעברים אוטומטיים:</label>
+              <div class="checkbox-group">
+                <div class="checkbox-item"><input type="checkbox" checked> לאחר סטטיסטיקה</div>
+                <div class="checkbox-item"><input type="checkbox"> לאחר לוח מובילים</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="addin-bottom">
+          <div class="btn-start">▶ התחל משחק</div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>לשונית הגדרות</h4>
+      <ul>
+        <li><strong>שפה</strong>: dropdown של 13 שפות. שינוי → UI מתרגם מיידית + כיוון RTL/LTR</li>
+        <li><strong>זמן תגובה</strong>: 5–60 שניות (ברירת מחדל: 30). שחקנים יכולים לענות עד לזמן זה.</li>
+        <li><strong>עיכוב שעון</strong>: 0–60 שניות (ברירת מחדל: 5). כמה שניות לפני שהשעון מתחיל לרוץ.</li>
+        <li><strong>מעברים אוטומטיים</strong>: האם לעבור אוטומטית לשקף הבא לאחר סטטיסטיקה / לוח מובילים</li>
+        <li>כל שינוי נשמר אוטומטית</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- STOP GAME BUTTON STATE -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">F</span> כפתור "עצור משחק" – מצב פעיל</div>
+    <div class="mock-wrapper white">
+      <div style="display:flex;flex-direction:column;gap:16px;padding:10px;">
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:6px;text-align:center;">לפני התחלה</div>
+          <div class="btn-start" style="border-radius:4px;font-size:14px;padding:12px 20px;">▶ התחל משחק</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:6px;text-align:center;">כשמשחק פעיל</div>
+          <div class="btn-stop" style="border-radius:4px;font-size:14px;padding:12px 20px;">⏹ עצור משחק</div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>מצבי כפתור תחתון</h4>
+      <ul>
+        <li>ללא PIN פעיל: כחול (#0078d4), אייקון Play "התחל משחק"</li>
+        <li>עם PIN פעיל: אדום (#d13438), אייקון Stop "עצור משחק"</li>
+        <li>הכפתור תמיד קבוע בתחתית הפאנל</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADMIN OVERLAY (ADDIN) -->
+  <div class="screen-card wide">
+    <div class="card-label"><span class="num">G</span> Admin Overlay – חיבור מנהל</div>
+    <div class="mock-wrapper gray">
+      <!-- Actual overlay: white background, light theme, position:fixed inset:0 -->
+      <div style="width:300px;min-height:460px;background:#ffffff;border:1px solid #e1dfdd;border-radius:4px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
+        <!-- Top bar: white, border-bottom -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px 10px 8px;border-bottom:1px solid #eee;">
+          <span style="font-size:15px;font-weight:700;color:#111;">חיבור מנהל</span>
+          <button style="width:32px;height:32px;border:none;background:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;">✕</button>
+        </div>
+        <!-- Body: centered, white, flex column -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:24px;">
+          <!-- PIN: dark text, monospace -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <span style="font-size:11px;font-weight:500;color:#aaa;text-transform:uppercase;letter-spacing:1px;">Game PIN</span>
+            <span style="font-family:'Consolas',monospace;font-size:32px;font-weight:800;color:#111;letter-spacing:4px;">321-456</span>
+          </div>
+          <!-- QR section -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;">
+            <p style="font-size:12px;color:#aaa;margin:0;text-align:center;">סרוק לניהול המשחק:</p>
+            <div class="qr-placeholder" style="width:120px;height:120px;border-radius:6px;"></div>
+          </div>
+          <!-- URL section -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;">
+            <p style="font-size:12px;color:#aaa;margin:0;text-align:center;">או הכנס כתובת URL ישירות:</p>
+            <div style="display:flex;align-items:center;width:100%;background:#ffffff;border:1px solid #e1dfdd;border-radius:8px;overflow:hidden;">
+              <input style="flex:1;border:none;background:transparent;padding:10px 12px;font-family:monospace;font-size:12px;color:#333;direction:ltr;text-align:center;" value="admin.quizngo.online/321456" readonly />
+              <button style="border:none;background:none;padding:10px 12px;cursor:pointer;color:#bbb;font-size:14px;">📋</button>
+            </div>
+          </div>
+        </div>
+        <!-- Footer: white, border-top, pulsing amber dot -->
+        <div style="padding:12px 20px;border-top:1px solid #eee;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>
+          <span style="font-size:13px;color:#999;">ממתין לחיבור מנהל...</span>
+        </div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>Admin Connection Overlay</h4>
+      <p>מוצג ב-Add-in כ-overlay מלא (<code>position:fixed; inset:0; z-index:3000</code>) כשמשחק מתחיל. <strong>ערכת צבעים בהירה (לבן)</strong> — לא כהה.</p>
+      <ul>
+        <li>רקע: <strong>#ffffff</strong> (לבן, לא #1a1a2e)</li>
+        <li>Top bar: לבן, border-bottom: 1px solid #eee</li>
+        <li>PIN: <strong>צבע #111 (כהה)</strong>, font monospace, 32px, letter-spacing 4px</li>
+        <li>QR: 170×170px, border-radius 10px</li>
+        <li>שדה URL: LTR, monospace, text-align center, border #e1dfdd</li>
+        <li>Footer: dot כתום (#f59e0b) עם אנימציית pulse, טקסט #999</li>
+        <li>כפתור X: border-radius 6px, hover: background #f0f0f0</li>
+      </ul>
+    </div>
+  </div>
+
+</div><!-- /screens-row -->
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 4 — ADMIN PANEL (MOBILE)
+═══════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="section-header">
+  <h2>🖥️ פאנל מנהל (Admin Panel)</h2>
+  <p>אפליקציית ווב נפרדת — בדרך כלל נפתחת בטאבלט/פלאפון של מנהל המשחק. עיצוב: זהה לאפליקציית שחקנים (רקע כהה). ממשק בעברית.</p>
+</div>
+
+<div class="screens-row">
+
+  <!-- ADMIN: PIN INPUT -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">H</span> מסך PIN – מנהל</div>
+    <div class="mock-wrapper dark">
+      <div class="admin-app-frame">
+        <div class="admin-app-title">QuizNGO Admin</div>
+        <div class="admin-app-sub">הכנס קוד PIN של המשחק</div>
+        <div class="admin-pin-input">321-</div>
+        <div class="admin-connect-btn">חבר למשחק</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>כניסת מנהל</h4>
+      <p>המנהל מקליד את ה-PIN של המשחק שנוצר בתוסף PowerPoint.</p>
+      <ul>
+        <li>עיצוב זהה לאפליקציית שחקנים</li>
+        <li>שדה PIN: פורמט XXX-XXX, מספרים בלבד</li>
+        <li>URL ניתן לטעינה ישירה עם PIN: /admin/321456</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADMIN: CONTROL PANEL - WAITING -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">I</span> מסך בקרה – לפני התחלה</div>
+    <div class="mock-wrapper dark">
+      <div class="admin-app-frame">
+        <div class="admin-chip">
+          <div class="admin-chip-label">Game PIN</div>
+          <span class="admin-chip-pin">321-456</span>
+        </div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.6);text-align:center;">12 שחקנים ממתינים</div>
+        <div class="admin-start-btn">▶ התחל משחק</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>לוח בקרה — לפני התחלה</h4>
+      <ul>
+        <li>PIN מוצג כ-chip כתום גדול</li>
+        <li>מספר שחקנים שכבר הצטרפו</li>
+        <li>כפתור "התחל משחק" בכתום</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADMIN: CONTROL PANEL - ACTIVE -->
+  <div class="screen-card">
+    <div class="card-label"><span class="num">J</span> מסך בקרה – משחק פעיל</div>
+    <div class="mock-wrapper dark">
+      <div class="admin-app-frame">
+        <div class="admin-chip">
+          <div class="admin-chip-label">Game PIN</div>
+          <span class="admin-chip-pin">321-456</span>
+        </div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.6);text-align:center;">שקף 3 / 8 · 24 שחקנים</div>
+        <div class="admin-next-btn">▶ שאלה הבאה</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;margin-top:-12px;">21 ענו מתוך 24</div>
+      </div>
+    </div>
+    <div class="desc-box">
+      <h4>לוח בקרה — משחק פעיל</h4>
+      <ul>
+        <li>PIN תמיד גלוי</li>
+        <li>מוצג מספר שקף נוכחי ומספר שחקנים</li>
+        <li>כפתור "שאלה הבאה" בירקרק (#00b894) — מעביר את השקף הבא</li>
+        <li>מספר שחקנים שענו עד כה (counter בזמן אמת)</li>
+      </ul>
+      <div class="note">⚠️ לחיצה על "שאלה הבאה" שולחת פקודה לשרת שמעביר את המצגת ב-PowerPoint לשקף הבא — בלי שהמרצה צריך לגעת בלפטופ.</div>
+    </div>
+  </div>
+
+</div><!-- /screens-row -->
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 5 — COLOR PALETTE
+═══════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="section-header">
+  <h2>🎨 פלטת צבעים נוכחית</h2>
+  <p>הצבעים הבאים משמשים באפליקציית השחקנים. ניתן לשנות הכל לפי הצעת חברת העיצוב.</p>
+</div>
+
+<div class="palette-section">
+  <div class="palette-box">
+    <strong style="font-size:15px;color:#0f3460;">🎮 אפליקציית שחקנים (רקע כהה):</strong>
+    <div class="palette-row">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#1a1a2e;"></div>
+        <div class="swatch-name">רקע ראשי</div>
+        <div class="swatch-hex">#1a1a2e</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#0f3460;"></div>
+        <div class="swatch-name">רקע משני</div>
+        <div class="swatch-hex">#0f3460</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#ff8c00;"></div>
+        <div class="swatch-name">כתום (ראשי)</div>
+        <div class="swatch-hex">#ff8c00</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#00ff88;"></div>
+        <div class="swatch-name">ירוק ניאון</div>
+        <div class="swatch-hex">#00ff88</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#ff6b6b;"></div>
+        <div class="swatch-name">אדום שגיאה</div>
+        <div class="swatch-hex">#ff6b6b</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#f1c40f;"></div>
+        <div class="swatch-name">צהוב timeout</div>
+        <div class="swatch-hex">#f1c40f</div>
+      </div>
+    </div>
+    <div style="margin-top:20px;">
+      <strong style="font-size:15px;color:#0f3460;">🔲 כפתורי תשובה:</strong>
+      <div class="palette-row" style="margin-top:12px;">
+        <div class="swatch">
+          <div class="swatch-color" style="background:#e74c3c;"></div>
+          <div class="swatch-name">אדום △</div>
+          <div class="swatch-hex">#e74c3c</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#3498db;"></div>
+          <div class="swatch-name">כחול ◆</div>
+          <div class="swatch-hex">#3498db</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#f1c40f;"></div>
+          <div class="swatch-name">צהוב ●</div>
+          <div class="swatch-hex">#f1c40f</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#2ecc71;"></div>
+          <div class="swatch-name">ירוק ■</div>
+          <div class="swatch-hex">#2ecc71</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px;">
+      <strong style="font-size:15px;color:#0f3460;">🖥️ Add-in / Admin Panel (עיצוב Office):</strong>
+      <div class="palette-row" style="margin-top:12px;">
+        <div class="swatch">
+          <div class="swatch-color" style="background:#0078d4;"></div>
+          <div class="swatch-name">כחול Office</div>
+          <div class="swatch-hex">#0078d4</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#107c10;"></div>
+          <div class="swatch-name">ירוק אישור</div>
+          <div class="swatch-hex">#107c10</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#d13438;"></div>
+          <div class="swatch-name">אדום ביטול</div>
+          <div class="swatch-hex">#d13438</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#ffffff;border:1px solid #ddd;"></div>
+          <div class="swatch-name">לבן רקע</div>
+          <div class="swatch-hex">#ffffff</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:#eff6fc;"></div>
+          <div class="swatch-name">כחול בהיר</div>
+          <div class="swatch-hex">#eff6fc</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 6 — TYPOGRAPHY & DESIGN NOTES
+═══════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="section-header">
+  <h2>📝 הערות עיצוב כלליות</h2>
+  <p>נקודות חשובות שצריך לדעת לפני עיצוב מחדש.</p>
+</div>
+
+<div class="screens-row">
+  <div class="screen-card full-width">
+    <div class="card-label"><span class="num">★</span> סיכום טכני ועיצובי</div>
+    <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;">
+
+      <div>
+        <h4 style="font-size:14px;color:#0f3460;margin-bottom:10px;border-bottom:2px solid #eff6fc;padding-bottom:6px;">📐 טיפוגרפיה</h4>
+        <ul style="font-size:13px;color:#555;line-height:2;list-style:none;">
+          <li>גופן: <strong>Segoe UI</strong> (fallback: system-ui)</li>
+          <li>כותרות: font-weight 700–800</li>
+          <li>אין border-radius בכפתורים (border-radius: 0)</li>
+          <li>PIN input: letter-spacing 6px, font-size 36px</li>
+          <li>אמוג'י: font-size 28–80px לפי הקשר</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 style="font-size:14px;color:#0f3460;margin-bottom:10px;border-bottom:2px solid #eff6fc;padding-bottom:6px;">🌍 RTL / LTR</h4>
+        <ul style="font-size:13px;color:#555;line-height:2;list-style:none;">
+          <li>עברית / ערבית → dir="rtl"</li>
+          <li>שאר השפות → dir="ltr"</li>
+          <li>מחליף שפה זזים לפינה המתאימה</li>
+          <li>Add-in: CSS custom property <code>--direction</code></li>
+          <li>קוד PIN תמיד dir="ltr" (מספרים)</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 style="font-size:14px;color:#0f3460;margin-bottom:10px;border-bottom:2px solid #eff6fc;padding-bottom:6px;">✨ אנימציות קיימות</h4>
+        <ul style="font-size:13px;color:#555;line-height:2;list-style:none;">
+          <li><strong>fadeIn</strong>: opacity+translateY, 0.4s — כל מסך</li>
+          <li><strong>popIn</strong>: scale 0→1, 0.4s — אייקוני תוצאה</li>
+          <li><strong>dots</strong>: ... אנימציה בלובי</li>
+          <li><strong>timerPulse</strong>: scale 1→1.1, 0.8s — טיימר דחוף</li>
+          <li><strong>spin</strong>: spinner טעינה</li>
+          <li><strong>adminPulse</strong>: opacity, 1.8s — dot admin</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 style="font-size:14px;color:#0f3460;margin-bottom:10px;border-bottom:2px solid #eff6fc;padding-bottom:6px;">📱 רספונסיביות</h4>
+        <ul style="font-size:13px;color:#555;line-height:2;list-style:none;">
+          <li>max-width שחקן: 440px (ממורכז)</li>
+          <li>מסך תשובות: fullscreen תמיד (position:fixed)</li>
+          <li>@media max-width 400px: font-size קטן יותר</li>
+          <li>icon-grid: 6 עמודות (5 במסכים צרים)</li>
+          <li>Add-in: רוחב קבוע ~300px (Office)</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 style="font-size:14px;color:#0f3460;margin-bottom:10px;border-bottom:2px solid #eff6fc;padding-bottom:6px;">🔧 צורות כפתורי תשובה</h4>
+        <ul style="font-size:13px;color:#555;line-height:2;list-style:none;">
+          <li>🔴 <strong>משולש</strong>: CSS border trick, לבן 90%</li>
+          <li>🔵 <strong>מעוין</strong>: ריבוע rotate(45deg)</li>
+          <li>🟡 <strong>עיגול</strong>: border-radius 50%</li>
+          <li>🟢 <strong>ריבוע</strong>: ריבוע רגיל</li>
+          <li>כל צורה: ~44×44px (לבן, opacity 90%)</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 style="font-size:14px;color:#0f3460;margin-bottom:10px;border-bottom:2px solid #eff6fc;padding-bottom:6px;">🎮 זרימת מנהל</h4>
+        <ul style="font-size:13px;color:#555;line-height:2;list-style:none;">
+          <li>מרצה: מפעיל משחק מ-Add-in ב-PowerPoint</li>
+          <li>Add-in מציג PIN + QR לחיבור אדמין</li>
+          <li>מנהל (טאבלט): סורק QR / מקליד PIN</li>
+          <li>מנהל שולט: "שאלה הבאה" → שקף מתקדם</li>
+          <li>שחקנים: נכנסים עם PIN, עונים בנייד</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 7 — WHAT TO DESIGN
+═══════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="section-header" style="border-color:#ff8c00;">
+  <h2>🎯 מה אנחנו מבקשים לעצב מחדש</h2>
+  <p>הנה רשימת הסדרי העדיפויות לעיצוב החדש.</p>
+</div>
+
+<div class="screens-row">
+  <div class="screen-card full-width">
+    <div style="padding:24px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <h4 style="font-size:15px;color:#0f3460;margin-bottom:12px;">עדיפות גבוהה 🔴</h4>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="border:1px solid #fde7e9;background:#fde7e9;padding:12px;border-radius:6px;font-size:13px;color:#333;">
+              <strong>מסך תשובות (4 כפתורים)</strong> — המסך המרכזי של המשחק. ניתן לשנות צבעים, צורות, פריסה.
+              <div class="tag red" style="margin-top:6px;">חובה</div>
+            </div>
+            <div style="border:1px solid #fde7e9;background:#fde7e9;padding:12px;border-radius:6px;font-size:13px;color:#333;">
+              <strong>מסך PIN ומסך שם</strong> — הכניסה למשחק. שיפור חוויה ראשונית.
+              <div class="tag red" style="margin-top:6px;">חובה</div>
+            </div>
+            <div style="border:1px solid #fde7e9;background:#fde7e9;padding:12px;border-radius:6px;font-size:13px;color:#333;">
+              <strong>מסך תוצאה וסיום</strong> — חגיגיות, אנימציה, עיצוב מושקע.
+              <div class="tag red" style="margin-top:6px;">חובה</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h4 style="font-size:15px;color:#0f3460;margin-bottom:12px;">עדיפות בינונית 🟡</h4>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="border:1px solid #fff4e6;background:#fff4e6;padding:12px;border-radius:6px;font-size:13px;color:#333;">
+              <strong>לובי המתנה</strong> — ניתן להוסיף אנימציה, עיצוב מרגש יותר לפני המשחק.
+              <div class="tag orange" style="margin-top:6px;">מומלץ</div>
+            </div>
+            <div style="border:1px solid #fff4e6;background:#fff4e6;padding:12px;border-radius:6px;font-size:13px;color:#333;">
+              <strong>פלטת צבעים כללית</strong> — ניתן להחליף את הכהה-כחול/כתום לזהות מותגית.
+              <div class="tag orange" style="margin-top:6px;">מומלץ</div>
+            </div>
+            <div style="border:1px solid #fff4e6;background:#fff4e6;padding:12px;border-radius:6px;font-size:13px;color:#333;">
+              <strong>לוגו / כותרת QuizNGO!</strong> — עיצוב לוגו מקצועי, אנימציה לכניסה.
+              <div class="tag orange" style="margin-top:6px;">מומלץ</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px;background:#f0f8ff;border:1px solid #c7e0f4;border-radius:6px;padding:16px;font-size:13px;color:#333;line-height:1.7;">
+        <strong style="color:#0078d4;">⚡ אילוצים טכניים שחשוב לשמור:</strong><br>
+        • מסך תשובות חייב להיות 4 כפתורים בגריד 2×2 (ניתן לשנות צורות/צבעים)<br>
+        • כפתורים חייבים להיות מזוהים לפי <strong>צבע + צורה</strong> (נגישות לעיוורי צבעים)<br>
+        • ממשק חייב לעבוד ב-RTL ו-LTR<br>
+        • אנימציות חייבות להיות קלות (לא JS-heavy) — מסכים נייד בלבד<br>
+        • Add-in נשאר ב-Fluent UI / Office style (מוגבל על ידי Microsoft)<br>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  QuizNGO! · תדריך עיצוב · נוצר אוטומטית · 2026
+</footer>
+
+</body>
+</html>

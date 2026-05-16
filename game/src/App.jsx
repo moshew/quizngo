@@ -8,6 +8,7 @@ import ResultScreen from './screens/ResultScreen'
 import GameOverScreen from './screens/GameOverScreen'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import { applyDirection } from './i18n'
+import { USER_ICONS } from './icons'
 
 const DEFAULT_LB_URL = (() => {
   const host = window.location.hostname
@@ -28,34 +29,154 @@ const SCREENS = {
   GAME_OVER: 'gameOver'
 }
 
+const DEFAULT_LANGUAGE = 'en'
+const PLAYER_PROFILE_STORAGE_KEY = 'quizngo_player_profile'
+
+function readStoredPlayerProfile() {
+  try {
+    const rawProfile = localStorage.getItem(PLAYER_PROFILE_STORAGE_KEY)
+    if (!rawProfile) return { name: '', icon: USER_ICONS[0] }
+
+    const profile = JSON.parse(rawProfile)
+    const name = typeof profile.name === 'string' ? profile.name.trim().slice(0, 16) : ''
+    const icon = USER_ICONS.includes(profile.icon) ? profile.icon : USER_ICONS[0]
+
+    return { name, icon }
+  } catch (err) {
+    console.warn('Failed to read stored player profile:', err)
+    return { name: '', icon: USER_ICONS[0] }
+  }
+}
+
+function storePlayerProfile(name, icon) {
+  try {
+    localStorage.setItem(PLAYER_PROFILE_STORAGE_KEY, JSON.stringify({
+      name: name.trim().slice(0, 16),
+      icon: USER_ICONS.includes(icon) ? icon : USER_ICONS[0]
+    }))
+  } catch (err) {
+    console.warn('Failed to store player profile:', err)
+  }
+}
+
+function resetViewportPosition() {
+  window.scrollTo(0, 0)
+  document.documentElement.scrollLeft = 0
+  document.body.scrollLeft = 0
+}
+
 const SERVER_CODE_MESSAGES = {
   ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: {
     he: 'חדר לא נמצא. יש ליצור חדר תחילה.',
     en: 'Room not found. Create room first.',
+    ar: 'الغرفة غير موجودة. يرجى إنشاء غرفة أولاً.',
+    zh: '未找到房间，请先创建房间。',
+    es: 'Sala no encontrada. Crea una sala primero.',
+    fr: "Salle introuvable. Créez d'abord une salle.",
+    de: 'Raum nicht gefunden. Erstelle zuerst einen Raum.',
+    pt: 'Sala não encontrada. Crie uma sala primeiro.',
+    ru: 'Комната не найдена. Сначала создайте комнату.',
+    ja: '部屋が見つかりません。先に部屋を作成してください。',
+    hi: 'कमरा नहीं मिला। पहले कमरा बनाएँ।',
+    ko: '방을 찾을 수 없습니다. 먼저 방을 만드세요.',
   },
   NO_ACTIVE_GAME_FOUND_WITH_PIN: {
     he: 'לא נמצא משחק פעיל עם הקוד {{gamePin}}',
     en: 'No active game found with PIN {{gamePin}}',
+    ar: 'لا توجد لعبة نشطة بالرمز {{gamePin}}',
+    zh: '未找到PIN码为 {{gamePin}} 的活跃游戏',
+    es: 'No se encontró juego activo con el PIN {{gamePin}}',
+    fr: 'Aucun jeu actif trouvé avec le PIN {{gamePin}}',
+    de: 'Kein aktives Spiel mit PIN {{gamePin}} gefunden',
+    pt: 'Nenhum jogo ativo encontrado com o PIN {{gamePin}}',
+    ru: 'Активная игра с PIN {{gamePin}} не найдена',
+    ja: 'PIN {{gamePin}} のアクティブなゲームが見つかりません',
+    hi: 'PIN {{gamePin}} के साथ कोई सक्रिय गेम नहीं मिला',
+    ko: 'PIN {{gamePin}}의 활성 게임을 찾을 수 없습니다',
   },
   GAME_HAS_NOT_STARTED_YET_PLEASE_WAIT_FOR_THE_HOST: {
     he: 'המשחק עדיין לא התחיל. יש להמתין למארח.',
     en: 'Game has not started yet. Please wait for the host.',
+    ar: 'لم تبدأ اللعبة بعد. يرجى الانتظار للمضيف.',
+    zh: '游戏尚未开始，请等待主持人。',
+    es: 'El juego aún no ha comenzado. Por favor espera al anfitrión.',
+    fr: "Le jeu n'a pas encore commencé. Veuillez attendre l'hôte.",
+    de: 'Das Spiel hat noch nicht begonnen. Bitte warte auf den Gastgeber.',
+    pt: 'O jogo ainda não começou. Por favor aguarde o anfitrião.',
+    ru: 'Игра ещё не началась. Пожалуйста, подождите ведущего.',
+    ja: 'ゲームはまだ始まっていません。ホストをお待ちください。',
+    hi: 'गेम अभी तक शुरू नहीं हुआ। कृपया होस्ट की प्रतीक्षा करें।',
+    ko: '게임이 아직 시작되지 않았습니다. 호스트를 기다려주세요.',
   },
   GAME_SESSION_NOT_FOUND: {
     he: 'סשן המשחק לא נמצא',
     en: 'Game session not found',
+    ar: 'جلسة اللعبة غير موجودة',
+    zh: '未找到游戏会话',
+    es: 'Sesión de juego no encontrada',
+    fr: 'Session de jeu introuvable',
+    de: 'Spielsitzung nicht gefunden',
+    pt: 'Sessão de jogo não encontrada',
+    ru: 'Игровая сессия не найдена',
+    ja: 'ゲームセッションが見つかりません',
+    hi: 'गेम सत्र नहीं मिला',
+    ko: '게임 세션을 찾을 수 없습니다',
   },
   GAME_IS_NO_LONGER_ACTIVE: {
     he: 'המשחק כבר אינו פעיל',
     en: 'Game is no longer active',
+    ar: 'اللعبة لم تعد نشطة',
+    zh: '游戏已结束',
+    es: 'El juego ya no está activo',
+    fr: "Le jeu n'est plus actif",
+    de: 'Das Spiel ist nicht mehr aktiv',
+    pt: 'O jogo não está mais ativo',
+    ru: 'Игра больше не активна',
+    ja: 'ゲームはすでに終了しました',
+    hi: 'गेम अब सक्रिय नहीं है',
+    ko: '게임이 더 이상 활성화되어 있지 않습니다',
   },
   INVALID_GAME_PIN: {
     he: 'קוד משחק לא תקין',
     en: 'Invalid game PIN',
+    ar: 'رمز اللعبة غير صالح',
+    zh: '游戏PIN码无效',
+    es: 'PIN de juego inválido',
+    fr: 'PIN du jeu invalide',
+    de: 'Ungültige Spiel-PIN',
+    pt: 'PIN do jogo inválido',
+    ru: 'Неверный PIN игры',
+    ja: '無効なゲームPINです',
+    hi: 'अमान्य गेम PIN',
+    ko: '유효하지 않은 게임 PIN',
   },
   SERVER_ERROR: {
     he: 'שגיאת שרת פנימית',
     en: 'Internal server error',
+    ar: 'خطأ داخلي في الخادم',
+    zh: '服务器内部错误',
+    es: 'Error interno del servidor',
+    fr: 'Erreur interne du serveur',
+    de: 'Interner Serverfehler',
+    pt: 'Erro interno do servidor',
+    ru: 'Внутренняя ошибка сервера',
+    ja: 'サーバー内部エラー',
+    hi: 'आंतरिक सर्वर त्रुटि',
+    ko: '내부 서버 오류',
+  },
+  NAME_ALREADY_IN_USE: {
+    he: 'השם "{{name}}" כבר תפוס על ידי שחקן אחר',
+    en: 'The name "{{name}}" is already taken by another player',
+    ar: 'الاسم "{{name}}" محجوز من قِبل لاعب آخر',
+    zh: '名字"{{name}}"已被其他玩家使用',
+    es: 'El nombre "{{name}}" ya está en uso por otro jugador',
+    fr: 'Le nom "{{name}}" est déjà utilisé par un autre joueur',
+    de: 'Der Name "{{name}}" wird bereits von einem anderen Spieler verwendet',
+    pt: 'O nome "{{name}}" já está em uso por outro jogador',
+    ru: 'Имя "{{name}}" уже занято другим игроком',
+    ja: '「{{name}}」という名前は他のプレイヤーが使用中です',
+    hi: '"{{name}}" नाम पहले से किसी अन्य खिलाड़ी द्वारा उपयोग में है',
+    ko: '"{{name}}" 이름은 이미 다른 플레이어가 사용 중입니다',
   },
 }
 
@@ -78,6 +199,24 @@ function formatServerMessage(message, language = 'en', fallback = 'Server error'
   return fallback
 }
 
+function isClosedGameResponse(data) {
+  if (data?.game_closed) return true
+
+  const message = data?.message
+  if (typeof message === 'object' && message?.code) {
+    const code = message.code.toUpperCase()
+    return code === 'NO_ACTIVE_GAME_FOUND_WITH_PIN' ||
+      code === 'GAME_IS_NO_LONGER_ACTIVE' ||
+      code === 'GAME_SESSION_NOT_FOUND'
+  }
+
+  if (typeof message === 'string') {
+    return /no active game found|game is no longer active|game session not found|game has been closed/i.test(message)
+  }
+
+  return false
+}
+
 function App() {
   // Check URL for pin parameter
   const urlParams = new URLSearchParams(window.location.search)
@@ -86,6 +225,7 @@ function App() {
 
   const [screen, setScreen] = useState(urlPin ? SCREENS.NAME : SCREENS.PIN)
   const [gamePin, setGamePin] = useState(urlPin || '')
+  const [storedPlayerProfile, setStoredPlayerProfile] = useState(readStoredPlayerProfile)
   const [playerName, setPlayerName] = useState('')
   const [playerIcon, setPlayerIcon] = useState('')
   const [uid, setUid] = useState(null)
@@ -97,7 +237,7 @@ function App() {
   const [pinError, setPinError] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkingPin, setCheckingPin] = useState(false)
-  const [language, setLanguage] = useState(urlLang || 'en')
+  const [language, setLanguage] = useState(urlLang || DEFAULT_LANGUAGE)
   const [answerTimeRemaining, setAnswerTimeRemaining] = useState(null)
   const [gameStarted, setGameStarted] = useState(false)
   const [serverUrl, setServerUrl] = useState(null)
@@ -105,9 +245,16 @@ function App() {
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
+  const errorTimeoutRef = useRef(null)
   const timerRef = useRef(null)
   const uidRef = useRef(null)
   const gameClosedRef = useRef(false)
+  const streakCountRef = useRef(0)
+  const finalStatsRef = useRef({
+    correctAnswers: 0,
+    totalQuestions: 0,
+    bestStreak: 0
+  })
 
   // Resolve server URL via LB when PIN comes from URL
   useEffect(() => {
@@ -121,23 +268,25 @@ function App() {
           } else {
             // Failed to resolve - show error and go back to PIN screen
             console.error('Failed to resolve PIN:', data.message)
-            setPinError(language === 'he' ? 'לא נמצא משחק עם PIN זה' : 'Game not found with this PIN')
+            setPinError('Game not found with this PIN')
             setScreen(SCREENS.PIN)
           }
         })
         .catch(err => {
           // Network error - show error and go back to PIN screen
           console.error('Failed to resolve PIN from URL:', err)
-          setPinError(language === 'he' ? 'שגיאת רשת - לא ניתן למצוא את המשחק' : 'Network error - cannot find game')
+          setPinError('Network error - cannot find game')
           setScreen(SCREENS.PIN)
         })
     }
   }, [urlPin, serverUrl, language])
 
-  // Apply direction when language changes
+  // Apply direction when language changes. The PIN screen is intentionally
+  // language-neutral/LTR, so returning home must clear any previous RTL state.
   useEffect(() => {
-    applyDirection(language)
-  }, [language])
+    applyDirection(screen === SCREENS.PIN ? DEFAULT_LANGUAGE : language)
+    resetViewportPosition()
+  }, [language, screen])
 
   // Start countdown timer for answer time
   const startAnswerTimer = useCallback((seconds) => {
@@ -161,6 +310,55 @@ function App() {
       }
     }, 1000)
   }, [])
+
+  const returnHomeSilently = useCallback((socket = null) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (gamePin) {
+      const cleanPin = gamePin.replace(/-/g, '')
+      sessionStorage.removeItem(`quizngo_uid_${cleanPin}`)
+    }
+    if (window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    const activeSocket = socket || socketRef.current
+    if (activeSocket) {
+      activeSocket.off('disconnect')
+      activeSocket.disconnect()
+      if (socketRef.current === activeSocket) {
+        socketRef.current = null
+      }
+    }
+
+    setScreen(SCREENS.PIN)
+    setGamePin('')
+    setServerUrl(null)
+    setLanguage(urlLang || DEFAULT_LANGUAGE)
+    setPlayerName('')
+    setPlayerIcon('')
+    setUid(null)
+    uidRef.current = null
+    setResults(null)
+    setHasAnswered(false)
+    setSelectedAnswer(null)
+    setIsAnswerTime(false)
+    setAnswerTimeRemaining(null)
+    setError('')
+    setPinError('')
+    setLoading(false)
+    setCheckingPin(false)
+    setDisconnected(false)
+    gameClosedRef.current = false
+    streakCountRef.current = 0
+    finalStatsRef.current = {
+      correctAnswers: 0,
+      totalQuestions: 0,
+      bestStreak: 0
+    }
+  }, [gamePin, urlLang])
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket) => {
@@ -189,11 +387,26 @@ function App() {
         timerRef.current = null
       }
       setAnswerTimeRemaining(null)
+      const fallbackStreakCount = data.isCorrect ? streakCountRef.current + 1 : 0
+      const streakCount = data.streakCount ?? fallbackStreakCount
+      streakCountRef.current = streakCount
+      const fallbackStats = finalStatsRef.current
+      const finalStats = {
+        correctAnswers: data.correctAnswers ?? (fallbackStats.correctAnswers + (data.isCorrect ? 1 : 0)),
+        totalQuestions: data.totalQuestions ?? (fallbackStats.totalQuestions + 1),
+        bestStreak: data.bestStreak ?? Math.max(fallbackStats.bestStreak, streakCount)
+      }
+      finalStatsRef.current = finalStats
       setResults({
         questionScore: data.questionScore,
         cumulativeScore: data.cumulativeScore,
         rank: data.rank,
         isCorrect: data.isCorrect,
+        correctAnswer: data.correctAnswer,
+        streakCount,
+        correctAnswers: finalStats.correctAnswers,
+        totalQuestions: finalStats.totalQuestions,
+        bestStreak: finalStats.bestStreak,
         answered: data.answered
       })
       setIsAnswerTime(false)
@@ -203,15 +416,27 @@ function App() {
     socket.on('game_closed', (data) => {
       console.log('🚫 Game closed!', data)
       gameClosedRef.current = true
-      // Clear answer timer
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
+
+      const reasonCode = data?.reason?.code || data?.message?.params?.reason
+      if (reasonCode === 'COMPLETED' || reasonCode === 'MANUAL') {
+        if (timerRef.current) {
+          clearInterval(timerRef.current)
+          timerRef.current = null
+        }
+        setAnswerTimeRemaining(null)
+        setIsAnswerTime(false)
+        setHasAnswered(false)
+        setSelectedAnswer(null)
+        socket.off('disconnect')
+        socket.disconnect()
+        if (socketRef.current === socket) {
+          socketRef.current = null
+        }
+        setScreen(SCREENS.GAME_OVER)
+        return
       }
-      setAnswerTimeRemaining(null)
-      setScreen(SCREENS.GAME_OVER)
-      socket.disconnect()
-      socketRef.current = null
+
+      returnHomeSilently(socket)
     })
 
     socket.on('disconnect', () => {
@@ -226,7 +451,18 @@ function App() {
         setDisconnected(true)
       }
     })
-  }, [startAnswerTimer])
+  }, [returnHomeSilently, startAnswerTimer])
+
+  const showError = useCallback((message) => {
+    setError(message)
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current)
+    }
+    errorTimeoutRef.current = setTimeout(() => {
+      setError('')
+      errorTimeoutRef.current = null
+    }, 3000)
+  }, [])
 
   // Join game
   const joinGame = async (name, icon) => {
@@ -239,7 +475,7 @@ function App() {
       // Guard: ensure serverUrl is resolved before connecting
       if (!serverUrl) {
         console.error('❌ Cannot join: serverUrl not resolved yet')
-        setError(language === 'he' ? 'השרת עדיין לא מוכן, נסו שוב' : 'Server not ready, please try again')
+        showError(language === 'he' ? 'השרת עדיין לא מוכן, נסו שוב' : 'Server not ready, please try again')
         setLoading(false)
         return
       }
@@ -285,6 +521,12 @@ function App() {
         sessionStorage.setItem(`quizngo_uid_${cleanPin}`, data.uid)
         setPlayerName(name)
         setPlayerIcon(icon)
+        const playerProfile = {
+          name: name.trim().slice(0, 16),
+          icon: USER_ICONS.includes(icon) ? icon : USER_ICONS[0]
+        }
+        storePlayerProfile(playerProfile.name, playerProfile.icon)
+        setStoredPlayerProfile(playerProfile)
         socketRef.current = socket
         setupSocketListeners(socket)
 
@@ -313,12 +555,17 @@ function App() {
 
         console.log(`✅ Joined game! UID: ${data.uid}, state: ${gameState}`)
       } else {
+        if (isClosedGameResponse(data)) {
+          returnHomeSilently(socket)
+          return
+        }
+        socket.off('disconnect')
         socket.disconnect()
-        setError(formatServerMessage(data.message, language, data.error || 'Failed to join game'))
+        showError(formatServerMessage(data.message, language, data.error || 'Failed to join game'))
       }
     } catch (err) {
       console.error('❌ Join error:', err)
-      setError(err.message || 'Connection failed')
+      showError(err.message || 'Connection failed')
     } finally {
       setLoading(false)
     }
@@ -349,7 +596,7 @@ function App() {
       const lbData = await lbResponse.json()
 
       if (!lbResponse.ok || lbData.status !== 'success') {
-        showPinError(language === 'he' ? 'לא נמצא חדר עם PIN זה' : 'No room found with this PIN')
+        showPinError('No room found with this PIN')
         return
       }
 
@@ -360,22 +607,24 @@ function App() {
       const response = await fetch(`${resolvedServerUrl}/?check_active_game&game_pin=${cleanPin}`)
       const data = await response.json()
 
-      if (response.ok && data.status === 'success' && data.active) {
-        if (!data.gameStarted) {
-          showPinError(language === 'he' ? 'המשחק עדיין לא התחיל, נסו שוב בעוד רגע' : 'Game has not started yet, try again in a moment')
+      if (response.ok && data.status === 'success') {
+        if (!data.active) {
+          returnHomeSilently()
+        } else if (!data.gameStarted) {
+          showPinError('Game has not started yet')
         } else {
-          setError('')
+          setPinError('')
           if (data.language) {
             setLanguage(data.language)
           }
           setScreen(SCREENS.NAME)
         }
       } else {
-        showPinError(language === 'he' ? 'לא נמצא חדר עם PIN זה' : 'No room found with this PIN')
+        showPinError('Error checking room, try again')
       }
     } catch (err) {
       console.error('PIN validation error:', err)
-      showPinError(language === 'he' ? 'שגיאה בבדיקת החדר, נסו שוב' : 'Error checking room, try again')
+      showPinError('Error checking room, try again')
     } finally {
       setCheckingPin(false)
     }
@@ -414,14 +663,23 @@ function App() {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
+    if (socketRef.current) {
+      socketRef.current.disconnect()
+      socketRef.current = null
+    }
     // Clear stored UID for old game
     if (gamePin) {
       const cleanPin = gamePin.replace(/-/g, '')
       sessionStorage.removeItem(`quizngo_uid_${cleanPin}`)
     }
+    // Clear URL params so a page-reload doesn't jump back to NameScreen
+    if (window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
     setScreen(SCREENS.PIN)
     setGamePin('')
     setServerUrl(null)
+    setLanguage(urlLang || DEFAULT_LANGUAGE)
     setPlayerName('')
     setPlayerIcon('')
     setUid(null)
@@ -436,6 +694,12 @@ function App() {
     setCheckingPin(false)
     setDisconnected(false)
     gameClosedRef.current = false
+    streakCountRef.current = 0
+    finalStatsRef.current = {
+      correctAnswers: 0,
+      totalQuestions: 0,
+      bestStreak: 0
+    }
   }
 
   // Cleanup on unmount
@@ -443,6 +707,9 @@ function App() {
     return () => {
       if (pinErrorTimeoutRef.current) {
         clearTimeout(pinErrorTimeoutRef.current)
+      }
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current)
       }
       if (timerRef.current) {
         clearInterval(timerRef.current)
@@ -453,27 +720,25 @@ function App() {
     }
   }, [])
 
-  const showLanguageSwitcher = screen !== SCREENS.PIN
-
   return (
-    <div className="game-app">
+    <div>
       {disconnected && (
-        <div className="disconnected-overlay">
-          <div className="disconnected-icon">&#x26A0;</div>
-          <div className="disconnected-title">
-            {language === 'he' ? 'החיבור אבד' : 'Connection Lost'}
+        <div className="qng-screen qng-screen--disconnect">
+          <div className="qng-screen-center">
+            <div className="qng-disconnect-icon-tile">📡</div>
+            <div className="qng-disconnect-title">
+              {language === 'he' ? 'החיבור אבד' : 'You got dropped'}
+            </div>
+            <div className="qng-disconnect-body">
+              {language === 'he'
+                ? 'השרת לא זמין. המשחק נסגר.'
+                : 'The game server vanished. Hop back home to try again.'}
+            </div>
+            <button className="qng-btn qng-btn--yellow" onClick={playAgain} style={{ marginTop: 14, maxWidth: 320 }}>
+              {language === 'he' ? 'חזרה למסך הראשי' : 'BACK TO HOME'}
+            </button>
           </div>
-          <div className="disconnected-subtitle">
-            {language === 'he' ? 'השרת לא זמין. המשחק נסגר.' : 'Server unavailable. Game closed.'}
-          </div>
-          <button className="btn-primary" onClick={playAgain}>
-            {language === 'he' ? 'חזרה למסך הראשי' : 'Back to Main Screen'}
-          </button>
         </div>
-      )}
-
-      {showLanguageSwitcher && (
-        <LanguageSwitcher language={language} setLanguage={setLanguage} />
       )}
 
       {screen === SCREENS.PIN && (
@@ -483,7 +748,6 @@ function App() {
           onSubmit={validatePinAndContinue}
           error={pinError}
           loading={checkingPin}
-          language={language}
         />
       )}
 
@@ -493,6 +757,8 @@ function App() {
           error={error}
           loading={loading || (urlPin && !serverUrl)}
           language={language}
+          defaultName={storedPlayerProfile.name}
+          defaultIcon={storedPlayerProfile.icon}
         />
       )}
 
@@ -518,7 +784,6 @@ function App() {
       {screen === SCREENS.RESULT && (
         <ResultScreen
           results={results}
-          selectedAnswer={selectedAnswer}
           language={language}
         />
       )}
@@ -530,6 +795,7 @@ function App() {
           language={language}
         />
       )}
+
     </div>
   )
 }

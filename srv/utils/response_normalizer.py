@@ -108,3 +108,24 @@ def normalize_flask_json_response(response):
 
     return response
 
+
+async def normalize_quart_json_response(response):
+    """Normalize Quart JSON response payload in-place and return response."""
+    try:
+        if not response.is_json:
+            return response
+
+        payload = await response.get_json(silent=True)
+        if payload is None:
+            return response
+
+        normalized = normalize_payload(payload)
+        if normalized != payload:
+            data = json.dumps(normalized, ensure_ascii=False)
+            await response.set_data(data)
+            response.headers['Content-Length'] = str(len(await response.get_data()))
+    except Exception:
+        return response
+
+    return response
+

@@ -624,6 +624,31 @@ pin_to_hash = {
 
 ---
 
+## חוזה תוצאות לשחקן
+
+אירוע `player_results` נשלח מהשרת לכל שחקן עם תוצאה אישית:
+
+```json
+{
+  "userId": "uuid-1234",
+  "nickname": "Player",
+  "questionScore": 850,
+  "cumulativeScore": 2350,
+  "rank": 3,
+  "isCorrect": true,
+  "correctAnswer": 2,
+  "streakCount": 3,
+  "answered": true,
+  "timestamp": 1710000000000
+}
+```
+
+`correctAnswer` הוא מספר התשובה הנכונה האמיתית לשאלה, 1-4. `streakCount` הוא מספר התשובות הנכונות ברצף עבור אותו שחקן. הוא מחושב ב-Add-in בזמן עיבוד התוצאות, מתאפס בתשובה שגויה או חוסר מענה, והשרת מעביר אותו לשחקן כחלק מהתוצאה.
+
+ב-Game client יש להשתמש רק ב-`correctAnswer` להצגת התשובה הנכונה במסכי תוצאה שגויה או timeout. אין להשתמש בתשובה שהשחקן בחר כתחליף אם `correctAnswer` חסר.
+
+---
+
 ## סיכום האירועים
 
 | אירוע | מקור | יעד | תיאור |

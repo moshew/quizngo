@@ -1,6 +1,4 @@
-import { t } from '../i18n'
-
-function PinScreen({ gamePin, setGamePin, onSubmit, error, loading, language }) {
+function PinScreen({ gamePin, setGamePin, onSubmit, error, loading }) {
   const isValid = gamePin.replace(/-/g, '').length === 6
 
   const handleChange = (e) => {
@@ -20,26 +18,44 @@ function PinScreen({ gamePin, setGamePin, onSubmit, error, loading, language }) 
   }
 
   return (
-    <form className="screen" onSubmit={handleSubmit}>
-      <div className="title">QuizNGO!</div>
-      <input
-        className="pin-input"
-        type="text"
-        inputMode="numeric"
-        value={gamePin}
-        onChange={handleChange}
-        placeholder={t(language, 'gamePin')}
-        maxLength="7"
-        autoFocus
-      />
-      <button
-        className="btn-primary"
-        type="submit"
-        disabled={!isValid || loading}
-      >
-        {loading ? t(language, 'checking') : t(language, 'enter')}
-      </button>
-      {error && <div className="pin-error-strip">{error}</div>}
+    <form className="qng-screen qng-screen--idle qng-pin-screen" onSubmit={handleSubmit} lang="en" dir="ltr">
+
+      <div className="qng-screen-center">
+        <img
+          src={`${import.meta.env.BASE_URL}logo.png`}
+          alt="QuizNGO"
+          className="qng-logo"
+        />
+
+        <div style={{ width: '88%', textAlign: 'center' }}>
+          <div className="qng-eyebrow">Game PIN</div>
+          <input
+            className="qng-pin-field"
+            type="text"
+            inputMode="numeric"
+            value={gamePin}
+            onChange={handleChange}
+            placeholder="· · ·  · · ·"
+            maxLength="7"
+            autoFocus
+          />
+        </div>
+
+        <button
+          className="qng-btn qng-btn--yellow"
+          type="submit"
+          disabled={!isValid || loading}
+          style={{ width: '90%', fontSize: '32px' }}
+        >
+          {loading ? 'Checking...' : 'Enter'}
+        </button>
+      </div>
+
+      <div className="qng-footer-hint">Need a PIN? Ask your host 👀</div>
+
+      <div className={`qng-error-drawer${error ? ' qng-error-drawer--open' : ''}`}>
+        {error}
+      </div>
     </form>
   )
 }

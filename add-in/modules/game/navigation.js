@@ -587,7 +587,7 @@ async function notifyGameComplete() {
         console.log(`📤 Notifying server: game complete for PIN ${gamePin}`);
         
         const { getApiUrl } = await import('../core/api.js');
-        const url = getApiUrl(`?close_game&game_pin=${gamePin}`);
+        const url = getApiUrl(`?close_game&game_pin=${gamePin}&reason=completed`);
         
         console.log(`📡 Sending request to: ${url}`);
         

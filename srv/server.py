@@ -95,7 +95,7 @@ from routes.player_routes import create_player_routes
 from routes.game_routes import create_game_routes
 from routes.navigation_routes import create_navigation_routes
 from routes.info_routes import create_info_routes
-from utils.response_normalizer import normalize_flask_json_response
+from utils.response_normalizer import normalize_quart_json_response
 
 # Configuration
 LOG_DIR = Path(__file__).parent / 'logs'
@@ -307,7 +307,7 @@ quart_app.register_blueprint(info_bp)
 @quart_app.after_request
 async def normalize_message_fields(response):
     """Ensure API responses expose message/reason as structured objects."""
-    return normalize_flask_json_response(response)
+    return await normalize_quart_json_response(response)
 
 
 @quart_app.route('/', methods=['GET', 'POST'])

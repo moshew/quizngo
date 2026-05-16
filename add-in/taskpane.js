@@ -930,9 +930,6 @@ Office.onReady(async (info) => {
     try {
         if (info.host === Office.HostType.PowerPoint) {
         console.log('PowerPoint detected - initializing add-in...');
-        // Show shell immediately to reduce perceived startup delay.
-        markAppReady();
-        logBootStep('shell visible');
 
         // Initialize i18n with saved language (avoids direction-change flicker on reload)
         await initI18n();

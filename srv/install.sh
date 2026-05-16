@@ -15,7 +15,7 @@ fi
 
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -c "import flask, flask_cors, flask_socketio, requests, psutil"
+.venv/bin/python -c "import quart, quart_cors, socketio, hypercorn, aiohttp, urllib3, psutil, qrcode"
 
 echo "Installation complete."
 echo "Run: ./start.sh"

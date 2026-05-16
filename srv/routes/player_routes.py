@@ -349,12 +349,64 @@ def create_player_routes(
             for existing_uid in game_uids:
                 player = player_registry.get(existing_uid)
                 if player and player.get('nickname') == name:
-                    # Name is taken (whether connected or disconnected) — reject
-                    game.log(f'🚫 Rejected join attempt - name {name} already taken in game {game_pin}')
-                    return jsonify({
-                        'status': 'error',
-                        'message': f'The name "{name}" is already in use.'
-                    }), 409
+                    if player.get('connected', False):
+                        # Another active player already has this name — reject
+                        game.log(f'🚫 Rejected join attempt - name {name} already taken (connected) in game {game_pin}')
+                        return jsonify({
+                            'status': 'error',
+                            'message': {'code': 'NAME_ALREADY_IN_USE', 'params': {'name': name}}
+                        }), 409
+
+                    # Disconnected player with the same name — treat as name-based rejoin
+                    game.log(f'♻️ Name-based rejoin for disconnected player {name} in game {game_pin}')
+                    uid = existing_uid
+                    player_registry[uid]['connected'] = True
+                    player_registry[uid]['reconnectedAt'] = time.time()
+                    if icon:
+                        player_registry[uid]['icon'] = icon
+
+                    await emit_to_addins(sio, addin_sockets_by_game, game.logger, 'participant_update', {
+                        'nick': name,
+                        'icon': player_registry[uid].get('icon', '👤'),
+                        'type': 'add',
+                        'user_id': uid,
+                        'timestamp': time.time()
+                    }, game_pin)
+
+                    if socket_id:
+                        await sio.enter_room(socket_id, game_pin)
+                        register_player_socket(
+                            client_rooms,
+                            socket_to_player,
+                            addin_sockets_by_game,
+                            player_sockets_by_game,
+                            socket_id,
+                            game_pin,
+                            uid
+                        )
+
+                    rejoin_response = {
+                        'status': 'success',
+                        'uid': uid,
+                        'gamePin': game_pin,
+                        'message': 'Rejoined successfully'
+                    }
+                    session = game_sessions.get(game_pin, {})
+                    rejoin_response['gameStarted'] = session.get('gameStarted', False)
+                    rejoin_response['gameState'] = session.get('currentState', 'waiting')
+
+                    if session.get('currentState') == 'answering' and 'currentQuestion' in session:
+                        question_data = session['currentQuestion']
+                        question_wait_time = question_data.get('questionWaitTime', 30)
+                        answer_started_at = session.get('answerStartedAt', 0)
+                        elapsed = time.time() - answer_started_at
+                        remaining = max(0, question_wait_time - elapsed)
+                        rejoin_response['needsSync'] = True
+                        rejoin_response['syncData'] = question_data
+                        rejoin_response['remainingTime'] = round(remaining, 1)
+                        game.log(f'⏱️ Mid-question name-rejoin: {remaining:.1f}s remaining for {name}')
+
+                    return jsonify(rejoin_response)
 
             # Check if game is active
             if not check_game_active(game_sessions, game_pin):

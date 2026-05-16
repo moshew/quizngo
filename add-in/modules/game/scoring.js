@@ -28,6 +28,20 @@ export function calculateScore(questionTime, answerTime) {
     return Math.max(0, Math.min(1000, score)); // Clamp between 0-1000
 }
 
+function normalizeCorrectAnswer(value) {
+    const parsed = Number.parseInt(value, 10);
+
+    if (Number.isNaN(parsed)) {
+        return null;
+    }
+
+    if (parsed >= 1 && parsed <= 4) {
+        return parsed;
+    }
+
+    return null;
+}
+
 /**
  * Process answers and calculate scores for current question
  * 
@@ -45,12 +59,17 @@ export async function processAnswersAndScores(slideId, questionStartTime, questi
     
     // Get slide data to find correct answer
     const slideData = getSlideData(slideId);
-    if (!slideData || !slideData.correctAnswer) {
+    if (!slideData || slideData.correctAnswer === undefined || slideData.correctAnswer === null || slideData.correctAnswer === '') {
         console.error('❌ No correct answer defined for this slide!');
         return null;
     }
     
-    const correctAnswer = parseInt(slideData.correctAnswer); // "1", "2", "3", or "4"
+    const correctAnswer = normalizeCorrectAnswer(slideData.correctAnswer); // 1, 2, 3, or 4
+    if (!correctAnswer) {
+        console.error('❌ Invalid correct answer defined for this slide:', slideData.correctAnswer);
+        return null;
+    }
+
     console.log(`✅ Correct answer: ${correctAnswer}`);
     
     // Get participants data and current answers
@@ -94,6 +113,10 @@ export async function processAnswersAndScores(slideId, questionStartTime, questi
         
         // Update participant's cumulative score
         const newScore = participantData.score + questionScore;
+        const correctStreak = isCorrect ? (participantData.correctStreak || 0) + 1 : 0;
+        const correctAnswers = (participantData.correctAnswers || 0) + (isCorrect ? 1 : 0);
+        const questionsAnswered = (participantData.questionsAnswered || 0) + 1;
+        const bestStreak = Math.max(participantData.bestStreak || 0, correctStreak);
         
         results.push({
             userId: userId,
@@ -101,12 +124,21 @@ export async function processAnswersAndScores(slideId, questionStartTime, questi
             questionScore: questionScore,
             cumulativeScore: newScore,
             isCorrect: isCorrect,
+            correctAnswer: correctAnswer,
+            streakCount: correctStreak,
+            correctAnswers: correctAnswers,
+            totalQuestions: questionsAnswered,
+            bestStreak: bestStreak,
             answerTime: answerTime,
             answered: !!answerData
         });
         
         // Update the participant data in memory
         participantData.score = newScore;
+        participantData.correctStreak = correctStreak;
+        participantData.correctAnswers = correctAnswers;
+        participantData.questionsAnswered = questionsAnswered;
+        participantData.bestStreak = bestStreak;
         participantData.lastAnswerTime = answerTime;
         participantData.lastAnswerCorrect = isCorrect;
     }
@@ -121,7 +153,7 @@ export async function processAnswersAndScores(slideId, questionStartTime, questi
     
     console.log('📊 FINAL RESULTS:');
     results.forEach(r => {
-        console.log(`  ${r.rank}. ${r.nickname}: ${r.cumulativeScore} pts (this Q: ${r.questionScore}, ${r.isCorrect ? '✅' : '❌'})`);
+        console.log(`  ${r.rank}. ${r.nickname}: ${r.cumulativeScore} pts (this Q: ${r.questionScore}, streak: ${r.streakCount}, ${r.isCorrect ? '✅' : '❌'})`);
     });
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
@@ -151,6 +183,7 @@ export async function sendResultsToServer(gamePin, results) {
             return { status: 'success', message: 'No results to send' };
         }
         
+        const correctAnswer = results[0]?.correctAnswer;
         const response = await fetch(getApiUrl('submit_results'), {
             method: 'POST',
             headers: {
@@ -158,6 +191,7 @@ export async function sendResultsToServer(gamePin, results) {
             },
             body: JSON.stringify({
                 gamePin: gamePin,
+                correctAnswer: correctAnswer,
                 results: results,
                 timestamp: Date.now()
             })

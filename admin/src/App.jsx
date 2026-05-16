@@ -46,6 +46,45 @@ function formatServerMessage(message, fallback = 'שגיאת שרת') {
   return fallback
 }
 
+function AdminShell({ subtitle, children }) {
+  const logoSrc = `${import.meta.env.BASE_URL}logo.png`
+
+  return (
+    <div className="admin-app" dir="ltr">
+      <main className="neon-frame">
+        <div className="neon-glow neon-glow-orange" />
+        <div className="neon-glow neon-glow-green" />
+        <div className="scanlines" />
+
+        <div className="brand-lockup">
+          <img className="brand-logo" src={logoSrc} alt="QuizNGO" />
+          <div className="brand-row">
+            <span className="brand-dot" />
+            <h1 className="title">QuizNGO_Admin</h1>
+            <span className="brand-dot" />
+          </div>
+        </div>
+
+        <p className="subtitle">{subtitle}</p>
+        {children}
+      </main>
+    </div>
+  )
+}
+
+function PinBox({ value }) {
+  return (
+    <div className="pin-chip">
+      <span className="corner corner-tl" />
+      <span className="corner corner-tr" />
+      <span className="corner corner-bl" />
+      <span className="corner corner-br" />
+      <div className="pin-label">// Game PIN</div>
+      <div className="pin-value">{value}</div>
+    </div>
+  )
+}
+
 function App() {
   const [gamePin, setGamePin] = useState(null)
   const [pinInput, setPinInput] = useState('')
@@ -230,24 +269,18 @@ function App() {
 
   if (isBootstrapping && isCheckingPin) {
     return (
-      <div className="admin-app" dir="rtl">
-        <div className="screen">
-          <h1 className="title">QuizNGO Admin</h1>
-          <p className="subtitle">טוען משחק...</p>
-          <div className="spinner" />
-        </div>
-      </div>
+      <AdminShell subtitle="> loading game">
+        <div className="spinner" />
+      </AdminShell>
     )
   }
 
   if (!gamePin) {
     return (
-      <div className="admin-app" dir="rtl">
-        <div className="screen">
-          <h1 className="title">QuizNGO Admin</h1>
-          <p className="subtitle">הכנס PIN משחק כדי להתחבר</p>
-
-          <form className="pin-form" onSubmit={handlePinSubmit}>
+      <AdminShell subtitle="> enter pin to connect">
+        <form className="pin-form" onSubmit={handlePinSubmit}>
+          <label className="input-group">
+            <span className="input-label">// PIN</span>
             <input
               type="text"
               inputMode="numeric"
@@ -264,46 +297,36 @@ function App() {
               className={`pin-input${pinError ? ' error' : ''}`}
               autoFocus
             />
+          </label>
 
-            {pinError && <div className="error-msg">{pinError}</div>}
+          {pinError && <div className="error-msg">{pinError}</div>}
 
-            <button type="submit" className="btn-primary" disabled={isCheckingPin}>
-              {isCheckingPin ? 'בודק...' : 'התחבר'}
-            </button>
-          </form>
-        </div>
-      </div>
+          <button type="submit" className="btn-primary" disabled={isCheckingPin}>
+            {isCheckingPin ? 'Checking...' : 'Connect'}
+          </button>
+        </form>
+      </AdminShell>
     )
   }
 
   return (
-    <div className="admin-app" dir="rtl">
-      <div className="screen">
-        <h1 className="title">QuizNGO Admin</h1>
-        <p className="subtitle">לוח בקרה לניהול המשחק</p>
+    <AdminShell subtitle="> game control panel">
+      <PinBox value={formatPin(gamePin)} />
 
-        <div className="pin-chip">
-          <div className="pin-label">Game PIN</div>
-          <div className="pin-value">{formatPin(gamePin)}</div>
-        </div>
+      <section className="admin-card">
+        {!gameStarted ? (
+          <button className="btn-primary btn-start" onClick={handleStartGame} disabled={!gameActive || isStartingGame}>
+            {isStartingGame ? 'Starting...' : 'Start Game'}
+          </button>
+        ) : (
+          <button className="btn-primary" onClick={handleNextSlide} disabled={!gameActive}>
+            Next Slide &gt;
+          </button>
+        )}
+      </section>
 
-        <div className="admin-card">
-          <h2 className="admin-card-title">בקרת שקפים</h2>
-
-          {!gameStarted ? (
-            <button className="btn-primary" onClick={handleStartGame} disabled={!gameActive || isStartingGame}>
-              {isStartingGame ? 'מתחיל...' : 'התחל משחק'}
-            </button>
-          ) : (
-            <button className="btn-primary" onClick={handleNextSlide} disabled={!gameActive}>
-              עבור לשקף הבא
-            </button>
-          )}
-
-          {!gameActive && <p className="admin-note">המשחק נסגר ואי אפשר להמשיך שקפים.</p>}
-        </div>
-      </div>
-    </div>
+      {!gameActive && <p className="admin-note">// session terminated - no more slides</p>}
+    </AdminShell>
   )
 }
 

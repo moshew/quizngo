@@ -13,6 +13,9 @@ hypercorn>=0.16.0
 # Async HTTP client (replaces requests)
 aiohttp>=3.9.0
 
+# SSL warning suppression for internal LB calls
+urllib3>=2.0.0
+
 # QR Code generation
 qrcode[pil]==7.4.2
 

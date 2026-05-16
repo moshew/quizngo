@@ -1,0 +1,76 @@
+/* QuizNGO · Magenta Party — design tokens
+   Drop these into your CSS / Tailwind config / styled-components theme.
+   The four answer-button colors (red/blue/yellow/green) are CANONICAL —
+   they appear in this same hex on the host display and everywhere else
+   the four answers show up. Do not theme them. */
+
+:root {
+  /* ── Backgrounds (one per game state) ── */
+  --qng-bg-idle:        linear-gradient(160deg, #6B2BFF 0%, #B620C9 60%, #FF2E93 110%);
+  --qng-bg-waiting:     linear-gradient(160deg, #2B1A6B 0%, #4A23B8 60%, #6B2BFF 110%);
+  --qng-bg-win:         linear-gradient(160deg, #00B36B 0%, #2BD68A 60%, #B6FF3C 110%);
+  --qng-bg-lose:        linear-gradient(160deg, #1A0F2E 0%, #3A1659 60%, #FF2E93 110%);
+  --qng-bg-timeout:     linear-gradient(160deg, #2A1F4A 0%, #5A3F8A 60%, #FFD400 130%);
+  --qng-bg-disconnect:  linear-gradient(160deg, #1a0a2e 0%, #2a1444 100%);
+  --qng-bg-question:    #1a0a2e;   /* solid ink, the only solid-bg screen */
+
+  /* ── Brand colors ── */
+  --qng-primary:    #FFD400;        /* yellow — primary CTA, highlights, score */
+  --qng-secondary:  #B6FF3C;        /* lime — secondary CTA, success accents */
+  --qng-danger:     #FF2E93;        /* pink — wrong answer, disconnect */
+  --qng-warn:       #FFD400;        /* timeout (alias of primary) */
+  --qng-ink:        #1a0a2e;        /* near-black purple — borders, shadows, dark text */
+  --qng-text:       #ffffff;        /* on-dark text */
+  --qng-text-muted: rgba(255,255,255,0.75);
+  --qng-text-dim:   rgba(255,255,255,0.7);
+  --qng-chip-bg:    rgba(0,0,0,0.25);
+  --qng-correct:    #00B36B;        /* green checkmark stroke */
+
+  /* ── Answer-button colors (CANONICAL — DO NOT THEME) ── */
+  --qng-answer-red:    #e74c3c;     /* ▲ Triangle */
+  --qng-answer-blue:   #3498db;     /* ◆ Diamond  */
+  --qng-answer-yellow: #f1c40f;     /* ● Circle   */
+  --qng-answer-green:  #2ecc71;     /* ■ Square   */
+
+  /* ── Type ── */
+  --qng-font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --qng-font-ui:      "Plus Jakarta Sans",   system-ui, sans-serif;
+  /* Load both from Google Fonts at weights 400/500/600/700/800. */
+
+  --qng-fs-display-xl: 90px; /* hero rank #2 */
+  --qng-fs-display-l:  40px; /* "NICE!" */
+  --qng-fs-display-m:  32px; /* PIN digits, "TIME'S UP!" */
+  --qng-fs-display-s:  28px; /* "Who are YOU?" */
+  --qng-fs-body:       13px;
+  --qng-fs-meta:       11px;
+  --qng-fs-label-tiny: 10px;
+
+  /* ── Shape / spacing ── */
+  --qng-radius-card:    20px;       /* CTAs, cards, score capsules */
+  --qng-radius-tile:    18px;       /* answer tiles */
+  --qng-radius-input:   16px;       /* name input */
+  --qng-radius-emoji:   12px;       /* avatar grid items */
+  --qng-radius-pill:    28px;       /* chips, timer, "you're in" pill */
+  --qng-radius-icon-tile: 28px;     /* large round icon tiles (lobby frog, result icon) */
+
+  --qng-border-ink:    3px solid var(--qng-ink);
+  --qng-border-ink-4:  4px solid var(--qng-ink);   /* used on big icon tiles */
+
+  /* ── 3D shadows ── */
+  /* The "chunky 3D button" look = hard-down ink shadow + soft ambient drop. */
+  --qng-shadow-3d-sm: 0 4px 0 var(--qng-ink);
+  --qng-shadow-3d:    0 6px 0 var(--qng-ink), 0 8px 14px rgba(0,0,0,0.18);
+  --qng-shadow-3d-lg: 0 10px 0 var(--qng-ink), 0 18px 30px rgba(0,0,0,0.30);
+
+  /* ── Animation ── */
+  --qng-bounce-dur:     1.4s;
+  --qng-bounce-slow-dur:1.6s;
+  --qng-pulse-dur:      0.7s;
+  --qng-dots-dur:       1.2s;
+}
+
+/* Keyframes used by the screens. */
+@keyframes qng-bounce      { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+@keyframes qng-bounce-slow { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-8px) rotate(2deg)} }
+@keyframes qng-pop-pulse   { 0%,100%{transform:scale(1) rotate(0)} 50%{transform:scale(1.08) rotate(-2deg)} }
+@keyframes qng-dot         { 0%,80%,100%{opacity:.25;transform:translateY(0)} 40%{opacity:1;transform:translateY(-3px)} }
