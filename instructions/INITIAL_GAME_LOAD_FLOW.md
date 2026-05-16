@@ -15,6 +15,12 @@
                     WebSocket + REST API
 ```
 
+### חזרה אוטומטית של שחקן אחרי sleep/reload במובייל
+
+אפליקציית `game` שומרת ב-`sessionStorage` את ה-PIN הפעיל ואת `uid` השחקן לפי PIN, ושומרת ב-`localStorage` את הכינוי והאווטאר האחרונים. אם ה-WebSocket נופל בגלל sleep או מעבר רשת, Socket.IO מנסה להתחבר מחדש. אחרי reconnect ה-client שולח שוב `join_player` עם אותו `uid` ועם ה-`socketId` החדש, ואז מסנכרן את המסך לפי `gameState` ו-`remainingTime` שמוחזרים מהשרת.
+
+אם הדף נטען מחדש באותו טאב, ה-client לא שומר `serverUrl` כאמת קבועה. הוא משתמש ב-PIN השמור כדי לבצע מחדש resolve מול ה-LB, ואז מצטרף אוטומטית עם אותו `uid` אם עדיין יש פרופיל שחקן שמור.
+
 ---
 
 ## שלב 1: חיבור Add-in ל-WebSocket ורישום לחדר

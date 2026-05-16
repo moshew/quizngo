@@ -1,7 +1,13 @@
 import { t } from '../i18n'
 
-function LobbyScreen({ playerName, playerIcon, language, gameStarted }) {
-  const waitingKey = gameStarted ? 'waitingNext' : 'waiting'
+function LobbyScreen({ playerName, playerIcon, language, gameStarted, mode = 'waiting' }) {
+  const isBetweenQuestions = mode === 'betweenQuestions'
+  const waitingKey = isBetweenQuestions
+    ? 'waitingBetweenQuestions'
+    : gameStarted
+      ? 'waitingNext'
+      : 'waiting'
+  const footerKey = isBetweenQuestions ? 'betweenQuestionsHint' : 'lookAtScreen'
 
   return (
     <div className="qng-screen qng-screen--waiting">
@@ -31,7 +37,7 @@ function LobbyScreen({ playerName, playerIcon, language, gameStarted }) {
       </div>
 
       <div className="qng-look-at-screen">
-        {t(language, 'lookAtScreen')}
+        {t(language, footerKey)}
       </div>
     </div>
   )

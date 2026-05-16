@@ -31,6 +31,59 @@ const SCREENS = {
 
 const DEFAULT_LANGUAGE = 'en'
 const PLAYER_PROFILE_STORAGE_KEY = 'quizngo_player_profile'
+const ACTIVE_GAME_PIN_STORAGE_KEY = 'quizngo_active_game_pin'
+const RECONNECT_TIMEOUT_MS = 30000
+
+function normalizePin(pin = '') {
+  return String(pin).replace(/[^0-9]/g, '')
+}
+
+function readStoredActiveGamePin() {
+  try {
+    const pin = normalizePin(sessionStorage.getItem(ACTIVE_GAME_PIN_STORAGE_KEY) || '')
+    return pin.length === 6 ? pin : ''
+  } catch (err) {
+    console.warn('Failed to read active game PIN:', err)
+    return ''
+  }
+}
+
+function storeActiveGamePin(pin) {
+  try {
+    const cleanPin = normalizePin(pin)
+    if (cleanPin.length === 6) {
+      sessionStorage.setItem(ACTIVE_GAME_PIN_STORAGE_KEY, cleanPin)
+    }
+  } catch (err) {
+    console.warn('Failed to store active game PIN:', err)
+  }
+}
+
+function clearStoredActiveGamePin() {
+  try {
+    sessionStorage.removeItem(ACTIVE_GAME_PIN_STORAGE_KEY)
+  } catch (err) {
+    console.warn('Failed to clear active game PIN:', err)
+  }
+}
+
+function removeSocketReconnectListeners(socket) {
+  const handlers = socket?.__quizngoReconnectHandlers
+  if (!handlers || !socket.io) return
+
+  socket.io.off('reconnect_attempt', handlers.handleReconnectAttempt)
+  socket.io.off('reconnect', handlers.handleReconnect)
+  socket.io.off('reconnect_error', handlers.handleReconnectError)
+  socket.io.off('reconnect_failed', handlers.handleReconnectFailed)
+  delete socket.__quizngoReconnectHandlers
+}
+
+function disconnectManagedSocket(socket) {
+  if (!socket) return
+  removeSocketReconnectListeners(socket)
+  socket.removeAllListeners()
+  socket.disconnect()
+}
 
 function readStoredPlayerProfile() {
   try {
@@ -222,9 +275,10 @@ function App() {
   const urlParams = new URLSearchParams(window.location.search)
   const urlPin = urlParams.get('pin')
   const urlLang = urlParams.get('lang')
+  const initialGamePin = useRef(normalizePin(urlPin || readStoredActiveGamePin())).current
 
-  const [screen, setScreen] = useState(urlPin ? SCREENS.NAME : SCREENS.PIN)
-  const [gamePin, setGamePin] = useState(urlPin || '')
+  const [screen, setScreen] = useState(initialGamePin ? SCREENS.NAME : SCREENS.PIN)
+  const [gamePin, setGamePin] = useState(initialGamePin)
   const [storedPlayerProfile, setStoredPlayerProfile] = useState(readStoredPlayerProfile)
   const [playerName, setPlayerName] = useState('')
   const [playerIcon, setPlayerIcon] = useState('')
@@ -240,14 +294,29 @@ function App() {
   const [language, setLanguage] = useState(urlLang || DEFAULT_LANGUAGE)
   const [answerTimeRemaining, setAnswerTimeRemaining] = useState(null)
   const [gameStarted, setGameStarted] = useState(false)
+  const [lobbyMode, setLobbyMode] = useState('waiting')
   const [serverUrl, setServerUrl] = useState(null)
   const [disconnected, setDisconnected] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
   const errorTimeoutRef = useRef(null)
+  const reconnectTimeoutRef = useRef(null)
+  const rejoinInProgressRef = useRef(false)
+  const autoJoinAttemptedRef = useRef(false)
   const timerRef = useRef(null)
   const uidRef = useRef(null)
+  const gamePinRef = useRef(initialGamePin)
+  const serverUrlRef = useRef(null)
+  const playerNameRef = useRef('')
+  const playerIconRef = useRef('')
+  const languageRef = useRef(urlLang || DEFAULT_LANGUAGE)
+  const screenRef = useRef(initialGamePin ? SCREENS.NAME : SCREENS.PIN)
+  const resultsRef = useRef(null)
+  const hasAnsweredRef = useRef(false)
+  const selectedAnswerRef = useRef(null)
+  const reconnectingRef = useRef(false)
   const gameClosedRef = useRef(false)
   const streakCountRef = useRef(0)
   const finalStatsRef = useRef({
@@ -256,18 +325,36 @@ function App() {
     bestStreak: 0
   })
 
-  // Resolve server URL via LB when PIN comes from URL
   useEffect(() => {
-    if (urlPin && !serverUrl) {
-      const cleanPin = urlPin.replace(/-/g, '')
+    gamePinRef.current = gamePin
+    serverUrlRef.current = serverUrl
+    playerNameRef.current = playerName
+    playerIconRef.current = playerIcon
+    languageRef.current = language
+    screenRef.current = screen
+    resultsRef.current = results
+    hasAnsweredRef.current = hasAnswered
+    selectedAnswerRef.current = selectedAnswer
+  }, [gamePin, serverUrl, playerName, playerIcon, language, screen, results, hasAnswered, selectedAnswer])
+
+  useEffect(() => {
+    autoJoinAttemptedRef.current = false
+  }, [gamePin])
+
+  // Resolve server URL via LB for direct-link or same-tab automatic resume.
+  useEffect(() => {
+    const cleanPin = normalizePin(gamePin)
+    if (screen === SCREENS.NAME && cleanPin.length === 6 && !serverUrl) {
       fetch(`${LB_URL}/api/resolve/${cleanPin}`)
         .then(res => res.json())
         .then(data => {
           if (data.status === 'success') {
+            serverUrlRef.current = data.server_url
             setServerUrl(data.server_url)
           } else {
             // Failed to resolve - show error and go back to PIN screen
             console.error('Failed to resolve PIN:', data.message)
+            clearStoredActiveGamePin()
             setPinError('Game not found with this PIN')
             setScreen(SCREENS.PIN)
           }
@@ -275,11 +362,12 @@ function App() {
         .catch(err => {
           // Network error - show error and go back to PIN screen
           console.error('Failed to resolve PIN from URL:', err)
+          clearStoredActiveGamePin()
           setPinError('Network error - cannot find game')
           setScreen(SCREENS.PIN)
         })
     }
-  }, [urlPin, serverUrl, language])
+  }, [screen, gamePin, serverUrl])
 
   // Apply direction when language changes. The PIN screen is intentionally
   // language-neutral/LTR, so returning home must clear any previous RTL state.
@@ -311,23 +399,83 @@ function App() {
     }, 1000)
   }, [])
 
+  const clearReconnectTimeout = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+  }, [])
+
+  const finishReconnecting = useCallback(() => {
+    reconnectingRef.current = false
+    clearReconnectTimeout()
+    setReconnecting(false)
+    setDisconnected(false)
+  }, [clearReconnectTimeout])
+
+  const beginReconnecting = useCallback(() => {
+    if (gameClosedRef.current) return
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    setAnswerTimeRemaining(null)
+    setDisconnected(false)
+    setReconnecting(true)
+
+    if (!reconnectingRef.current) {
+      reconnectingRef.current = true
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (!reconnectingRef.current) return
+        reconnectingRef.current = false
+        reconnectTimeoutRef.current = null
+        setReconnecting(false)
+        setDisconnected(true)
+
+        const activeSocket = socketRef.current
+        if (activeSocket) {
+          disconnectManagedSocket(activeSocket)
+          socketRef.current = null
+        }
+      }, RECONNECT_TIMEOUT_MS)
+    }
+  }, [])
+
+  const failReconnecting = useCallback((socket = null) => {
+    if (gameClosedRef.current) return
+    reconnectingRef.current = false
+    clearReconnectTimeout()
+    setReconnecting(false)
+    setDisconnected(true)
+
+    const activeSocket = socket || socketRef.current
+    if (activeSocket) {
+      disconnectManagedSocket(activeSocket)
+      if (socketRef.current === activeSocket) {
+        socketRef.current = null
+      }
+    }
+  }, [clearReconnectTimeout])
+
   const returnHomeSilently = useCallback((socket = null) => {
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
-    if (gamePin) {
-      const cleanPin = gamePin.replace(/-/g, '')
+    const cleanPin = normalizePin(gamePinRef.current || gamePin)
+    if (cleanPin) {
       sessionStorage.removeItem(`quizngo_uid_${cleanPin}`)
     }
+    clearStoredActiveGamePin()
+    finishReconnecting()
     if (window.location.search) {
       window.history.replaceState({}, '', window.location.pathname)
     }
 
     const activeSocket = socket || socketRef.current
     if (activeSocket) {
-      activeSocket.off('disconnect')
-      activeSocket.disconnect()
+      disconnectManagedSocket(activeSocket)
       if (socketRef.current === activeSocket) {
         socketRef.current = null
       }
@@ -335,22 +483,31 @@ function App() {
 
     setScreen(SCREENS.PIN)
     setGamePin('')
+    gamePinRef.current = ''
     setServerUrl(null)
+    serverUrlRef.current = null
     setLanguage(urlLang || DEFAULT_LANGUAGE)
     setPlayerName('')
+    playerNameRef.current = ''
     setPlayerIcon('')
+    playerIconRef.current = ''
     setUid(null)
     uidRef.current = null
     setResults(null)
+    resultsRef.current = null
     setHasAnswered(false)
+    hasAnsweredRef.current = false
     setSelectedAnswer(null)
+    selectedAnswerRef.current = null
     setIsAnswerTime(false)
     setAnswerTimeRemaining(null)
+    setLobbyMode('waiting')
     setError('')
     setPinError('')
     setLoading(false)
     setCheckingPin(false)
     setDisconnected(false)
+    setReconnecting(false)
     gameClosedRef.current = false
     streakCountRef.current = 0
     finalStatsRef.current = {
@@ -358,17 +515,146 @@ function App() {
       totalQuestions: 0,
       bestStreak: 0
     }
-  }, [gamePin, urlLang])
+  }, [finishReconnecting, gamePin, urlLang])
+
+  const applyJoinedGameState = useCallback((data, { preserveCurrentAnswer = false, preserveCurrentResults = false } = {}) => {
+    const gameState = data.gameState || 'waiting'
+    const isGameStarted = data.gameStarted || false
+    setGameStarted(isGameStarted)
+
+    if (gameState === 'results' && preserveCurrentResults && resultsRef.current) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setAnswerTimeRemaining(null)
+      setIsAnswerTime(false)
+      setLobbyMode('waiting')
+      setScreen(SCREENS.RESULT)
+      screenRef.current = SCREENS.RESULT
+      console.log('📊 Synced results state, keeping current result screen')
+      return
+    }
+
+    if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
+      console.log(`⏱️ Synced active question: ${data.remainingTime}s remaining`)
+      const shouldKeepAnswer = preserveCurrentAnswer && hasAnsweredRef.current
+      setIsAnswerTime(true)
+      setLobbyMode('waiting')
+      setHasAnswered(shouldKeepAnswer)
+      hasAnsweredRef.current = shouldKeepAnswer
+      setSelectedAnswer(shouldKeepAnswer ? selectedAnswerRef.current : null)
+      if (!shouldKeepAnswer) {
+        selectedAnswerRef.current = null
+      }
+      setResults(null)
+      resultsRef.current = null
+      setScreen(SCREENS.ANSWER)
+      screenRef.current = SCREENS.ANSWER
+      startAnswerTimer(data.remainingTime)
+      return
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    setAnswerTimeRemaining(null)
+    setIsAnswerTime(false)
+    setHasAnswered(false)
+    hasAnsweredRef.current = false
+    setSelectedAnswer(null)
+    selectedAnswerRef.current = null
+
+    if (gameState === 'results') {
+      console.log('📊 Synced between questions, waiting in lobby')
+      setLobbyMode('betweenQuestions')
+    } else {
+      setLobbyMode('waiting')
+    }
+    setScreen(SCREENS.LOBBY)
+    screenRef.current = SCREENS.LOBBY
+  }, [startAnswerTimer])
+
+  const rejoinConnectedSocket = useCallback(async (socket) => {
+    if (rejoinInProgressRef.current) return
+
+    const cleanPin = normalizePin(gamePinRef.current)
+    const currentServerUrl = serverUrlRef.current
+    const storedUid = cleanPin ? sessionStorage.getItem(`quizngo_uid_${cleanPin}`) : null
+    const currentUid = uidRef.current || storedUid
+    const fallbackProfile = readStoredPlayerProfile()
+    const name = (playerNameRef.current || fallbackProfile.name).trim()
+    const icon = playerIconRef.current || fallbackProfile.icon
+
+    if (!socket?.connected || !currentServerUrl || cleanPin.length !== 6 || !currentUid || !name) {
+      failReconnecting(socket)
+      return
+    }
+
+    rejoinInProgressRef.current = true
+    try {
+      const response = await fetch(`${currentServerUrl}/?join_player`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          game_pin: cleanPin,
+          name,
+          icon,
+          socketId: socket.id,
+          uid: currentUid
+        })
+      })
+      const data = await response.json()
+
+      if (response.ok && data.uid) {
+        setUid(data.uid)
+        uidRef.current = data.uid
+        sessionStorage.setItem(`quizngo_uid_${cleanPin}`, data.uid)
+        storeActiveGamePin(cleanPin)
+        setGamePin(cleanPin)
+        setPlayerName(name)
+        setPlayerIcon(icon)
+        playerNameRef.current = name
+        playerIconRef.current = icon
+        setStoredPlayerProfile({ name, icon })
+        storePlayerProfile(name, icon)
+        applyJoinedGameState(data, { preserveCurrentAnswer: true, preserveCurrentResults: true })
+        finishReconnecting()
+        console.log(`✅ Rejoined game after reconnect. UID: ${data.uid}`)
+        return
+      }
+
+      if (isClosedGameResponse(data)) {
+        returnHomeSilently(socket)
+        return
+      }
+
+      console.error('❌ Rejoin failed:', data)
+      failReconnecting(socket)
+    } catch (err) {
+      console.error('❌ Rejoin error:', err)
+      failReconnecting(socket)
+    } finally {
+      rejoinInProgressRef.current = false
+    }
+  }, [applyJoinedGameState, failReconnecting, finishReconnecting, returnHomeSilently])
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket) => {
     socket.on('answer_time_started', (data) => {
       console.log('🎯 Answer time started!', data)
+      finishReconnecting()
       setIsAnswerTime(true)
+      setLobbyMode('waiting')
       setHasAnswered(false)
+      hasAnsweredRef.current = false
       setSelectedAnswer(null)
+      selectedAnswerRef.current = null
       setResults(null)
+      resultsRef.current = null
       setScreen(SCREENS.ANSWER)
+      screenRef.current = SCREENS.ANSWER
       // Start timer from full question wait time
       const questionWaitTime = data.questionWaitTime || 30
       startAnswerTimer(questionWaitTime)
@@ -376,6 +662,7 @@ function App() {
 
     socket.on('player_results', (data) => {
       console.log('📊 Results received!', data)
+      finishReconnecting()
       // Only process results meant for this player
       if (data.userId && uidRef.current && data.userId !== uidRef.current) {
         console.log('⚠️ Ignoring results for different user:', data.userId)
@@ -397,7 +684,7 @@ function App() {
         bestStreak: data.bestStreak ?? Math.max(fallbackStats.bestStreak, streakCount)
       }
       finalStatsRef.current = finalStats
-      setResults({
+      const nextResults = {
         questionScore: data.questionScore,
         cumulativeScore: data.cumulativeScore,
         rank: data.rank,
@@ -408,27 +695,38 @@ function App() {
         totalQuestions: finalStats.totalQuestions,
         bestStreak: finalStats.bestStreak,
         answered: data.answered
-      })
+      }
+      resultsRef.current = nextResults
+      setResults(nextResults)
       setIsAnswerTime(false)
       setScreen(SCREENS.RESULT)
+      screenRef.current = SCREENS.RESULT
     })
 
     socket.on('game_closed', (data) => {
       console.log('🚫 Game closed!', data)
       gameClosedRef.current = true
+      finishReconnecting()
 
       const reasonCode = data?.reason?.code || data?.message?.params?.reason
       if (reasonCode === 'COMPLETED' || reasonCode === 'MANUAL') {
+        const cleanPin = normalizePin(gamePinRef.current)
+        if (cleanPin) {
+          sessionStorage.removeItem(`quizngo_uid_${cleanPin}`)
+        }
+        clearStoredActiveGamePin()
         if (timerRef.current) {
           clearInterval(timerRef.current)
           timerRef.current = null
         }
-        setAnswerTimeRemaining(null)
-        setIsAnswerTime(false)
-        setHasAnswered(false)
+      setAnswerTimeRemaining(null)
+      setIsAnswerTime(false)
+      setLobbyMode('waiting')
+      setHasAnswered(false)
+        hasAnsweredRef.current = false
         setSelectedAnswer(null)
-        socket.off('disconnect')
-        socket.disconnect()
+        selectedAnswerRef.current = null
+        disconnectManagedSocket(socket)
         if (socketRef.current === socket) {
           socketRef.current = null
         }
@@ -439,19 +737,51 @@ function App() {
       returnHomeSilently(socket)
     })
 
-    socket.on('disconnect', () => {
-      console.log('❌ Socket disconnected')
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Socket disconnected:', reason)
       // Only show disconnected overlay if this wasn't a normal game_closed
-      if (!gameClosedRef.current) {
-        if (timerRef.current) {
-          clearInterval(timerRef.current)
-          timerRef.current = null
-        }
-        setAnswerTimeRemaining(null)
-        setDisconnected(true)
+      if (gameClosedRef.current || reason === 'io client disconnect') {
+        return
+      }
+
+      if (socket.active) {
+        beginReconnecting()
+      } else {
+        failReconnecting(socket)
       }
     })
-  }, [returnHomeSilently, startAnswerTimer])
+
+    const handleReconnectAttempt = () => {
+      beginReconnecting()
+    }
+    const handleReconnect = () => {
+      rejoinConnectedSocket(socket)
+    }
+    const handleReconnectError = () => {
+      beginReconnecting()
+    }
+    const handleReconnectFailed = () => {
+      failReconnecting(socket)
+    }
+
+    socket.__quizngoReconnectHandlers = {
+      handleReconnectAttempt,
+      handleReconnect,
+      handleReconnectError,
+      handleReconnectFailed
+    }
+    socket.io.on('reconnect_attempt', handleReconnectAttempt)
+    socket.io.on('reconnect', handleReconnect)
+    socket.io.on('reconnect_error', handleReconnectError)
+    socket.io.on('reconnect_failed', handleReconnectFailed)
+  }, [
+    beginReconnecting,
+    failReconnecting,
+    finishReconnecting,
+    rejoinConnectedSocket,
+    returnHomeSilently,
+    startAnswerTimer
+  ])
 
   const showError = useCallback((message) => {
     setError(message)
@@ -465,32 +795,63 @@ function App() {
   }, [])
 
   // Join game
-  const joinGame = async (name, icon) => {
+  const joinGame = useCallback(async (name, icon) => {
     setLoading(true)
     setError('')
+    let socket = null
 
     try {
-      const cleanPin = gamePin.replace(/-/g, '')
+      const cleanPin = normalizePin(gamePinRef.current || gamePin)
+      const currentServerUrl = serverUrlRef.current || serverUrl
+      const playerProfile = {
+        name: name.trim().slice(0, 16),
+        icon: USER_ICONS.includes(icon) ? icon : USER_ICONS[0]
+      }
 
       // Guard: ensure serverUrl is resolved before connecting
-      if (!serverUrl) {
+      if (!currentServerUrl) {
         console.error('❌ Cannot join: serverUrl not resolved yet')
-        showError(language === 'he' ? 'השרת עדיין לא מוכן, נסו שוב' : 'Server not ready, please try again')
+        showError(languageRef.current === 'he' ? 'השרת עדיין לא מוכן, נסו שוב' : 'Server not ready, please try again')
         setLoading(false)
         return
       }
 
+      if (socketRef.current) {
+        disconnectManagedSocket(socketRef.current)
+        socketRef.current = null
+      }
+
       // Create WebSocket to the resolved game server
-      const socket = io(serverUrl, {
+      socket = io(currentServerUrl, {
         transports: ['websocket', 'polling'],
-        reconnection: false,
+        reconnection: true,
+        reconnectionAttempts: 12,
+        reconnectionDelay: 800,
+        reconnectionDelayMax: 3000,
+        timeout: 5000,
         forceNew: true
       })
 
       await new Promise((resolve, reject) => {
-        socket.on('connect', resolve)
-        socket.on('connect_error', reject)
-        setTimeout(() => reject(new Error('Connection timeout')), 5000)
+        const timeoutId = setTimeout(() => {
+          cleanup()
+          reject(new Error('Connection timeout'))
+        }, 5000)
+        const cleanup = () => {
+          clearTimeout(timeoutId)
+          socket.off('connect', handleConnect)
+          socket.off('connect_error', handleConnectError)
+        }
+        const handleConnect = () => {
+          cleanup()
+          resolve()
+        }
+        const handleConnectError = (err) => {
+          cleanup()
+          reject(err)
+        }
+        socket.once('connect', handleConnect)
+        socket.once('connect_error', handleConnectError)
       })
 
       console.log(`✅ Socket connected: ${socket.id}`)
@@ -499,14 +860,14 @@ function App() {
       const storedUid = sessionStorage.getItem(`quizngo_uid_${cleanPin}`)
       const joinBody = {
         game_pin: cleanPin,
-        name: name,
-        icon: icon,
+        name: playerProfile.name,
+        icon: playerProfile.icon,
         socketId: socket.id
       }
       if (storedUid) {
         joinBody.uid = storedUid
       }
-      const response = await fetch(`${serverUrl}/?join_player`, {
+      const response = await fetch(`${currentServerUrl}/?join_player`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(joinBody)
@@ -519,57 +880,101 @@ function App() {
         uidRef.current = data.uid
         // Persist UID for reconnection
         sessionStorage.setItem(`quizngo_uid_${cleanPin}`, data.uid)
-        setPlayerName(name)
-        setPlayerIcon(icon)
-        const playerProfile = {
-          name: name.trim().slice(0, 16),
-          icon: USER_ICONS.includes(icon) ? icon : USER_ICONS[0]
-        }
+        storeActiveGamePin(cleanPin)
+        setGamePin(cleanPin)
+        gamePinRef.current = cleanPin
+        setPlayerName(playerProfile.name)
+        setPlayerIcon(playerProfile.icon)
+        playerNameRef.current = playerProfile.name
+        playerIconRef.current = playerProfile.icon
         storePlayerProfile(playerProfile.name, playerProfile.icon)
         setStoredPlayerProfile(playerProfile)
+        gameClosedRef.current = false
+        finishReconnecting()
         socketRef.current = socket
         setupSocketListeners(socket)
+        applyJoinedGameState(data)
 
-        // Determine which screen to show based on current game state
-        const gameState = data.gameState || 'waiting'
-        const isGameStarted = data.gameStarted || false
-        setGameStarted(isGameStarted)
-
-        if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
-          // Mid-question join: show answer screen with remaining time
-          console.log(`⏱️ Mid-question join: ${data.remainingTime}s remaining`)
-          setIsAnswerTime(true)
-          setHasAnswered(false)
-          setSelectedAnswer(null)
-          setResults(null)
-          setScreen(SCREENS.ANSWER)
-          startAnswerTimer(data.remainingTime)
-        } else if (gameState === 'results') {
-          // Between questions: wait in lobby for next question
-          console.log('📊 Joined between questions, waiting in lobby')
-          setScreen(SCREENS.LOBBY)
-        } else {
-          // Default: lobby (waiting for game to start or next question)
-          setScreen(SCREENS.LOBBY)
-        }
-
-        console.log(`✅ Joined game! UID: ${data.uid}, state: ${gameState}`)
+        console.log(`✅ Joined game! UID: ${data.uid}, state: ${data.gameState || 'waiting'}`)
       } else {
         if (isClosedGameResponse(data)) {
           returnHomeSilently(socket)
           return
         }
-        socket.off('disconnect')
-        socket.disconnect()
-        showError(formatServerMessage(data.message, language, data.error || 'Failed to join game'))
+        disconnectManagedSocket(socket)
+        socket = null
+        showError(formatServerMessage(data.message, languageRef.current, data.error || 'Failed to join game'))
       }
     } catch (err) {
       console.error('❌ Join error:', err)
+      if (socket && socketRef.current !== socket) {
+        disconnectManagedSocket(socket)
+      }
       showError(err.message || 'Connection failed')
     } finally {
       setLoading(false)
     }
-  }
+  }, [
+    applyJoinedGameState,
+    finishReconnecting,
+    gamePin,
+    returnHomeSilently,
+    serverUrl,
+    setupSocketListeners,
+    showError
+  ])
+
+  useEffect(() => {
+    const cleanPin = normalizePin(gamePin)
+    if (
+      autoJoinAttemptedRef.current ||
+      screen !== SCREENS.NAME ||
+      !serverUrl ||
+      loading ||
+      uidRef.current ||
+      cleanPin.length !== 6
+    ) {
+      return
+    }
+
+    const storedUid = sessionStorage.getItem(`quizngo_uid_${cleanPin}`)
+    if (!storedUid || !storedPlayerProfile.name) {
+      return
+    }
+
+    autoJoinAttemptedRef.current = true
+    joinGame(storedPlayerProfile.name, storedPlayerProfile.icon)
+  }, [gamePin, joinGame, loading, screen, serverUrl, storedPlayerProfile])
+
+  useEffect(() => {
+    const handleResume = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') {
+        return
+      }
+
+      const socket = socketRef.current
+      if (!socket || !uidRef.current || gameClosedRef.current) {
+        return
+      }
+
+      if (socket.connected) {
+        rejoinConnectedSocket(socket)
+      } else if (socket.active) {
+        beginReconnecting()
+        socket.connect()
+      } else {
+        failReconnecting(socket)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleResume)
+    window.addEventListener('pageshow', handleResume)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleResume)
+      window.removeEventListener('pageshow', handleResume)
+    }
+  }, [beginReconnecting, failReconnecting, rejoinConnectedSocket])
 
   const showPinError = useCallback((message) => {
     setPinError(message)
@@ -589,7 +994,7 @@ function App() {
     setPinError('')
 
     try {
-      const cleanPin = gamePin.replace(/-/g, '')
+      const cleanPin = normalizePin(gamePin)
 
       // Step 1: Resolve PIN via Load Balancer to get the game server URL
       const lbResponse = await fetch(`${LB_URL}/api/resolve/${cleanPin}`)
@@ -601,6 +1006,7 @@ function App() {
       }
 
       const resolvedServerUrl = lbData.server_url
+      serverUrlRef.current = resolvedServerUrl
       setServerUrl(resolvedServerUrl)
 
       // Step 2: Check game status on the actual game server
@@ -617,6 +1023,7 @@ function App() {
           if (data.language) {
             setLanguage(data.language)
           }
+          setGamePin(cleanPin)
           setScreen(SCREENS.NAME)
         }
       } else {
@@ -636,9 +1043,11 @@ function App() {
 
     setHasAnswered(true)
     setSelectedAnswer(answerIndex)
+    hasAnsweredRef.current = true
+    selectedAnswerRef.current = answerIndex
 
     try {
-      const response = await fetch(`${serverUrl}/submit_answer`, {
+      const response = await fetch(`${serverUrlRef.current || serverUrl}/submit_answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -663,36 +1072,47 @@ function App() {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
+    finishReconnecting()
     if (socketRef.current) {
-      socketRef.current.disconnect()
+      disconnectManagedSocket(socketRef.current)
       socketRef.current = null
     }
     // Clear stored UID for old game
     if (gamePin) {
-      const cleanPin = gamePin.replace(/-/g, '')
+      const cleanPin = normalizePin(gamePin)
       sessionStorage.removeItem(`quizngo_uid_${cleanPin}`)
     }
+    clearStoredActiveGamePin()
     // Clear URL params so a page-reload doesn't jump back to NameScreen
     if (window.location.search) {
       window.history.replaceState({}, '', window.location.pathname)
     }
     setScreen(SCREENS.PIN)
     setGamePin('')
+    gamePinRef.current = ''
     setServerUrl(null)
+    serverUrlRef.current = null
     setLanguage(urlLang || DEFAULT_LANGUAGE)
     setPlayerName('')
+    playerNameRef.current = ''
     setPlayerIcon('')
+    playerIconRef.current = ''
     setUid(null)
     uidRef.current = null
     setResults(null)
+    resultsRef.current = null
     setHasAnswered(false)
+    hasAnsweredRef.current = false
     setSelectedAnswer(null)
+    selectedAnswerRef.current = null
     setIsAnswerTime(false)
     setAnswerTimeRemaining(null)
+    setLobbyMode('waiting')
     setError('')
     setPinError('')
     setCheckingPin(false)
     setDisconnected(false)
+    setReconnecting(false)
     gameClosedRef.current = false
     streakCountRef.current = 0
     finalStatsRef.current = {
@@ -714,14 +1134,35 @@ function App() {
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
       if (socketRef.current) {
-        socketRef.current.disconnect()
+        disconnectManagedSocket(socketRef.current)
       }
     }
   }, [])
 
   return (
     <div>
+      {reconnecting && !disconnected && (
+        <div className="qng-screen qng-screen--disconnect">
+          <div className="qng-screen-center">
+            <div className="qng-disconnect-icon-tile">
+              <div className="qng-spinner" aria-hidden="true" />
+            </div>
+            <div className="qng-disconnect-title">
+              {language === 'he' ? 'מתחברים מחדש' : 'Reconnecting'}
+            </div>
+            <div className="qng-disconnect-body">
+              {language === 'he'
+                ? 'מחזירים אותך למשחק אוטומטית...'
+                : 'Bringing you back into the game automatically...'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {disconnected && (
         <div className="qng-screen qng-screen--disconnect">
           <div className="qng-screen-center">
@@ -755,7 +1196,7 @@ function App() {
         <NameScreen
           onJoin={joinGame}
           error={error}
-          loading={loading || (urlPin && !serverUrl)}
+          loading={loading || (screen === SCREENS.NAME && !!gamePin && !serverUrl)}
           language={language}
           defaultName={storedPlayerProfile.name}
           defaultIcon={storedPlayerProfile.icon}
@@ -768,6 +1209,7 @@ function App() {
           playerIcon={playerIcon}
           language={language}
           gameStarted={gameStarted}
+          mode={lobbyMode}
         />
       )}
 
