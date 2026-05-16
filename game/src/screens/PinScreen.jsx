@@ -25,6 +25,8 @@ function PinScreen({ gamePin, setGamePin, onSubmit, error, loading }) {
           src={`${import.meta.env.BASE_URL}logo.png`}
           alt="QuizNGO"
           className="qng-logo"
+          width="845"
+          height="448"
         />
 
         <div style={{ width: '88%', textAlign: 'center' }}>

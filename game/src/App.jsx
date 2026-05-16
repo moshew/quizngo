@@ -33,6 +33,7 @@ const DEFAULT_LANGUAGE = 'en'
 const PLAYER_PROFILE_STORAGE_KEY = 'quizngo_player_profile'
 const ACTIVE_GAME_PIN_STORAGE_KEY = 'quizngo_active_game_pin'
 const RECONNECT_TIMEOUT_MS = 30000
+const RECONNECT_OVERLAY_DELAY_MS = 1200
 
 function normalizePin(pin = '') {
   return String(pin).replace(/[^0-9]/g, '')
@@ -64,6 +65,16 @@ function clearStoredActiveGamePin() {
     sessionStorage.removeItem(ACTIVE_GAME_PIN_STORAGE_KEY)
   } catch (err) {
     console.warn('Failed to clear active game PIN:', err)
+  }
+}
+
+function readStoredUidForPin(pin) {
+  try {
+    const cleanPin = normalizePin(pin)
+    return cleanPin.length === 6 ? sessionStorage.getItem(`quizngo_uid_${cleanPin}`) : null
+  } catch (err) {
+    console.warn('Failed to read stored player UID:', err)
+    return null
   }
 }
 
@@ -296,13 +307,20 @@ function App() {
   const [gameStarted, setGameStarted] = useState(false)
   const [lobbyMode, setLobbyMode] = useState('waiting')
   const [serverUrl, setServerUrl] = useState(null)
-  const [disconnected, setDisconnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
+  const [autoJoinVisible, setAutoJoinVisible] = useState(() => {
+    const cleanInitialPin = normalizePin(initialGamePin)
+    return cleanInitialPin.length === 6 &&
+      !!readStoredUidForPin(cleanInitialPin) &&
+      !!storedPlayerProfile.name
+  })
 
   const socketRef = useRef(null)
   const pinErrorTimeoutRef = useRef(null)
   const errorTimeoutRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
+  const reconnectOverlayDelayRef = useRef(null)
+  const rejoinRetryTimeoutRef = useRef(null)
   const rejoinInProgressRef = useRef(false)
   const autoJoinAttemptedRef = useRef(false)
   const timerRef = useRef(null)
@@ -339,7 +357,20 @@ function App() {
 
   useEffect(() => {
     autoJoinAttemptedRef.current = false
+    setAutoJoinVisible(false)
   }, [gamePin])
+
+  useEffect(() => {
+    const cleanPin = normalizePin(gamePin)
+    const canAutoJoin = screen === SCREENS.NAME &&
+      cleanPin.length === 6 &&
+      !uidRef.current &&
+      !autoJoinAttemptedRef.current &&
+      !!readStoredUidForPin(cleanPin) &&
+      !!storedPlayerProfile.name
+
+    setAutoJoinVisible(canAutoJoin)
+  }, [gamePin, screen, storedPlayerProfile.name])
 
   // Resolve server URL via LB for direct-link or same-tab automatic resume.
   useEffect(() => {
@@ -406,57 +437,23 @@ function App() {
     }
   }, [])
 
-  const finishReconnecting = useCallback(() => {
-    reconnectingRef.current = false
-    clearReconnectTimeout()
-    setReconnecting(false)
-    setDisconnected(false)
-  }, [clearReconnectTimeout])
-
-  const beginReconnecting = useCallback(() => {
-    if (gameClosedRef.current) return
-
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    setAnswerTimeRemaining(null)
-    setDisconnected(false)
-    setReconnecting(true)
-
-    if (!reconnectingRef.current) {
-      reconnectingRef.current = true
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (!reconnectingRef.current) return
-        reconnectingRef.current = false
-        reconnectTimeoutRef.current = null
-        setReconnecting(false)
-        setDisconnected(true)
-
-        const activeSocket = socketRef.current
-        if (activeSocket) {
-          disconnectManagedSocket(activeSocket)
-          socketRef.current = null
-        }
-      }, RECONNECT_TIMEOUT_MS)
+  const clearReconnectOverlayDelay = useCallback(() => {
+    if (reconnectOverlayDelayRef.current) {
+      clearTimeout(reconnectOverlayDelayRef.current)
+      reconnectOverlayDelayRef.current = null
     }
   }, [])
 
-  const failReconnecting = useCallback((socket = null) => {
-    if (gameClosedRef.current) return
+  const finishReconnecting = useCallback(() => {
     reconnectingRef.current = false
     clearReconnectTimeout()
-    setReconnecting(false)
-    setDisconnected(true)
-
-    const activeSocket = socket || socketRef.current
-    if (activeSocket) {
-      disconnectManagedSocket(activeSocket)
-      if (socketRef.current === activeSocket) {
-        socketRef.current = null
-      }
+    clearReconnectOverlayDelay()
+    if (rejoinRetryTimeoutRef.current) {
+      clearTimeout(rejoinRetryTimeoutRef.current)
+      rejoinRetryTimeoutRef.current = null
     }
-  }, [clearReconnectTimeout])
+    setReconnecting(false)
+  }, [clearReconnectOverlayDelay, clearReconnectTimeout])
 
   const returnHomeSilently = useCallback((socket = null) => {
     if (timerRef.current) {
@@ -506,7 +503,6 @@ function App() {
     setPinError('')
     setLoading(false)
     setCheckingPin(false)
-    setDisconnected(false)
     setReconnecting(false)
     gameClosedRef.current = false
     streakCountRef.current = 0
@@ -517,10 +513,94 @@ function App() {
     }
   }, [finishReconnecting, gamePin, urlLang])
 
+  const beginReconnecting = useCallback(() => {
+    if (gameClosedRef.current) return
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    setAnswerTimeRemaining(null)
+
+    if (!reconnectingRef.current) {
+      reconnectingRef.current = true
+    }
+
+    const pageVisible = !document.visibilityState || document.visibilityState === 'visible'
+    if (pageVisible && !reconnectOverlayDelayRef.current) {
+      reconnectOverlayDelayRef.current = setTimeout(() => {
+        reconnectOverlayDelayRef.current = null
+        if (reconnectingRef.current && !gameClosedRef.current) {
+          setReconnecting(true)
+        }
+      }, RECONNECT_OVERLAY_DELAY_MS)
+    }
+
+    if (pageVisible && !reconnectTimeoutRef.current) {
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (!reconnectingRef.current) return
+        reconnectingRef.current = false
+        reconnectTimeoutRef.current = null
+        returnHomeSilently(socketRef.current)
+      }, RECONNECT_TIMEOUT_MS)
+    }
+  }, [returnHomeSilently])
+
+  const failReconnecting = useCallback((socket = null) => {
+    if (gameClosedRef.current) return
+    returnHomeSilently(socket)
+  }, [returnHomeSilently])
+
+  const applyPlayerResult = useCallback((data) => {
+    if (data.userId && uidRef.current && data.userId !== uidRef.current) {
+      return false
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    setAnswerTimeRemaining(null)
+    const fallbackStreakCount = data.isCorrect ? streakCountRef.current + 1 : 0
+    const streakCount = data.streakCount ?? fallbackStreakCount
+    streakCountRef.current = streakCount
+    const fallbackStats = finalStatsRef.current
+    const finalStats = {
+      correctAnswers: data.correctAnswers ?? (fallbackStats.correctAnswers + (data.isCorrect ? 1 : 0)),
+      totalQuestions: data.totalQuestions ?? (fallbackStats.totalQuestions + 1),
+      bestStreak: data.bestStreak ?? Math.max(fallbackStats.bestStreak, streakCount)
+    }
+    finalStatsRef.current = finalStats
+    const nextResults = {
+      questionScore: data.questionScore,
+      cumulativeScore: data.cumulativeScore,
+      rank: data.rank,
+      isCorrect: data.isCorrect,
+      correctAnswer: data.correctAnswer,
+      streakCount,
+      correctAnswers: finalStats.correctAnswers,
+      totalQuestions: finalStats.totalQuestions,
+      bestStreak: finalStats.bestStreak,
+      answered: data.answered
+    }
+    resultsRef.current = nextResults
+    setResults(nextResults)
+    setIsAnswerTime(false)
+    setLobbyMode('waiting')
+    setScreen(SCREENS.RESULT)
+    screenRef.current = SCREENS.RESULT
+    return true
+  }, [])
+
   const applyJoinedGameState = useCallback((data, { preserveCurrentAnswer = false, preserveCurrentResults = false } = {}) => {
     const gameState = data.gameState || 'waiting'
     const isGameStarted = data.gameStarted || false
     setGameStarted(isGameStarted)
+
+    if (gameState === 'results' && data.playerResult && applyPlayerResult(data.playerResult)) {
+      console.log('📊 Synced player result after reconnect')
+      return
+    }
 
     if (gameState === 'results' && preserveCurrentResults && resultsRef.current) {
       if (timerRef.current) {
@@ -536,22 +616,31 @@ function App() {
       return
     }
 
-    if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
+    const currentAnswer = data.currentAnswer || null
+    const hasServerAnswer = currentAnswer?.answerIndex !== undefined && currentAnswer?.answerIndex !== null
+    if (gameState === 'answering' && data.needsSync && (data.remainingTime > 0 || hasServerAnswer)) {
       console.log(`⏱️ Synced active question: ${data.remainingTime}s remaining`)
-      const shouldKeepAnswer = preserveCurrentAnswer && hasAnsweredRef.current
+      const shouldKeepAnswer = hasServerAnswer || (preserveCurrentAnswer && hasAnsweredRef.current)
+      const nextSelectedAnswer = hasServerAnswer ? currentAnswer.answerIndex : selectedAnswerRef.current
       setIsAnswerTime(true)
       setLobbyMode('waiting')
       setHasAnswered(shouldKeepAnswer)
       hasAnsweredRef.current = shouldKeepAnswer
-      setSelectedAnswer(shouldKeepAnswer ? selectedAnswerRef.current : null)
+      setSelectedAnswer(shouldKeepAnswer ? nextSelectedAnswer : null)
       if (!shouldKeepAnswer) {
         selectedAnswerRef.current = null
+      } else {
+        selectedAnswerRef.current = nextSelectedAnswer
       }
       setResults(null)
       resultsRef.current = null
       setScreen(SCREENS.ANSWER)
       screenRef.current = SCREENS.ANSWER
-      startAnswerTimer(data.remainingTime)
+      if (data.remainingTime > 0) {
+        startAnswerTimer(data.remainingTime)
+      } else {
+        setAnswerTimeRemaining(0)
+      }
       return
     }
 
@@ -574,14 +663,29 @@ function App() {
     }
     setScreen(SCREENS.LOBBY)
     screenRef.current = SCREENS.LOBBY
-  }, [startAnswerTimer])
+  }, [applyPlayerResult, startAnswerTimer])
 
   const rejoinConnectedSocket = useCallback(async (socket) => {
     if (rejoinInProgressRef.current) return
 
+    const scheduleRejoinRetry = () => {
+      if (rejoinRetryTimeoutRef.current || gameClosedRef.current) return
+      rejoinRetryTimeoutRef.current = setTimeout(() => {
+        rejoinRetryTimeoutRef.current = null
+        if (!reconnectingRef.current || socketRef.current !== socket || gameClosedRef.current) {
+          return
+        }
+        if (socket.connected) {
+          rejoinConnectedSocket(socket)
+        } else {
+          socket.connect()
+        }
+      }, 1000)
+    }
+
     const cleanPin = normalizePin(gamePinRef.current)
     const currentServerUrl = serverUrlRef.current
-    const storedUid = cleanPin ? sessionStorage.getItem(`quizngo_uid_${cleanPin}`) : null
+    const storedUid = readStoredUidForPin(cleanPin)
     const currentUid = uidRef.current || storedUid
     const fallbackProfile = readStoredPlayerProfile()
     const name = (playerNameRef.current || fallbackProfile.name).trim()
@@ -608,6 +712,10 @@ function App() {
       const data = await response.json()
 
       if (response.ok && data.uid) {
+        if (data.language) {
+          setLanguage(data.language)
+          languageRef.current = data.language
+        }
         setUid(data.uid)
         uidRef.current = data.uid
         sessionStorage.setItem(`quizngo_uid_${cleanPin}`, data.uid)
@@ -631,17 +739,34 @@ function App() {
       }
 
       console.error('❌ Rejoin failed:', data)
-      failReconnecting(socket)
+      beginReconnecting()
+      scheduleRejoinRetry()
     } catch (err) {
       console.error('❌ Rejoin error:', err)
-      failReconnecting(socket)
+      beginReconnecting()
+      scheduleRejoinRetry()
     } finally {
       rejoinInProgressRef.current = false
     }
-  }, [applyJoinedGameState, failReconnecting, finishReconnecting, returnHomeSilently])
+  }, [applyJoinedGameState, beginReconnecting, failReconnecting, finishReconnecting, returnHomeSilently])
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket) => {
+    const scheduleSocketRecovery = () => {
+      if (rejoinRetryTimeoutRef.current || gameClosedRef.current) return
+      rejoinRetryTimeoutRef.current = setTimeout(() => {
+        rejoinRetryTimeoutRef.current = null
+        if (!reconnectingRef.current || socketRef.current !== socket || gameClosedRef.current) {
+          return
+        }
+        if (socket.connected) {
+          rejoinConnectedSocket(socket)
+        } else {
+          socket.connect()
+        }
+      }, 1000)
+    }
+
     socket.on('answer_time_started', (data) => {
       console.log('🎯 Answer time started!', data)
       finishReconnecting()
@@ -663,44 +788,9 @@ function App() {
     socket.on('player_results', (data) => {
       console.log('📊 Results received!', data)
       finishReconnecting()
-      // Only process results meant for this player
-      if (data.userId && uidRef.current && data.userId !== uidRef.current) {
+      if (!applyPlayerResult(data)) {
         console.log('⚠️ Ignoring results for different user:', data.userId)
-        return
       }
-      // Clear answer timer
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-      }
-      setAnswerTimeRemaining(null)
-      const fallbackStreakCount = data.isCorrect ? streakCountRef.current + 1 : 0
-      const streakCount = data.streakCount ?? fallbackStreakCount
-      streakCountRef.current = streakCount
-      const fallbackStats = finalStatsRef.current
-      const finalStats = {
-        correctAnswers: data.correctAnswers ?? (fallbackStats.correctAnswers + (data.isCorrect ? 1 : 0)),
-        totalQuestions: data.totalQuestions ?? (fallbackStats.totalQuestions + 1),
-        bestStreak: data.bestStreak ?? Math.max(fallbackStats.bestStreak, streakCount)
-      }
-      finalStatsRef.current = finalStats
-      const nextResults = {
-        questionScore: data.questionScore,
-        cumulativeScore: data.cumulativeScore,
-        rank: data.rank,
-        isCorrect: data.isCorrect,
-        correctAnswer: data.correctAnswer,
-        streakCount,
-        correctAnswers: finalStats.correctAnswers,
-        totalQuestions: finalStats.totalQuestions,
-        bestStreak: finalStats.bestStreak,
-        answered: data.answered
-      }
-      resultsRef.current = nextResults
-      setResults(nextResults)
-      setIsAnswerTime(false)
-      setScreen(SCREENS.RESULT)
-      screenRef.current = SCREENS.RESULT
     })
 
     socket.on('game_closed', (data) => {
@@ -739,16 +829,27 @@ function App() {
 
     socket.on('disconnect', (reason) => {
       console.log('❌ Socket disconnected:', reason)
-      // Only show disconnected overlay if this wasn't a normal game_closed
+      // Show reconnecting while the client tries to recover. Mobile sleep can
+      // leave Socket.IO inactive briefly, so let the reconnect timeout decide.
       if (gameClosedRef.current || reason === 'io client disconnect') {
         return
       }
 
-      if (socket.active) {
-        beginReconnecting()
-      } else {
-        failReconnecting(socket)
+      beginReconnecting()
+      if (!socket.active) {
+        socket.connect()
       }
+    })
+
+    socket.on('connect', () => {
+      if (!uidRef.current || gameClosedRef.current) return
+      rejoinConnectedSocket(socket)
+    })
+
+    socket.on('connect_error', () => {
+      if (gameClosedRef.current) return
+      beginReconnecting()
+      scheduleSocketRecovery()
     })
 
     const handleReconnectAttempt = () => {
@@ -761,7 +862,8 @@ function App() {
       beginReconnecting()
     }
     const handleReconnectFailed = () => {
-      failReconnecting(socket)
+      beginReconnecting()
+      scheduleSocketRecovery()
     }
 
     socket.__quizngoReconnectHandlers = {
@@ -777,6 +879,7 @@ function App() {
   }, [
     beginReconnecting,
     failReconnecting,
+    applyPlayerResult,
     finishReconnecting,
     rejoinConnectedSocket,
     returnHomeSilently,
@@ -876,6 +979,10 @@ function App() {
       const data = await response.json()
 
       if (response.ok && data.uid) {
+        if (data.language) {
+          setLanguage(data.language)
+          languageRef.current = data.language
+        }
         setUid(data.uid)
         uidRef.current = data.uid
         // Persist UID for reconnection
@@ -937,44 +1044,60 @@ function App() {
       return
     }
 
-    const storedUid = sessionStorage.getItem(`quizngo_uid_${cleanPin}`)
+    const storedUid = readStoredUidForPin(cleanPin)
     if (!storedUid || !storedPlayerProfile.name) {
       return
     }
 
     autoJoinAttemptedRef.current = true
-    joinGame(storedPlayerProfile.name, storedPlayerProfile.icon)
+    setAutoJoinVisible(true)
+    joinGame(storedPlayerProfile.name, storedPlayerProfile.icon).finally(() => {
+      if (screenRef.current === SCREENS.NAME) {
+        setAutoJoinVisible(false)
+      }
+    })
   }, [gamePin, joinGame, loading, screen, serverUrl, storedPlayerProfile])
 
   useEffect(() => {
+    const markHidden = () => {
+      clearReconnectTimeout()
+    }
+
     const handleResume = () => {
       if (document.visibilityState && document.visibilityState !== 'visible') {
+        markHidden()
         return
       }
 
       const socket = socketRef.current
+
       if (!socket || !uidRef.current || gameClosedRef.current) {
         return
       }
 
-      if (socket.connected) {
-        rejoinConnectedSocket(socket)
-      } else if (socket.active) {
+      if (!socket.connected) {
         beginReconnecting()
         socket.connect()
-      } else {
-        failReconnecting(socket)
+        return
+      }
+
+      if (reconnectingRef.current) {
+        beginReconnecting()
+        rejoinConnectedSocket(socket)
+        return
       }
     }
 
     document.addEventListener('visibilitychange', handleResume)
+    window.addEventListener('pagehide', markHidden)
     window.addEventListener('pageshow', handleResume)
 
     return () => {
       document.removeEventListener('visibilitychange', handleResume)
+      window.removeEventListener('pagehide', markHidden)
       window.removeEventListener('pageshow', handleResume)
     }
-  }, [beginReconnecting, failReconnecting, rejoinConnectedSocket])
+  }, [beginReconnecting, clearReconnectTimeout, rejoinConnectedSocket])
 
   const showPinError = useCallback((message) => {
     setPinError(message)
@@ -1111,7 +1234,6 @@ function App() {
     setError('')
     setPinError('')
     setCheckingPin(false)
-    setDisconnected(false)
     setReconnecting(false)
     gameClosedRef.current = false
     streakCountRef.current = 0
@@ -1137,47 +1259,35 @@ function App() {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }
+      if (reconnectOverlayDelayRef.current) {
+        clearTimeout(reconnectOverlayDelayRef.current)
+      }
+      if (rejoinRetryTimeoutRef.current) {
+        clearTimeout(rejoinRetryTimeoutRef.current)
+      }
       if (socketRef.current) {
         disconnectManagedSocket(socketRef.current)
       }
     }
   }, [])
 
+  const shouldShowAutoJoinScreen = screen === SCREENS.NAME && autoJoinVisible && !uid
+  const shouldShowRecoveryScreen = reconnecting || shouldShowAutoJoinScreen
+
   return (
     <div>
-      {reconnecting && !disconnected && (
+      {shouldShowRecoveryScreen && (
         <div className="qng-screen qng-screen--disconnect">
           <div className="qng-screen-center">
             <div className="qng-disconnect-icon-tile">
               <div className="qng-spinner" aria-hidden="true" />
             </div>
             <div className="qng-disconnect-title">
-              {language === 'he' ? 'מתחברים מחדש' : 'Reconnecting'}
+              Reconnecting
             </div>
             <div className="qng-disconnect-body">
-              {language === 'he'
-                ? 'מחזירים אותך למשחק אוטומטית...'
-                : 'Bringing you back into the game automatically...'}
+              Bringing you back into the game automatically...
             </div>
-          </div>
-        </div>
-      )}
-
-      {disconnected && (
-        <div className="qng-screen qng-screen--disconnect">
-          <div className="qng-screen-center">
-            <div className="qng-disconnect-icon-tile">📡</div>
-            <div className="qng-disconnect-title">
-              {language === 'he' ? 'החיבור אבד' : 'You got dropped'}
-            </div>
-            <div className="qng-disconnect-body">
-              {language === 'he'
-                ? 'השרת לא זמין. המשחק נסגר.'
-                : 'The game server vanished. Hop back home to try again.'}
-            </div>
-            <button className="qng-btn qng-btn--yellow" onClick={playAgain} style={{ marginTop: 14, maxWidth: 320 }}>
-              {language === 'he' ? 'חזרה למסך הראשי' : 'BACK TO HOME'}
-            </button>
           </div>
         </div>
       )}
@@ -1192,7 +1302,7 @@ function App() {
         />
       )}
 
-      {screen === SCREENS.NAME && (
+      {screen === SCREENS.NAME && !shouldShowAutoJoinScreen && (
         <NameScreen
           onJoin={joinGame}
           error={error}

@@ -167,7 +167,10 @@ body {
 /* ── Logo ────────────────────────────────────────────────────────── */
 .qng-logo {
   width: 90vw;
+  aspect-ratio: 845 / 448;
   height: auto;
+  display: block;
+  flex: 0 0 auto;
   filter: drop-shadow(0 8px 0 rgba(0,0,0,0.22)) drop-shadow(0 14px 28px rgba(0,0,0,0.32));
 }
 

@@ -43,6 +43,39 @@ def create_player_routes(
     """
     player_bp = Blueprint('player', __name__)
 
+    def append_player_game_state(response_data, session, uid=None, player_name='player'):
+        """Attach the current game state plus any player-specific restore data."""
+        game_state = session.get('currentState', 'waiting')
+        response_data['gameStarted'] = session.get('gameStarted', False)
+        response_data['gameState'] = game_state
+        response_data['language'] = session.get('language', 'en')
+
+        if game_state == 'results' and uid:
+            player_result = session.get('lastResultsByUser', {}).get(uid)
+            if not player_result:
+                player_result = player_registry.get(uid, {}).get('lastResult')
+            if player_result:
+                response_data['playerResult'] = player_result
+
+        if game_state == 'answering' and 'currentQuestion' in session:
+            question_data = session['currentQuestion']
+            question_wait_time = question_data.get('questionWaitTime', 30)
+            answer_started_at = session.get('answerStartedAt', 0)
+            elapsed = time.time() - answer_started_at
+            remaining = max(0, question_wait_time - elapsed)
+
+            response_data['needsSync'] = True
+            response_data['syncData'] = question_data
+            response_data['remainingTime'] = round(remaining, 1)
+
+            current_answer = player_registry.get(uid, {}).get('currentAnswer') if uid else None
+            if current_answer and current_answer.get('questionStartedAt') == answer_started_at:
+                response_data['currentAnswer'] = current_answer
+
+            game.log(f'⏱️ Mid-question rejoin: {remaining:.1f}s remaining for {player_name}')
+
+        return response_data
+
     @player_bp.route('/rejoin_player', methods=['POST'])
     async def rejoin_player():
         """Handle player rejoin - reconnect with existing UID"""
@@ -109,30 +142,14 @@ def create_player_routes(
                 'timestamp': time.time()
             }, game_pin)
 
-            # Check current game state and send appropriate status
-            game_state = session.get('currentState', 'waiting')
-
             response_data = {
                 'status': 'success',
                 'message': 'Reconnected successfully',
                 'userId': user_id,
                 'nickname': player_name,
                 'gamePin': game_pin,
-                'gameState': game_state
             }
-
-            # If in answer time, include sync data with remaining time in response
-            if game_state == 'answering' and 'currentQuestion' in session:
-                response_data['needsSync'] = True
-                response_data['syncData'] = session['currentQuestion']
-                # Calculate remaining time (same logic as join_player)
-                question_data = session['currentQuestion']
-                question_wait_time = question_data.get('questionWaitTime', 30)
-                answer_started_at = session.get('answerStartedAt', 0)
-                elapsed = time.time() - answer_started_at
-                remaining = max(0, question_wait_time - elapsed)
-                response_data['remainingTime'] = round(remaining, 1)
-                game.log(f'⏱️ Mid-question rejoin: {remaining:.1f}s remaining for {player_name}')
+            append_player_game_state(response_data, session, user_id, player_name)
 
             # If socketId provided, register socket to room (room = gamePin)
             if socket_id:
@@ -200,6 +217,13 @@ def create_player_routes(
 
             # Get gamePin from player registry
             game_pin = player['gamePin']
+            session = game_sessions.get(game_pin, {})
+            if session.get('currentState') == 'answering':
+                player['currentAnswer'] = {
+                    'answerIndex': data.get('answerIndex'),
+                    'timestamp': data.get('timestamp') or time.time(),
+                    'questionStartedAt': session.get('answerStartedAt'),
+                }
 
             # Forward player answers only to add-in sockets (not all players).
             await emit_to_addins(
@@ -323,23 +347,8 @@ def create_player_routes(
                         'message': 'Rejoined successfully'
                     }
 
-                    # Include current game state
                     session = game_sessions.get(game_pin, {})
-                    rejoin_response['gameStarted'] = session.get('gameStarted', False)
-                    rejoin_response['gameState'] = session.get('currentState', 'waiting')
-
-                    # If mid-question, include sync data with remaining time
-                    if session.get('currentState') == 'answering' and 'currentQuestion' in session:
-                        question_data = session['currentQuestion']
-                        question_wait_time = question_data.get('questionWaitTime', 30)
-                        answer_started_at = session.get('answerStartedAt', 0)
-                        elapsed = time.time() - answer_started_at
-                        remaining = max(0, question_wait_time - elapsed)
-
-                        rejoin_response['needsSync'] = True
-                        rejoin_response['syncData'] = question_data
-                        rejoin_response['remainingTime'] = round(remaining, 1)
-                        game.log(f'⏱️ Mid-question rejoin: {remaining:.1f}s remaining for {name}')
+                    append_player_game_state(rejoin_response, session, uid, name)
 
                     return jsonify(rejoin_response)
 
@@ -392,19 +401,7 @@ def create_player_routes(
                         'message': 'Rejoined successfully'
                     }
                     session = game_sessions.get(game_pin, {})
-                    rejoin_response['gameStarted'] = session.get('gameStarted', False)
-                    rejoin_response['gameState'] = session.get('currentState', 'waiting')
-
-                    if session.get('currentState') == 'answering' and 'currentQuestion' in session:
-                        question_data = session['currentQuestion']
-                        question_wait_time = question_data.get('questionWaitTime', 30)
-                        answer_started_at = session.get('answerStartedAt', 0)
-                        elapsed = time.time() - answer_started_at
-                        remaining = max(0, question_wait_time - elapsed)
-                        rejoin_response['needsSync'] = True
-                        rejoin_response['syncData'] = question_data
-                        rejoin_response['remainingTime'] = round(remaining, 1)
-                        game.log(f'⏱️ Mid-question name-rejoin: {remaining:.1f}s remaining for {name}')
+                    append_player_game_state(rejoin_response, session, uid, name)
 
                     return jsonify(rejoin_response)
 
@@ -463,21 +460,7 @@ def create_player_routes(
             }
 
             session = game_sessions.get(game_pin, {})
-            join_response['gameStarted'] = session.get('gameStarted', False)
-            join_response['gameState'] = session.get('currentState', 'waiting')
-
-            # If mid-question, include sync data with remaining time
-            if session.get('currentState') == 'answering' and 'currentQuestion' in session:
-                question_data = session['currentQuestion']
-                question_wait_time = question_data.get('questionWaitTime', 30)
-                answer_started_at = session.get('answerStartedAt', 0)
-                elapsed = time.time() - answer_started_at
-                remaining = max(0, question_wait_time - elapsed)
-
-                join_response['needsSync'] = True
-                join_response['syncData'] = question_data
-                join_response['remainingTime'] = round(remaining, 1)
-                game.log(f'⏱️ Mid-question join: {remaining:.1f}s remaining for {name}')
+            append_player_game_state(join_response, session, uid, name)
 
             return jsonify(join_response)
 

@@ -87,6 +87,13 @@ def create_game_routes(
                     game_sessions[game_pin]['currentState'] = 'answering'
                     game_sessions[game_pin]['currentQuestion'] = data
                     game_sessions[game_pin]['answerStartedAt'] = time.time()
+                    game_sessions[game_pin].pop('lastResultsByUser', None)
+
+                for uid in players_by_game.get(game_pin, set()):
+                    player = player_registry.get(uid)
+                    if player:
+                        player.pop('currentAnswer', None)
+                        player.pop('lastResult', None)
 
                 # Count connected players using per-game index (O(players in game)).
                 game_uids = players_by_game.get(game_pin, set())
@@ -170,31 +177,41 @@ def create_game_routes(
 
             # Send individual results to each player in parallel.
             ts = data.get('timestamp')
+            session_results = {}
+            if game_pin in game_sessions:
+                session_results = game_sessions[game_pin].setdefault('lastResultsByUser', {})
 
             async def _send_one(result):
                 user_id = result.get('userId')
-                target_sid = sid_by_uid.get(user_id)
-                if not target_sid:
-                    return
                 correct_answer = normalize_correct_answer(result.get('correctAnswer')) or request_correct_answer
                 if correct_answer is None:
                     game.log(f'⚠️ Missing valid correctAnswer for result userId={user_id} gamePin={game_pin}')
+                player_result = {
+                    'userId': user_id,
+                    'nickname': result.get('nickname'),
+                    'questionScore': result.get('questionScore'),
+                    'cumulativeScore': result.get('cumulativeScore'),
+                    'rank': result.get('rank'),
+                    'isCorrect': result.get('isCorrect'),
+                    'correctAnswer': correct_answer,
+                    'streakCount': result.get('streakCount'),
+                    'correctAnswers': result.get('correctAnswers'),
+                    'totalQuestions': result.get('totalQuestions'),
+                    'bestStreak': result.get('bestStreak'),
+                    'answered': result.get('answered'),
+                    'timestamp': ts,
+                }
+                if user_id:
+                    session_results[user_id] = player_result
+                    if user_id in player_registry:
+                        player_registry[user_id]['lastResult'] = player_result
+                        player_registry[user_id].pop('currentAnswer', None)
+
+                target_sid = sid_by_uid.get(user_id)
+                if not target_sid:
+                    return
                 try:
-                    await sio.emit('player_results', {
-                        'userId': user_id,
-                        'nickname': result.get('nickname'),
-                        'questionScore': result.get('questionScore'),
-                        'cumulativeScore': result.get('cumulativeScore'),
-                        'rank': result.get('rank'),
-                        'isCorrect': result.get('isCorrect'),
-                        'correctAnswer': correct_answer,
-                        'streakCount': result.get('streakCount'),
-                        'correctAnswers': result.get('correctAnswers'),
-                        'totalQuestions': result.get('totalQuestions'),
-                        'bestStreak': result.get('bestStreak'),
-                        'answered': result.get('answered'),
-                        'timestamp': ts,
-                    }, to=target_sid)
+                    await sio.emit('player_results', player_result, to=target_sid)
                 except Exception:
                     pass
 
