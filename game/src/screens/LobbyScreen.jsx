@@ -18,26 +18,28 @@ function LobbyScreen({ playerName, playerIcon, language, gameStarted, mode = 'wa
         <div style={{ position: 'absolute', top: 210, left: 50,  width: 6,  height: 6,  borderRadius: '50%', background: '#fff',                  opacity: 0.5 }} />
         <div style={{ position: 'absolute', bottom: 180, right: 40, width: 14, height: 14, borderRadius: '50%', background: 'var(--qng-secondary)', opacity: 0.7 }} />
       </div>
-      <div className="qng-screen-center">
-        <div className="qng-lobby-avatar">{playerIcon}</div>
+      <div className="qng-screen-frame qng-screen-frame--lobby">
+        <div className="qng-screen-center">
+          <div className="qng-lobby-avatar">{playerIcon}</div>
 
-        <div className="qng-lobby-name">{playerName}</div>
+          <div className="qng-lobby-name">{playerName}</div>
 
-        <div className="qng-you-are-in-pill" style={{ marginTop: 22 }}>
-          <span className="qng-you-are-in-dot" />
-          {t(language, 'youreIn').replace(/[!.]\s.*/, '!')}
+          <div className="qng-you-are-in-pill" style={{ marginTop: 22 }}>
+            <span className="qng-you-are-in-dot" />
+            {t(language, 'youreIn').replace(/[!.]\s.*/, '!')}
+          </div>
+
+          <div className="qng-waiting-line">
+            {t(language, waitingKey)}
+            <span className="qng-dots">
+              <span /><span /><span />
+            </span>
+          </div>
         </div>
 
-        <div className="qng-waiting-line">
-          {t(language, waitingKey)}
-          <span className="qng-dots">
-            <span /><span /><span />
-          </span>
+        <div className="qng-look-at-screen">
+          {t(language, footerKey)}
         </div>
-      </div>
-
-      <div className="qng-look-at-screen">
-        {t(language, footerKey)}
       </div>
     </div>
   )

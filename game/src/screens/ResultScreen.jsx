@@ -76,34 +76,41 @@ function ResultScreen({ results, language }) {
   if (!answered) {
     return (
       <div className="qng-screen qng-screen--timeout">
-        <ResultShapes />
-        <div className="qng-screen-center">
-          <div className="qng-result-icon-tile qng-result-icon-tile--timeout" style={{ transform: 'rotate(-3deg)' }}>
-            ⏰
-          </div>
+        <div className="qng-screen-frame qng-screen-frame--result">
+          <ResultShapes />
+          <div className="qng-screen-center">
+            <div className="qng-result-feedback-heading qng-result-feedback-heading--timeout">
+              <div className="qng-result-icon-tile qng-result-icon-tile--timeout" style={{ transform: 'rotate(-3deg)' }}>
+                ⏰
+              </div>
 
-          <div className="qng-result-headline qng-result-headline--timeout">
-            {t(language, 'timesUp')}
-          </div>
-
-          <CorrectAnswerHint answer={correctAnswer} language={language} />
-
-          <div className="qng-points-capsule qng-points-capsule--empty qng-points-capsule--timeout">
-            <div className="qng-points-label qng-points-label--muted">+ {t(language, 'points')}</div>
-            <div className="qng-points-value">0</div>
-          </div>
-
-          {rank && (
-            <div className="qng-stat-chip qng-stat-chip--timeout" dir="ltr">
-              <span className="qng-stat-chip-score" dir={isRtl ? 'rtl' : 'ltr'}>
-                <bdi dir="ltr">{totalFormatted}</bdi> {t(language, 'points')}
-              </span>
-              <span className="qng-stat-chip-separator" aria-hidden="true">·</span>
-              <span className="qng-stat-chip-rank" dir={isRtl ? 'rtl' : 'ltr'}>
-                {timeoutRankLabel}
-              </span>
+              <div className="qng-result-title-stack">
+                <div className="qng-result-headline qng-result-headline--timeout">
+                  {t(language, 'timesUp')}
+                </div>
+                <CorrectAnswerHint answer={correctAnswer} language={language} />
+              </div>
             </div>
-          )}
+
+            <div className="qng-timeout-score-stack">
+              <div className="qng-points-capsule qng-points-capsule--empty qng-points-capsule--timeout">
+                <div className="qng-points-label qng-points-label--muted">+ {t(language, 'points')}</div>
+                <div className="qng-points-value">0</div>
+              </div>
+
+              {rank && (
+                <div className="qng-stat-chip qng-stat-chip--timeout" dir="ltr">
+                  <span className="qng-stat-chip-score" dir={isRtl ? 'rtl' : 'ltr'}>
+                    <bdi dir="ltr">{totalFormatted}</bdi> {t(language, 'points')}
+                  </span>
+                  <span className="qng-stat-chip-separator" aria-hidden="true">·</span>
+                  <span className="qng-stat-chip-rank" dir={isRtl ? 'rtl' : 'ltr'}>
+                    {timeoutRankLabel}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -113,36 +120,47 @@ function ResultScreen({ results, language }) {
   if (isCorrect) {
     return (
       <div className="qng-screen qng-screen--win">
-        <ResultShapes />
-        <div className="qng-screen-center">
-          <div className="qng-result-icon-tile" style={{ transform: 'rotate(-4deg)' }}>
-            <svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="#00B36B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-
-          <div className="qng-result-headline qng-result-headline--lg qng-result-headline--feedback">
-            {t(language, 'correct')}
-          </div>
-
-          <div className="qng-points-capsule qng-points-capsule--correct">
-            <div className="qng-points-label">+ {t(language, 'points')}</div>
-            <div className="qng-points-value">{scoreFormatted}</div>
-          </div>
-
-          <div className="qng-stat-chips">
-            {rank && (
-              <div className="qng-stat-chip">📈 {t(language, 'rank', { rank })}</div>
-            )}
-            {streakCount > 0 && (
-              <div className="qng-stat-chip">
-                🔥 {t(language, 'streakLabel')} <bdi dir="ltr">x{streakCount}</bdi>
+        <div className="qng-screen-frame qng-screen-frame--result">
+          <ResultShapes />
+          <div className="qng-screen-center">
+            <div className="qng-result-feedback-heading qng-result-feedback-heading--correct">
+              <div className="qng-result-icon-tile" style={{ transform: 'rotate(-4deg)' }}>
+                <svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="#00B36B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 13l4 4L19 7" />
+                </svg>
               </div>
-            )}
-          </div>
 
-          <div className="qng-total-line qng-total-line--win">
-            {t(language, 'total', { score: totalFormatted })}
+              <div className="qng-result-headline qng-result-headline--lg qng-result-headline--feedback">
+                {t(language, 'correct')}
+              </div>
+            </div>
+
+            <div className="qng-correct-score-stack">
+              <div className="qng-points-capsule qng-points-capsule--correct">
+                <div className="qng-points-label">+ {t(language, 'points')}</div>
+                <div className="qng-points-value">{scoreFormatted}</div>
+              </div>
+
+              <div className="qng-stat-chips">
+                {rank && (
+                  <div className="qng-stat-chip">
+                    <span className="qng-stat-chip-icon">📈</span>
+                    <span>{t(language, 'rank', { rank })}</span>
+                  </div>
+                )}
+                {streakCount > 0 && (
+                  <div className="qng-stat-chip">
+                    <span className="qng-stat-chip-icon">🔥</span>
+                    <span>{t(language, 'streakLabel')}</span>
+                    <bdi dir="ltr">x{streakCount}</bdi>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="qng-total-line qng-total-line--win">
+              {t(language, 'total', { score: totalFormatted })}
+            </div>
           </div>
         </div>
       </div>
@@ -152,35 +170,44 @@ function ResultScreen({ results, language }) {
   // ── INCORRECT ──
   return (
     <div className="qng-screen qng-screen--lose">
-      <ResultShapes />
-      <div className="qng-screen-center">
-        <div className="qng-result-icon-tile" style={{ transform: 'rotate(3deg)' }}>
-          <svg width="62" height="62" viewBox="0 0 24 24" fill="none" stroke="#FF2E93" strokeWidth="4" strokeLinecap="round">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </div>
-
-        <div className="qng-result-headline qng-result-headline--md qng-result-headline--feedback">
-          {t(language, 'incorrect')}
-        </div>
-
-        <CorrectAnswerHint answer={correctAnswer} language={language} />
-
-        <div className="qng-points-capsule qng-points-capsule--empty qng-points-capsule--incorrect">
-          <div className="qng-points-label qng-points-label--muted">+ {t(language, 'points')}</div>
-          <div className="qng-points-value">0</div>
-        </div>
-
-        <div className="qng-stat-chips">
-          {rank && (
-            <div className="qng-stat-chip qng-stat-chip--danger">
-              📉 {t(language, 'rank', { rank })}
+      <div className="qng-screen-frame qng-screen-frame--result">
+        <ResultShapes />
+        <div className="qng-screen-center">
+          <div className="qng-result-feedback-heading qng-result-feedback-heading--incorrect">
+            <div className="qng-result-icon-tile" style={{ transform: 'rotate(3deg)' }}>
+              <svg width="62" height="62" viewBox="0 0 24 24" fill="none" stroke="#FF2E93" strokeWidth="4" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
             </div>
-          )}
-        </div>
 
-        <div className="qng-total-line qng-total-line--result">
-          {t(language, 'total', { score: totalFormatted })}
+            <div className="qng-result-title-stack">
+              <div className="qng-result-headline qng-result-headline--lg qng-result-headline--feedback">
+                {t(language, 'incorrect')}
+              </div>
+              <CorrectAnswerHint answer={correctAnswer} language={language} />
+            </div>
+          </div>
+
+          <div className="qng-incorrect-score-stack">
+            <div className="qng-points-capsule qng-points-capsule--empty qng-points-capsule--incorrect">
+              <div className="qng-points-label qng-points-label--muted">+ {t(language, 'points')}</div>
+              <div className="qng-points-value">0</div>
+            </div>
+
+            <div className="qng-stat-chips">
+              {rank && (
+                <div className="qng-stat-chip qng-stat-chip--danger qng-stat-chip--result-summary" dir="ltr">
+                  <span className="qng-stat-chip-score" dir={isRtl ? 'rtl' : 'ltr'}>
+                    <bdi dir="ltr">{totalFormatted}</bdi> {t(language, 'points')}
+                  </span>
+                  <span className="qng-stat-chip-separator" aria-hidden="true">·</span>
+                  <span className="qng-stat-chip-rank" dir={isRtl ? 'rtl' : 'ltr'}>
+                    {timeoutRankLabel}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
