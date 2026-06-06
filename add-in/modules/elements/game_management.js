@@ -261,20 +261,14 @@ export async function updateQrCodeInSlides(gamePin) {
                             
                             const imageBlob = await imageResponse.blob();
                             
-                            // Convert to base64 (WITHOUT the data URL prefix for Office API)
-                            const base64Image = await new Promise((resolve, reject) => {
+                            // Read blob → data URL, then trim quiet zone + recolor to black
+                            const dataUrl = await new Promise((resolve, reject) => {
                                 const reader = new FileReader();
-                                reader.onloadend = () => {
-                                    let result = reader.result;
-                                    // Remove the data URL prefix (e.g., "data:image/png;base64,")
-                                    if (result.includes(',')) {
-                                        result = result.split(',')[1];
-                                    }
-                                    resolve(result);
-                                };
+                                reader.onloadend = () => resolve(reader.result);
                                 reader.onerror = reject;
                                 reader.readAsDataURL(imageBlob);
                             });
+                            const base64Image = await processQrToBlack(dataUrl);
                             
                             // Delete the placeholder shape
                             shape.delete();
@@ -369,67 +363,130 @@ export async function updateQrCodeInSlides(gamePin) {
 }
 
 /**
- * Insert QR Code placeholder
+ * Generate a QR code PNG base64 string (without data: prefix) for the given text.
+ * Requires vendor/qrcode.min.js (qrcode-generator by Kazuhiko Arase) to be loaded globally.
+ */
+function generateQrBase64(text, sizePixels = 200) {
+    const qr = window.qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+
+    const moduleCount = qr.getModuleCount();
+    const quietZone = 4; // standard 4-module quiet zone, matches server-generated QR appearance
+    const totalModules = moduleCount + quietZone * 2;
+    const cellSize = Math.floor(sizePixels / totalModules);
+    const canvasSize = cellSize * totalModules;
+    const offset = quietZone * cellSize;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasSize;
+    canvas.height = canvasSize;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+    ctx.fillStyle = '#000000';
+    for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+            if (qr.isDark(row, col)) {
+                ctx.fillRect(offset + col * cellSize, offset + row * cellSize, cellSize, cellSize);
+            }
+        }
+    }
+
+    const dataUrl = canvas.toDataURL('image/png');
+    return dataUrl.split(',')[1];
+}
+
+/**
+ * Recolor all QR modules to black; quiet zone and white background are preserved unchanged.
+ * @param {string} dataUrl - full data URL of the source image
+ * @returns {Promise<string>} base64 PNG without data URL prefix
+ */
+function processQrToBlack(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const w = img.width, h = img.height;
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0);
+            const pd = ctx.getImageData(0, 0, w, h);
+            const px = pd.data;
+            const T = 200;
+            for (let i = 0; i < px.length; i += 4) {
+                if (px[i] > T && px[i+1] > T && px[i+2] > T) {
+                    px[i] = px[i+1] = px[i+2] = 255; px[i+3] = 255;
+                } else {
+                    px[i] = px[i+1] = px[i+2] = 0;   px[i+3] = 255;
+                }
+            }
+            ctx.putImageData(pd, 0, 0);
+            resolve(canvas.toDataURL('image/png').split(',')[1]);
+        };
+        img.src = dataUrl;
+    });
+}
+
+/**
+ * Insert QR Code placeholder — inserts an actual QR code image encoding "Preview".
+ * Tagged with quizngo-qr-code so updateQrCodeInSlides() can replace it with the live URL.
  */
 export async function insertQrCodeButton() {
     try {
+        // QR code dimensions — includes quiet zone, matches server-generated QR appearance
+        const qrSize = 144; // points (includes ~4-module quiet zone border)
+        const qrLeft = 500;
+        const qrTop  = 100;
+
+        // Render at 2x for sharpness
+        const base64Png = generateQrBase64('Preview', 288);
+
+        await new Promise((resolve, reject) => {
+            Office.context.document.setSelectedDataAsync(
+                base64Png,
+                {
+                    coercionType: Office.CoercionType.Image,
+                    imageLeft:  qrLeft,
+                    imageTop:   qrTop,
+                    imageWidth: qrSize,
+                    imageHeight: qrSize,
+                },
+                (asyncResult) => {
+                    if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+                        resolve();
+                    } else {
+                        reject(new Error(asyncResult.error.message));
+                    }
+                }
+            );
+        });
+
+        // Tag the newly inserted image so updateQrCodeInSlides() can find and replace it
         await PowerPoint.run(async (context) => {
             const slides = context.presentation.getSelectedSlides();
             slides.load('items');
             await context.sync();
-            
-            if (slides.items.length === 0) {
-                showError(t('errors.selectSlideFirst'));
-                return;
-            }
-            
+
+            if (slides.items.length === 0) return;
+
             const slide = slides.items[0];
-            
-            // QR code dimensions - standard size
-            const qrSize = 200; // 200x200 points
-            const qrLeft = 500; // Right side of slide
-            const qrTop = 100;  // Top area
-            
-            // Create a placeholder shape with QR code tag
-            const placeholder = slide.shapes.addTextBox('📱 QR Code\n\nיתעדכן בזמן המשחק', {
-                left: qrLeft,
-                top: qrTop,
-                width: qrSize,
-                height: qrSize
-            });
-            
-            placeholder.load(['textFrame', 'tags']);
+            slide.shapes.load('items');
             await context.sync();
-            
-            // Add tag for dynamic updates
-            placeholder.tags.add('quizngo-qr-code', 'true');
+
+            // The newly inserted image is always the last shape
+            const shapes = slide.shapes.items;
+            if (shapes.length === 0) return;
+
+            const newShape = shapes[shapes.length - 1];
+            newShape.tags.add('quizngo-qr-code', 'true');
             await context.sync();
-            
-            // Style the text
-            const textRange = placeholder.textFrame.textRange;
-            textRange.load(['font']);
-            await context.sync();
-            
-            textRange.font.size = 20;
-            textRange.font.color = '#9b59b6';
-            textRange.font.bold = true;
-            
-            await context.sync();
-            
-            // Try to style the placeholder (border and fill) - optional
-            try {
-                placeholder.load(['fill', 'line']);
-                await context.sync();
-                
-                placeholder.fill.setSolidColor('#f0e6ff'); // Light purple background
-                placeholder.line.color = '#9b59b6'; // Purple border
-                placeholder.line.weight = 3;
-                
-                await context.sync();
-                } catch (styleError) {
-                // Border/fill styling is not critical - continue without it
-            }
         });
+
     } catch (error) {
         console.error('Error adding QR code placeholder:', error);
         showError(t('errors.addQrCode'));
