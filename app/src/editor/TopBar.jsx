@@ -6,6 +6,7 @@ import { useEditor, undo, redo, setTitle, openDrawer, saveNow, flushOnLeave } fr
 import Button, { IconButton } from '../components/Button.jsx'
 import Icon from '../components/Icon.jsx'
 import Menu, { useMenu } from '../components/Menu.jsx'
+import TemplateSwitcher from '../components/TemplateSwitcher.jsx'
 
 function SaveState() {
   const { t } = useI18n()
@@ -27,6 +28,10 @@ function SaveState() {
   )
 }
 
+/**
+ * Three zones (SPEC FR-04): where am I · undo · what can I do next. Everything occasional
+ * (settings, shortcuts, language, account) lives behind one "more" menu.
+ */
 export default function TopBar({ onPreview }) {
   const { t, lang, setLang } = useI18n()
   const user = authStore.useStore((s) => s.user)
@@ -35,7 +40,7 @@ export default function TopBar({ onPreview }) {
   const canRedo = useEditor((s) => s.canRedo)
   const questionCount = useEditor((s) => s.quiz?.slides.filter((x) => x.type === 'question').length || 0)
   const [draft, setDraft] = useState(title)
-  const userMenu = useMenu()
+  const more = useMenu()
 
   useEffect(() => { setDraft(title) }, [title])
 
@@ -44,11 +49,11 @@ export default function TopBar({ onPreview }) {
     if (next && next !== title) setTitle(next)
     else setDraft(title)
   }
+  const leave = (fn) => () => { flushOnLeave(); fn() }
 
   return (
     <header className="topbar">
-      <IconButton icon="arrowLeft" label={t('editor.backToLibrary')} onClick={() => { flushOnLeave(); navigate('/') }} className="rtl-flip" />
-      <div className="brand"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="QuizNGO" /></div>
+      <IconButton icon="arrowLeft" label={t('editor.backToLibrary')} onClick={leave(() => navigate('/'))} className="rtl-flip" />
       <div className="topbar-title grow">
         <input
           value={draft}
@@ -64,22 +69,22 @@ export default function TopBar({ onPreview }) {
         <IconButton icon="undo" label={`${t('common.undo')} (Ctrl+Z)`} onClick={undo} disabled={!canUndo} />
         <IconButton icon="redo" label={`${t('common.redo')} (Ctrl+Y)`} onClick={redo} disabled={!canRedo} />
       </div>
-      <Button icon="listChecks" onClick={() => openDrawer('questions')}>{t('editor.questions')} <span className="chip" style={{ height: 20 }}>{questionCount}</span></Button>
-      <IconButton icon="settings" label={t('editor.settings')} onClick={() => openDrawer('settings')} />
-      <IconButton icon="keyboard" label={t('editor.shortcuts')} onClick={() => openDrawer('shortcuts')} />
       <div className="vdivider" />
-      <Button icon="monitor" onClick={onPreview}>{t('editor.preview')}</Button>
-      <Button variant="primary" icon="play" disabled data-tip={t('common.comingSoon')}>{t('editor.play')}</Button>
-      <button type="button" className="ibtn" onClick={(e) => userMenu.open(e)} aria-label={user?.name}>
-        <span className="avatar" style={{ width: 28, height: 28, fontSize: 12 }}>{(user?.name || '?').slice(0, 1).toUpperCase()}</span>
-      </button>
-      {userMenu.menu && (
-        <Menu anchor={userMenu.menu.anchor} align="end" onClose={userMenu.close} items={[
+      <Button variant="ghost" icon="listChecks" onClick={() => openDrawer('questions')}>{t('editor.questions')} <span className="chip" style={{ height: 20 }}>{questionCount}</span></Button>
+      <TemplateSwitcher>{(open) => <Button variant="ghost" icon="palette" onClick={open}>{t('settings.template')}</Button>}</TemplateSwitcher>
+      <Button variant="primary" icon="play" onClick={onPreview}>{t('editor.preview')}</Button>
+      <IconButton icon="more" label={t('common.more')} onClick={(e) => more.open(e)} />
+      {more.menu && (
+        <Menu anchor={more.menu.anchor} align="end" onClose={more.close} minWidth={230} items={[
           { title: user?.email },
+          { label: t('editor.settings'), icon: 'settings', onClick: () => openDrawer('settings') },
+          { label: t('editor.shortcuts'), icon: 'keyboard', onClick: () => openDrawer('shortcuts') },
+          { label: t('home.play'), icon: 'monitor', disabled: true, badge: t('common.comingSoon') },
+          { sep: true },
           ...Object.entries(LANGUAGES).map(([code, meta]) => ({ label: `${meta.flag} ${meta.nativeName}`, checked: lang === code, onClick: () => setLang(code) })),
           { sep: true },
-          { label: t('editor.backToLibrary'), icon: 'home', onClick: () => { flushOnLeave(); navigate('/') } },
-          { label: t('common.logout'), icon: 'logout', onClick: () => { flushOnLeave(); logout() } },
+          { label: t('editor.backToLibrary'), icon: 'home', onClick: leave(() => navigate('/')) },
+          { label: t('common.logout'), icon: 'logout', onClick: leave(logout) },
         ]} />
       )}
     </header>

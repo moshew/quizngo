@@ -2,7 +2,7 @@ import { uploadAsset, measureImage, MAX_UPLOAD_BYTES, ACCEPTED_IMAGE_TYPES } fro
 import { assetUrl } from '../../api/client.js'
 import { t } from '../../i18n/index.js'
 import { toast } from '../../components/Toast.jsx'
-import { getState, insertImage, updateElement, updateQuestion, setAnswer, setBackground, mutate } from '../../state/editorStore.js'
+import { getState, insertImage, updateElement, updateQuestion, setAnswer, setBackground, setQuestionMediaSrc } from '../../state/editorStore.js'
 
 /** Center crop (fractions of the source) that fills a box of boxW×boxH with an imgW×imgH image. */
 export function coverCrop(imgW, imgH, boxW, boxH) {
@@ -88,21 +88,11 @@ export function pickForElement(elementId) {
   pickFiles({ onFiles: (files) => replaceElementImage(elementId, files[0]) })
 }
 
+/** Upload and set the question image; the store switches to an image layout when needed (FR-19). */
 export async function setQuestionMedia(slideId, file) {
   const asset = await uploadFile(file)
   if (!asset) return
-  const size = asset.width && asset.height ? { width: asset.width, height: asset.height } : await measureImage(assetUrl(asset.url))
-  mutate((quiz) => {
-    const s = quiz.slides.find((x) => x.id === slideId)
-    if (!s?.question) return
-    s.question.media = { src: asset.url }
-    for (const el of s.elements) {
-      if (el.kind === 'image' && el.binding === 'question-media') {
-        el.crop = coverCrop(size.width, size.height, el.w, el.h)
-        el.placeholder = false
-      }
-    }
-  })
+  setQuestionMediaSrc(slideId, asset.url)
 }
 
 export async function setAnswerImage(slideId, index, file) {
@@ -115,7 +105,8 @@ export async function setBackgroundImage(slideId, file) {
   const asset = await uploadFile(file)
   if (!asset) return
   const slide = getState().quiz.slides.find((s) => s.id === slideId)
-  setBackground(slideId, { kind: 'image', src: asset.url, overlay: slide?.background?.overlay || null, fit: 'cover' }, null)
+  // A photo background replaces the template's atmosphere rather than fighting it.
+  setBackground(slideId, { kind: 'image', src: asset.url, overlay: slide?.background?.overlay || null, fit: 'cover', decor: false }, null)
 }
 
 export function useImageUpload() {

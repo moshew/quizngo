@@ -6,11 +6,14 @@ import { createStore } from './store.js'
 import { createHistory } from '../model/history.js'
 import * as quizApi from '../api/quizzes.js'
 import {
-  normalizeQuiz, createQuestion, createText, createImage, createShape, createAnswer, createWidget,
-  slideIndexById, questionSlides, findElement,
+  createQuestion, createText, createImage, createShape, createAnswer, createWidget,
+  slideIndexById, questionSlides, findElement, SKIN_STYLE_KEYS,
 } from '../model/schema.js'
-import { createSlideFromTemplate, applyTemplate, getTemplate, templateFonts, roleOf } from '../model/templates/index.js'
-import { SLIDE_W, SLIDE_H, RESULT_SLIDE_TYPES, ANSWER_INDICES, WIDGET_DEFAULTS } from '../model/constants.js'
+import { upgradeQuiz } from '../model/migrate.js'
+import {
+  createSlideFromTemplate, applyTemplate, applyQuestionLayout, templateBackground, getTemplate, templateFonts, roleOf,
+} from '../model/templates/index.js'
+import { SLIDE_W, SLIDE_H, RESULT_SLIDE_TYPES, ANSWER_INDICES, WIDGET_DEFAULTS, QUESTION_LAYOUTS } from '../model/constants.js'
 import { uid } from '../model/ids.js'
 import { textToHtml } from '../model/sanitize.js'
 
@@ -67,7 +70,7 @@ export async function openQuiz(quizId) {
   editorStore.set({ ...initialState, quizId, loading: true })
   try {
     const remote = await quizApi.getQuiz(quizId)
-    const quiz = normalizeQuiz(remote.data)
+    const quiz = upgradeQuiz(remote.data)
     quiz.title = remote.title || quiz.title
     const draft = readDraft(quizId)
     editorStore.set({
@@ -92,7 +95,7 @@ export function closeQuiz() {
 export function restoreDraft() {
   const { draftPrompt, quizId } = getState()
   if (!draftPrompt) return
-  const quiz = normalizeQuiz(draftPrompt.quiz)
+  const quiz = upgradeQuiz(draftPrompt.quiz)
   editorStore.set({ quiz, draftPrompt: null, dirty: true, saveState: 'pending', currentSlideId: quiz.slides[0]?.id || null })
   clearDraft(quizId)
   scheduleSave()
@@ -195,7 +198,7 @@ export async function resolveConflict(action) {
   }
   // reload from server
   const remote = state.conflict || (await quizApi.getQuiz(state.quizId))
-  const quiz = normalizeQuiz(remote.data)
+  const quiz = upgradeQuiz(remote.data)
   history = createHistory(100)
   clearDraft(state.quizId)
   editorStore.set({ quiz, revision: remote.revision, meta: remote, dirty: false, saveState: 'saved', conflict: null, canUndo: false, canRedo: false, selectedIds: [], editingId: null })
@@ -522,16 +525,11 @@ export function insertShape(shape, overrides = {}) {
 
 export function insertWidget(widget, overrides = {}) {
   const quiz = getState().quiz
-  const template = getTemplate(quiz.templateId)
-  const fonts = templateFonts(quiz)
   const def = WIDGET_DEFAULTS[widget]
+  // No look values: the template's skin draws the widget (SPEC FR-18).
   const el = createWidget(widget, {
     x: (SLIDE_W - def.w) / 2, y: (SLIDE_H - def.h) / 2,
     props: { ...(overrides.props || {}) },
-    style: {
-      fontFamily: fonts.display, color: template.colors.text, accent: template.colors.accent, ink: template.colors.ink,
-      background: template.widget.background, borderRadius: template.widget.borderRadius, border: template.widget.border, shadow: template.widget.shadow,
-    },
   })
   if (widget === 'leaderboard') el.props.count = quiz.settings.leaderboardSize
   return addElement(el)
@@ -550,16 +548,14 @@ export function insertImage({ src, width, height, x, y, binding = null }) {
   return addElement(el)
 }
 
+/** Put a deleted answer tile back where the slide's layout expects it. */
 export function insertAnswerElement(index) {
-  const quiz = getState().quiz
-  const template = getTemplate(quiz.templateId)
-  const fonts = templateFonts(quiz)
-  const w = 825, h = 155
-  const el = createAnswer(index, {
-    x: (SLIDE_W - w) / 2, y: 700 + (index - 1) * 40, w, h,
-    style: { fontFamily: fonts.display, ...template.answer },
-  })
-  return addElement(el)
+  const state = getState()
+  const slide = currentSlide(state)
+  const fresh = slide ? createSlideFromTemplate(state.quiz, 'question', { question: slide.question, layout: slide.layout }) : null
+  const el = fresh?.elements.find((e) => e.kind === 'answer' && e.index === index)
+    || createAnswer(index, { x: (SLIDE_W - 859) / 2, y: 640 + (index - 1) * 40, w: 859, h: 150 })
+  return addElement({ ...el, fromTemplate: true })
 }
 
 // ───────────────────────── Question data ─────────────────────────
@@ -579,6 +575,57 @@ export function setAnswer(slideId, index, patch, key = `a:${slideId}:${index}`) 
     if (!s?.question) return
     s.question.answers[index - 1] = { ...s.question.answers[index - 1], ...patch }
   }, key)
+}
+
+/** Re-arrange a question slide (SPEC FR-19). One undo step; content and free elements are kept. */
+export function setQuestionLayout(slideId, layout) {
+  if (!QUESTION_LAYOUTS.includes(layout)) return
+  mutate((quiz) => {
+    const idx = slideIndexById(quiz, slideId)
+    if (idx < 0 || quiz.slides[idx].type !== 'question') return
+    quiz.slides[idx] = applyQuestionLayout(quiz, quiz.slides[idx], layout)
+  })
+  editorStore.set({ selectedIds: [], editingId: null, croppingId: null })
+}
+
+/**
+ * Set / clear the question image and keep the layout honest: an image needs a layout that shows
+ * it, and an image layout without an image would leave a hole on the projector.
+ */
+export function setQuestionMediaSrc(slideId, src) {
+  mutate((quiz) => {
+    const idx = slideIndexById(quiz, slideId)
+    const slide = quiz.slides[idx]
+    if (!slide || slide.type !== 'question') return
+    if (!slide.question) slide.question = createQuestion()
+    slide.question.media = src ? { src } : null
+    for (const el of slide.elements) {
+      if (el.binding === 'question-media') { el.crop = { x: 0, y: 0, w: 1, h: 1 }; el.placeholder = !src }
+    }
+    const showsImage = slide.elements.some((el) => el.binding === 'question-media')
+    if (src && !showsImage) quiz.slides[idx] = applyQuestionLayout(quiz, slide, 'banner')
+    else if (!src && showsImage && ['banner', 'side'].includes(slide.layout)) quiz.slides[idx] = applyQuestionLayout(quiz, slide, 'text')
+  })
+  editorStore.set({ selectedIds: [], editingId: null, croppingId: null })
+}
+
+/** Drop the author's look overrides so the element follows the template again. */
+export function resetElementStyle(ids) {
+  mutate((quiz) => withCurrentSlide(quiz, (slide) => {
+    for (const id of ids) {
+      const el = findElement(slide, id)
+      if (!el?.style || (el.kind !== 'answer' && el.kind !== 'widget')) continue
+      for (const key of SKIN_STYLE_KEYS) if (key in el.style) el.style[key] = null
+      if (el.kind === 'answer') el.style.variant = 'card'
+    }
+  }))
+}
+
+export function resetBackground(slideId) {
+  mutate((quiz) => {
+    const s = quiz.slides.find((x) => x.id === slideId)
+    if (s) s.background = templateBackground(quiz, s.type)
+  })
 }
 
 export function setCorrectAnswer(slideId, index) {

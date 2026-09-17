@@ -3,8 +3,8 @@ import { useI18n } from '../i18n/index.js'
 import { SLIDE_W, SLIDE_H } from '../model/constants.js'
 import {
   useEditor, currentSlide, select, clearSelection, setEditing, setCropping, updateQuestion, setAnswer, updateElement,
-  deleteElements, duplicateElements, copySelection, cutSelection, pasteClipboard, reorderElements, alignElements, toggleLock, toggleHidden,
-  setZoom, setBackground, insertText,
+  deleteElements, duplicateElements, copySelection, pasteClipboard, reorderElements, toggleLock,
+  setZoom, setBackground, insertText, setTitle,
 } from '../state/editorStore.js'
 import SlideRenderer from './render/SlideRenderer.jsx'
 import SelectionLayer from './SelectionLayer.jsx'
@@ -17,6 +17,23 @@ import Menu, { useMenu } from '../components/Menu.jsx'
 import { zoomStep, reportZoom } from './useEditorShortcuts.js'
 
 const PADDING = 48
+const HINT_KEY = 'qng.studio.hint.canvas'
+
+/** One-time orientation for new authors; dismissed forever with one click. */
+function CanvasHint() {
+  const { t } = useI18n()
+  const [shown, setShown] = useState(() => { try { return localStorage.getItem(HINT_KEY) !== '1' } catch { return false } })
+  if (!shown) return null
+  const dismiss = () => { setShown(false); try { localStorage.setItem(HINT_KEY, '1') } catch { /* private mode */ } }
+  return (
+    <div className="canvas-hint" role="note">
+      <span>{t('editor.hint1')}</span><i />
+      <span>{t('editor.hint2')}</span><i />
+      <span>{t('editor.hint3')}</span>
+      <button type="button" className="btn btn-sm btn-ghost" onClick={dismiss}>{t('editor.hintDismiss')}</button>
+    </div>
+  )
+}
 
 export default function Canvas() {
   const { t } = useI18n()
@@ -30,6 +47,7 @@ export default function Canvas() {
   const areaRef = useRef(null)
   const slideRef = useRef(null)
   const selectionRef = useRef(null)
+  const pendingDragRef = useRef(null)
   const nodesRef = useRef(new Map())
   const [nodesVersion, setNodesVersion] = useState(0)
   const [areaSize, setAreaSize] = useState({ w: 800, h: 600 })
@@ -89,8 +107,29 @@ export default function Canvas() {
     e.stopPropagation()
     if (editingId) setEditing(null)
     if (e.shiftKey || e.ctrlKey || e.metaKey) { select([el.id], { toggle: true }); return }
-    if (!selectedIds.includes(el.id)) select([el.id])
-    if (!el.locked) selectionRef.current?.startDrag(e.nativeEvent)
+    // An already-selected element is dragged by Moveable itself; a newly selected one needs a hand-off.
+    const wasSelected = selectedIds.includes(el.id)
+    if (!wasSelected) select([el.id])
+    pendingDragRef.current = !wasSelected && !el.locked ? el.id : null
+  }
+
+  // Press-and-drag in one gesture, also on the first press. Started from mousedown (see SelectionLayer.startDrag).
+  const onElementMouseDown = (e, el) => {
+    if (e.button !== 0 || pendingDragRef.current !== el.id) return
+    pendingDragRef.current = null
+    const nativeEvent = e.nativeEvent
+    let released = false
+    const onUp = () => { released = true }
+    const stop = () => window.removeEventListener('mouseup', onUp, true)
+    window.addEventListener('mouseup', onUp, true)
+    // The selection layer mounts a frame after the selection changes: wait for it, unless the press ended.
+    const attempt = (tries) => {
+      if (released) { stop(); return }
+      const layer = selectionRef.current
+      if (layer) { layer.startDrag(nativeEvent, () => released); setTimeout(stop, 500); return }
+      if (tries < 6) requestAnimationFrame(() => attempt(tries + 1)); else stop()
+    }
+    attempt(0)
   }
 
   const onElementDoubleClick = (e, el) => {
@@ -113,6 +152,7 @@ export default function Canvas() {
   const onTextCommit = (el, value) => {
     if (el.kind === 'answer') setAnswer(slide.id, el.index, { text: value })
     else if (el.binding === 'question') updateQuestion(slide.id, { text: value })
+    else if (el.binding === 'quiz-title') { if (value.trim()) setTitle(value.trim()) }
     else updateElement(el.id, { html: value }, `text:${el.id}`)
   }
   const onTextAutoFit = (el, h) => {
@@ -198,24 +238,14 @@ export default function Canvas() {
         { label: t('editor.crop'), icon: 'crop', disabled: !hasSrc, onClick: () => setCropping(el.id) },
         { label: t('editor.replaceImage'), icon: 'image', onClick: () => pickForElement(el.id) },
         { label: t('editor.setAsBackground'), icon: 'paint', disabled: !hasSrc, onClick: () => setBackground(slide.id, { kind: 'image', src: hasSrc, overlay: null, fit: 'cover' }, null) },
-        { label: t('editor.flipH'), icon: 'flipH', onClick: () => updateElement(el.id, { flipH: !el.flipH }) },
-        { label: t('editor.flipV'), icon: 'flipV', onClick: () => updateElement(el.id, { flipV: !el.flipV }) },
       ] : []),
       { sep: true },
       { label: t('common.copy'), icon: 'copy', kbd: 'Ctrl+C', onClick: copySelection },
-      { label: t('common.cut'), icon: 'eraser', kbd: 'Ctrl+X', onClick: cutSelection },
       { label: t('common.duplicate'), icon: 'plusSquare', kbd: 'Ctrl+D', onClick: () => duplicateElements(ids) },
       { sep: true },
-      { label: t('editor.layerFront'), icon: 'bringFront', kbd: 'Ctrl+Shift+]', onClick: () => reorderElements(ids, 'front') },
-      { label: t('editor.layerForward'), icon: 'bringForward', kbd: 'Ctrl+]', onClick: () => reorderElements(ids, 'forward') },
-      { label: t('editor.layerBackward'), icon: 'sendBackward', kbd: 'Ctrl+[', onClick: () => reorderElements(ids, 'backward') },
-      { label: t('editor.layerBack'), icon: 'sendBack', kbd: 'Ctrl+Shift+[', onClick: () => reorderElements(ids, 'back') },
-      { sep: true },
-      { label: t('editor.alignCenterH'), icon: 'alignCenterH', onClick: () => alignElements(ids, 'centerH') },
-      { label: t('editor.alignCenterV'), icon: 'alignCenterV', onClick: () => alignElements(ids, 'centerV') },
-      { sep: true },
+      { label: t('editor.layerFront'), icon: 'bringFront', onClick: () => reorderElements(ids, 'front') },
+      { label: t('editor.layerBack'), icon: 'sendBack', onClick: () => reorderElements(ids, 'back') },
       { label: el.locked ? t('editor.unlock') : t('editor.lock'), icon: el.locked ? 'unlock' : 'lock', onClick: () => toggleLock(ids) },
-      { label: el.hidden ? t('editor.showSlide') : t('editor.hideSlide'), icon: el.hidden ? 'eye' : 'eyeOff', onClick: () => toggleHidden(ids) },
       { sep: true },
       { label: t('common.delete'), icon: 'trash', danger: true, kbd: 'Del', onClick: () => deleteElements(ids) },
     ]
@@ -223,12 +253,11 @@ export default function Canvas() {
   const backgroundMenuItems = () => [
     { label: t('common.paste'), icon: 'copy', kbd: 'Ctrl+V', onClick: pasteClipboard, disabled: !useEditorClipboardHasItems() },
     { label: t('editor.insertText'), icon: 'type', onClick: () => insertText() },
-    { sep: true },
-    { label: t('editor.background'), icon: 'paint', onClick: () => clearSelection() },
   ]
 
   return (
     <div className="canvas-wrap" onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDropping(true) } }} onDragLeave={() => setDropping(false)} onDrop={onDrop}>
+      <InsertBar />
       <div ref={areaRef} className="canvas-area" onPointerDown={onBackgroundPointerDown} onContextMenu={(e) => { if (!e.target.closest('.el')) { e.preventDefault(); menu.open(e, { kind: 'background' }) } }}>
         <div className="canvas-inner">
           <div ref={slideRef} className="canvas-slide" style={{ width: SLIDE_W * scale, height: SLIDE_H * scale }}>
@@ -242,6 +271,7 @@ export default function Canvas() {
               croppingId={croppingId}
               registerRef={registerRef}
               onElementPointerDown={onElementPointerDown}
+              onElementMouseDown={onElementMouseDown}
               onElementDoubleClick={onElementDoubleClick}
               onElementContextMenu={onElementContextMenu}
               onTextCommit={onTextCommit}
@@ -263,13 +293,12 @@ export default function Canvas() {
         </div>
       </div>
 
-      <InsertBar />
+      <CanvasHint />
 
       <div className="zoom-bar">
         <IconButton icon="zoomOut" size="sm" label={t('editor.zoomOut')} onClick={() => setZoom(zoomStep(scale, -1))} />
-        <button type="button" className="zoom-value" onClick={() => setZoom('fit')} title={t('editor.zoomFit')}>{Math.round(scale * 100)}%</button>
+        <button type="button" className={`zoom-value ${zoom === 'fit' ? 'is-fit' : ''}`} onClick={() => setZoom('fit')} data-tip={t('editor.zoomFit')} data-tip-pos="top">{Math.round(scale * 100)}%</button>
         <IconButton icon="zoomIn" size="sm" label={t('editor.zoomIn')} onClick={() => setZoom(zoomStep(scale, 1))} />
-        <IconButton icon="fit" size="sm" label={t('editor.zoomFit')} active={zoom === 'fit'} onClick={() => setZoom('fit')} />
       </div>
 
       {textTarget && toolbarRect && !croppingId && <TextToolbar element={textTarget} editing={editingId === textTarget.id} anchorRect={toolbarRect} quiz={quiz} />}

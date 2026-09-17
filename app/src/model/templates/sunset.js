@@ -1,60 +1,26 @@
-import { gradient, solid } from './base.js'
+import { gradient } from './base.js'
+import magenta from './magenta.js'
 
-const INK = '#2B0F2F'
-const ACCENT = '#FFD200'
+const INK = '#2a0a1e'
 
+/** Chunky skin, warm orange → coral → magenta. */
 export default {
+  ...magenta,
   id: 'sunset',
-  preview: { background: 'linear-gradient(160deg,#ff512f 0%,#f09819 100%)', accent: ACCENT, ink: INK, text: '#fff', card: '#fff' },
-  fonts: {
-    he: { display: 'Suez One', body: 'Rubik' },
-    ar: { display: 'Rubik', body: 'Rubik' },
-    default: { display: 'Lilita One', body: 'Poppins' },
+  preview: { accent: '#FFE14A' },
+  palette: ['#FFE14A', '#8CF5D2', '#7A2BFF', '#FF9A1F', '#FF4D5E', '#ffffff', INK, '#D6249F'],
+  colors: { ...magenta.colors, ink: INK, accent: '#FFE14A', accent2: '#8CF5D2', eyebrow: '#FFE14A' },
+  vars: {
+    ...magenta.vars,
+    '--t-ink': INK,
+    '--t-primary': '#FFE14A',
+    '--t-secondary': '#8CF5D2',
+    '--t-danger': '#7A2BFF',
+    '--t-surface-muted': '#6b4a55',
+    '--t-glass-strong': 'rgba(42,10,30,0.42)',
+    '--t-blob-1': '#ffc04d',
+    '--t-blob-2': '#ff2e93',
   },
-  palette: [ACCENT, '#FF512F', '#F09819', '#A4508B', '#5F0A87', '#ffffff', INK, '#FF7EB3'],
-  colors: {
-    text: '#ffffff',
-    textMuted: 'rgba(255,255,255,0.85)',
-    ink: INK,
-    accent: ACCENT,
-    accent2: '#FF7EB3',
-    surface: '#ffffff',
-    surfaceText: INK,
-  },
-  text: { titleShadow: '0 5px 0 rgba(43,15,47,0.55)' },
-  backgrounds: {
-    opening: gradient(160, ['#FF512F', 0], ['#F09819', 100]),
-    question: solid(INK),
-    statistics: gradient(160, ['#5F0A87', 0], ['#A4508B', 100]),
-    leaderboard: gradient(160, ['#5F0A87', 0], ['#A4508B', 100]),
-    transition: gradient(160, ['#FF512F', 0], ['#F09819', 100]),
-    summary: gradient(160, ['#F7971E', 0], ['#FFD200', 100]),
-  },
-  answer: {
-    variant: 'pill',
-    borderRadius: 999,
-    border: { width: 0, color: INK },
-    shadow: '0 10px 26px rgba(0,0,0,0.32)',
-    color: '#ffffff',
-    fontSize: 42,
-    showShape: true,
-    bold: true,
-  },
-  widget: {
-    background: '#ffffff',
-    borderRadius: 40,
-    border: null,
-    shadow: '0 12px 30px rgba(0,0,0,0.28)',
-  },
-  widgets: {
-    timerVariant: 'circle',
-    participantsAvatar: 'pill',
-  },
-  decorations(type, ctx, { createShape, mirrorX }) {
-    if (!['opening', 'transition', 'summary'].includes(type)) return []
-    return [
-      createShape({ shape: 'ellipse', x: mirrorX(1380, 620), y: 560, w: 620, h: 620, fill: 'rgba(255,210,0,0.35)', stroke: { width: 0 }, fromTemplate: true }),
-      createShape({ shape: 'ellipse', x: mirrorX(1480, 420), y: 660, w: 420, h: 420, fill: 'rgba(255,255,255,0.22)', stroke: { width: 0 }, fromTemplate: true }),
-    ]
-  },
+  background: gradient(155, ['#FF9A1F', 0], ['#FF4D5E', 58], ['#D6249F', 116]),
+  image: { border: { width: 7, color: INK }, borderRadius: 28, shadow: `0 18px 0 ${INK}, 0 34px 52px rgba(0,0,0,0.34)` },
 }

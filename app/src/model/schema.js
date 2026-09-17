@@ -1,6 +1,6 @@
 import { uid } from './ids.js'
 import {
-  SCHEMA_VERSION, SLIDE_TYPES, ANSWER_INDICES, DEFAULT_SETTINGS, LIMITS, WIDGET_DEFAULTS, WIDGET_TYPES, RTL_LANGS,
+  SCHEMA_VERSION, SLIDE_TYPES, ANSWER_INDICES, DEFAULT_SETTINGS, LIMITS, WIDGET_DEFAULTS, WIDGET_TYPES, RTL_LANGS, QUESTION_LAYOUTS,
 } from './constants.js'
 import { sanitizeHtml } from './sanitize.js'
 
@@ -45,15 +45,20 @@ export const DEFAULT_SHAPE_PROPS = {
   shadow: null,
 }
 
+/**
+ * Answers and widgets are drawn by the template's skin (CSS). Every look-related field below is an
+ * OVERRIDE: `null` means "as the template says", so re-theming stays cheap and the skin can use
+ * effects inline styles cannot express (glows, glass, pseudo-elements).
+ */
 export const DEFAULT_ANSWER_STYLE = {
   variant: 'card',
-  background: null,      // null → canonical answer color
-  color: '#ffffff',
-  fontFamily: 'Rubik',
-  fontSize: 44,
-  borderRadius: 24,
-  border: { width: 4, color: '#1a0a2e' },
-  shadow: '0 10px 0 #1a0a2e',
+  background: null,      // null → canonical answer color, drawn by the skin
+  color: null,
+  fontFamily: null,
+  fontSize: 38,
+  borderRadius: null,
+  border: null,          // { width, color } — width 0 means "explicitly none"
+  shadow: null,
   showShape: true,
   showIndex: false,
   imagePosition: 'start',
@@ -61,17 +66,18 @@ export const DEFAULT_ANSWER_STYLE = {
 }
 
 export const DEFAULT_WIDGET_STYLE = {
-  fontFamily: 'Rubik',
-  fontSize: 40,
-  color: '#ffffff',
-  accent: '#FFD400',
-  ink: '#1a0a2e',
+  fontFamily: null,
+  color: null,
+  accent: null,
+  ink: null,
   background: null,
-  borderRadius: 24,
+  borderRadius: null,
   border: null,
   shadow: null,
-  padding: 20,
 }
+
+/** Look-related keys that "reset to template style" clears. */
+export const SKIN_STYLE_KEYS = ['background', 'color', 'fontFamily', 'borderRadius', 'border', 'shadow', 'accent', 'ink']
 
 // ───────────────────────── Factories ─────────────────────────
 
@@ -92,8 +98,9 @@ function base(kind, geo = {}) {
   }
 }
 
-export function createText({ html = '', style = {}, binding = null, ...geo } = {}) {
-  return { ...base('text', geo), html: sanitizeHtml(html), binding, style: { ...DEFAULT_TEXT_STYLE, ...style } }
+export function createText({ html = '', style = {}, binding = null, role = null, ...geo } = {}) {
+  // `role` ("title" | "eyebrow" | "subtitle") marks template-owned texts so re-theming keeps their wording.
+  return { ...base('text', geo), html: sanitizeHtml(html), binding, role, style: { ...DEFAULT_TEXT_STYLE, ...style } }
 }
 
 export function createImage({ src = '', binding = null, placeholder = false, ...rest } = {}) {
@@ -141,16 +148,19 @@ export function createQuestion(partial = {}) {
   }
 }
 
-export function createSlide(type, { background, elements = [], question, hidden = false, notes = '' } = {}) {
+export function createSlide(type, { background, elements = [], question, hidden = false, notes = '', layout } = {}) {
   const slide = {
     id: uid('s'),
     type: SLIDE_TYPES.includes(type) ? type : 'transition',
     hidden,
-    background: background || { kind: 'color', color: '#1a0a2e' },
+    background: background || { kind: 'color', color: '#1a0a2e', decor: true },
     elements,
     notes,
   }
-  if (slide.type === 'question') slide.question = createQuestion(question)
+  if (slide.type === 'question') {
+    slide.question = createQuestion(question)
+    if (QUESTION_LAYOUTS.includes(layout)) slide.layout = layout
+  }
   return slide
 }
 
@@ -192,7 +202,7 @@ function normalizeElement(el) {
   }
   switch (el.kind) {
     case 'text':
-      return { ...geo, html: sanitizeHtml(el.html || ''), binding: el.binding || null, style: { ...DEFAULT_TEXT_STYLE, ...(el.style || {}) } }
+      return { ...geo, html: sanitizeHtml(el.html || ''), binding: el.binding || null, role: el.role || null, style: { ...DEFAULT_TEXT_STYLE, ...(el.style || {}) } }
     case 'image':
       return {
         ...geo,
@@ -239,7 +249,10 @@ function normalizeSlide(slide) {
     elements: Array.isArray(slide?.elements) ? slide.elements.map(normalizeElement).filter(Boolean) : [],
     notes: slide?.notes || '',
   }
-  if (type === 'question') out.question = createQuestion(slide?.question || {})
+  if (type === 'question') {
+    out.question = createQuestion(slide?.question || {})
+    if (QUESTION_LAYOUTS.includes(slide?.layout)) out.layout = slide.layout
+  }
   return out
 }
 

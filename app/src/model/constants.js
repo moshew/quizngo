@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** Logical slide size. Every element coordinate is expressed in these units. */
 export const SLIDE_W = 1920
@@ -6,6 +6,10 @@ export const SLIDE_H = 1080
 
 export const SLIDE_TYPES = ['opening', 'question', 'statistics', 'leaderboard', 'transition', 'summary']
 export const RESULT_SLIDE_TYPES = ['statistics', 'leaderboard']
+
+/** Ready-made arrangements of a question slide (SPEC FR-19). */
+export const QUESTION_LAYOUTS = ['text', 'banner', 'side', 'image-answers']
+export const DEFAULT_QUESTION_LAYOUT = 'text'
 
 /** Canonical answer colors & shapes — shared with the player app; never themed. */
 export const ANSWERS = {
@@ -36,13 +40,13 @@ export const WIDGET_TYPES = [
 
 /** Default props and sizes for widgets when inserted from the toolbar. */
 export const WIDGET_DEFAULTS = {
-  'game-pin': { w: 460, h: 170, props: { showLabel: true, label: '' } },
+  'game-pin': { w: 460, h: 170, props: { showLabel: true, label: '', showJoinUrl: false } },
   'qr-code': { w: 300, h: 340, props: { showLabel: true, label: '' } },
   'participants-count': { w: 320, h: 120, props: { showLabel: true, label: '' } },
   'participants-list': { w: 1100, h: 700, props: { headerText: '', showCount: true, columns: 3, maxRows: 4, avatarStyle: 'card' } },
   timer: { w: 200, h: 200, props: { variant: 'circle', label: '' } },
-  respondents: { w: 200, h: 200, props: { variant: 'circle', showTotal: true, label: '' } },
-  'answers-chart': { w: 1400, h: 700, props: { showValues: true, showShapes: true, barRadius: 18, showQuestion: false } },
+  respondents: { w: 220, h: 160, props: { variant: 'box', showTotal: false, label: '' } },
+  'answers-chart': { w: 1400, h: 700, props: { showValues: true, showShapes: true, showLabels: true, barRadius: 20, showQuestion: false } },
   leaderboard: { w: 1100, h: 760, props: { count: 5, variant: 'list', showAvatar: true, showScore: true } },
   'question-number': { w: 380, h: 80, props: { label: '' } },
 }
@@ -67,6 +71,7 @@ export const FONTS = [
   { family: 'Miriam Libre', he: true },
   { family: 'Bricolage Grotesque', display: true },
   { family: 'Plus Jakarta Sans' },
+  { family: 'Space Mono', mono: true },
   { family: 'Poppins' },
   { family: 'Montserrat' },
   { family: 'Fredoka', display: true },

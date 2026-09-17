@@ -7,6 +7,7 @@ import LoginScreen from './screens/LoginScreen.jsx'
 import HomeScreen from './screens/HomeScreen.jsx'
 import EditorScreen from './screens/EditorScreen.jsx'
 import PreviewScreen from './screens/PreviewScreen.jsx'
+import GalleryScreen from './screens/GalleryScreen.jsx'
 
 function FullscreenLoader() {
   const { t } = useI18n()
@@ -44,6 +45,7 @@ export default function App() {
     switch (route.name) {
       case 'editor': screen = <EditorScreen key={route.params.id} quizId={route.params.id} />; break
       case 'preview': screen = <PreviewScreen key={route.params.id} quizId={route.params.id} />; break
+      case 'gallery': screen = <GalleryScreen />; break
       case 'home': screen = <HomeScreen />; break
       default: screen = <HomeScreen />
     }

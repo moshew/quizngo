@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useI18n } from '../../i18n/index.js'
+import Icon from '../../components/Icon.jsx'
 import { Switch } from '../../components/Field.jsx'
 import ColorInput from '../../components/ColorInput.jsx'
 import { NumberField } from '../../components/Field.jsx'
@@ -7,11 +8,39 @@ import { fontOptions } from '../text/TextToolbar.jsx'
 import { useEditor } from '../../state/editorStore.js'
 import { getTemplate } from '../../model/templates/index.js'
 
-export function Section({ title, children, action }) {
+const FOLD_KEY = 'qng.studio.fold.'
+
+function readFold(id, fallback) {
+  try { const v = localStorage.getItem(FOLD_KEY + id); return v === null ? fallback : v === '1' } catch { return fallback }
+}
+
+/**
+ * Inspector section. With `foldId` it becomes collapsible and remembers its state across
+ * visits (SPEC FR-04: content first, design on demand) — power users open it once and it stays.
+ */
+export function Section({ title, children, action, foldId, defaultOpen = false, icon }) {
+  const [open, setOpen] = useState(() => (foldId ? readFold(foldId, defaultOpen) : true))
+  if (!foldId) {
+    return (
+      <div className="prop-section">
+        {title && <div className="prop-title">{title}<span className="spacer" />{action}</div>}
+        {children}
+      </div>
+    )
+  }
+  const toggle = () => {
+    const next = !open
+    setOpen(next)
+    try { localStorage.setItem(FOLD_KEY + foldId, next ? '1' : '0') } catch { /* private mode */ }
+  }
   return (
-    <div className="prop-section">
-      {title && <div className="prop-title">{title}<span className="spacer" />{action}</div>}
-      {children}
+    <div className={`prop-section is-fold ${open ? 'is-open' : ''}`}>
+      <button type="button" className="prop-fold" onClick={toggle} aria-expanded={open}>
+        {icon && <Icon name={icon} size={15} />}
+        <span className="grow">{title}</span>
+        <Icon name="chevronDown" size={15} className="chev" />
+      </button>
+      {open && <div className="prop-fold-body">{children}</div>}
     </div>
   )
 }
@@ -39,10 +68,13 @@ export function usePalette() {
   return getTemplate(templateId).palette
 }
 
-export function FontSelect({ value, onChange }) {
+/** `allowTemplate` adds the "as the template says" choice (value null) for skin-driven elements. */
+export function FontSelect({ value, onChange, allowTemplate = false }) {
+  const { t } = useI18n()
   const lang = useEditor((s) => s.quiz?.language)
   return (
-    <select className="select sm font-select" value={value} onChange={(e) => onChange(e.target.value)} style={{ fontFamily: value }}>
+    <select className="select sm font-select" value={value || ''} onChange={(e) => onChange(e.target.value || null)} style={{ fontFamily: value || undefined }}>
+      {allowTemplate && <option value="">{t('inspector.fromTemplate')}</option>}
       {fontOptions(lang).map((f) => <option key={f.family} value={f.family} style={{ fontFamily: f.family }}>{f.family}</option>)}
     </select>
   )
@@ -56,12 +88,13 @@ export const SHADOW_PRESETS = {
   deep: '0 24px 60px rgba(0,0,0,0.55)',
 }
 
-export function ShadowSelect({ value, onChange }) {
+/** `allowTemplate`: for skin-driven elements an empty value means "as the template says", not "none". */
+export function ShadowSelect({ value, onChange, allowTemplate = false }) {
   const { t } = useI18n()
   const key = Object.keys(SHADOW_PRESETS).find((k) => SHADOW_PRESETS[k] === (value || null)) || (value ? 'custom' : 'none')
   return (
     <select className="select sm" value={key} onChange={(e) => onChange(SHADOW_PRESETS[e.target.value] ?? null)}>
-      <option value="none">{t('common.none')}</option>
+      <option value="none">{allowTemplate ? t('inspector.fromTemplate') : t('common.none')}</option>
       <option value="soft">Soft</option>
       <option value="hard">Hard</option>
       <option value="glow">Glow</option>
@@ -71,13 +104,13 @@ export function ShadowSelect({ value, onChange }) {
   )
 }
 
-export function BorderControl({ value, onChange }) {
+export function BorderControl({ value, onChange, allowTemplate = false }) {
   const palette = usePalette()
   const width = value?.width || 0
   const color = value?.color || '#ffffff'
   return (
     <>
-      <NumberField value={width} min={0} max={60} onChange={(w) => onChange(w > 0 ? { width: w, color } : null)} prefix="W" />
+      <NumberField value={allowTemplate && !value ? null : width} min={0} max={60} onChange={(w) => onChange(value || w > 0 ? { width: w, color } : null)} prefix="W" />
       <ColorInput size="sm" value={color} allowNull={false} palette={palette} onChange={(c) => onChange({ width: width || 3, color: c })} />
     </>
   )

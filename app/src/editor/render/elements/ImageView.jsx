@@ -20,6 +20,11 @@ export function imageFilter(filters) {
 /** Style for the <img> so that only the crop rectangle (fractions of the source) fills the box. */
 export function croppedImageStyle(crop) {
   const c = crop || { x: 0, y: 0, w: 1, h: 1 }
+  // An untouched crop means "fill the box": layouts and re-theming change the box aspect, and a
+  // cover fit never stretches the picture. An explicit crop (from crop mode) is honored exactly.
+  if (c.x === 0 && c.y === 0 && c.w === 1 && c.h === 1) {
+    return { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }
+  }
   const w = Math.max(c.w, 0.01), h = Math.max(c.h, 0.01)
   return {
     position: 'absolute',

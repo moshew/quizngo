@@ -1,0 +1,90 @@
+/* ── Template decor layers (SPEC FR-18) ────────────────────────
+   Atmosphere drawn above the slide background and below every element. Never selectable.
+   Colors come from the theme tokens, so re-colored templates share the same layer. */
+
+.slide-decor { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.slide-decor > i { position: absolute; display: block; }
+
+/* ─── party (chunky family) ─── */
+.decor-party .blob { border-radius: 50%; opacity: .5; }
+.decor-party .b1 { width: 820px; height: 820px; left: -260px; top: -280px; background: radial-gradient(circle, var(--t-blob-1) 0%, transparent 66%); }
+.decor-party .b2 { width: 760px; height: 760px; right: -250px; bottom: -260px; background: radial-gradient(circle, var(--t-blob-2) 0%, transparent 66%); }
+.decor-party .ghost { opacity: var(--t-ghost-opacity, .1); }
+.decor-party .g-tri { left: 120px; bottom: 120px; width: 0; height: 0; border-left: 90px solid transparent; border-right: 90px solid transparent; border-bottom: 150px solid var(--t-ghost); transform: rotate(-12deg); }
+.decor-party .g-dia { right: 160px; top: 120px; width: 150px; height: 150px; background: var(--t-ghost); border-radius: 18px; transform: rotate(45deg); }
+.decor-party .g-cir { left: 48%; top: -40px; width: 170px; height: 170px; box-sizing: border-box; border: 26px solid var(--t-ghost); border-radius: 50%; }
+.decor-party .g-sq { right: 300px; bottom: 90px; width: 140px; height: 140px; background: var(--t-ghost); border-radius: 22px; transform: rotate(12deg); }
+.decor-party .dot { border-radius: 50%; }
+.decor-party .d1 { width: 18px; height: 18px; left: 240px; top: 200px; background: var(--t-primary); }
+.decor-party .d2 { width: 14px; height: 14px; right: 280px; top: 300px; background: var(--t-secondary); }
+.decor-party .d3 { width: 22px; height: 22px; left: 160px; bottom: 280px; background: var(--t-primary); }
+.decor-party .d4 { width: 12px; height: 12px; right: 200px; bottom: 360px; background: var(--t-ghost); opacity: .6; }
+/* soft projector vignette + top sheen, unified across every slide */
+.decor-party .sheen { inset: 0; background:
+  radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.16), transparent 55%),
+  radial-gradient(120% 90% at 50% 120%, rgba(26,10,46,.42), transparent 60%); }
+.theme-minimal-light .decor-party .sheen { background:
+  radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.7), transparent 55%),
+  radial-gradient(120% 90% at 50% 120%, rgba(182,32,201,.10), transparent 60%); }
+/* Busy slides keep the corners calm: ghosts step back behind content-heavy layouts. */
+.type-question .decor-party .ghost, .type-statistics .decor-party .ghost { opacity: calc(var(--t-ghost-opacity, .1) * .55); }
+
+/* ─── arcade (neon family) ─── */
+.decor-arcade .glow { inset: 0; background:
+  radial-gradient(46% 56% at 88% -2%, rgba(var(--t-accent-rgb), .20), transparent 60%),
+  radial-gradient(50% 54% at 2% 100%, rgba(var(--t-glow-2-rgb), .22), transparent 62%),
+  radial-gradient(38% 42% at 98% 96%, rgba(var(--t-glow-3-rgb), .14), transparent 64%),
+  radial-gradient(60% 56% at 50% 46%, rgba(86,108,160,.12), transparent 64%),
+  radial-gradient(80% 22% at 50% 52%, rgba(var(--t-accent-rgb), .16), transparent 70%),
+  radial-gradient(150% 130% at 82% -6%, #16171f 0%, #0d0e15 46%, #07080f 100%); }
+/* arcade screen — dot-matrix overlay, fades toward the centre */
+.decor-arcade .matrix { inset: 0;
+  background-image: radial-gradient(rgba(120,200,255,.16) 1.6px, transparent 1.8px); background-size: 30px 30px;
+  -webkit-mask: radial-gradient(120% 100% at 50% 40%, transparent 22%, #000 92%);
+          mask: radial-gradient(120% 100% at 50% 40%, transparent 22%, #000 92%); }
+/* neon perspective floor grid sweeping up from the bottom + glowing horizon */
+.decor-arcade .floor { left: -30%; right: -30%; bottom: 0; height: 62%;
+  background:
+    repeating-linear-gradient(90deg, rgba(var(--t-grid-rgb), .6) 0 2px, transparent 2px 96px),
+    repeating-linear-gradient(0deg,  rgba(var(--t-grid-rgb), .5) 0 2px, transparent 2px 70px);
+  transform: perspective(760px) rotateX(63deg); transform-origin: 50% 100%;
+  -webkit-mask: linear-gradient(to top, #000 0%, rgba(0,0,0,.85) 26%, transparent 74%);
+          mask: linear-gradient(to top, #000 0%, rgba(0,0,0,.85) 26%, transparent 74%);
+  opacity: .9; }
+.type-question .decor-arcade .floor, .type-statistics .decor-arcade .floor, .type-leaderboard .decor-arcade .floor { opacity: .45; }
+.decor-arcade .star { width: var(--s, 3px); height: var(--s, 3px); border-radius: 50%; background: #fff; opacity: .7;
+  box-shadow: 0 0 3px .5px rgba(255,255,255,.9), 0 0 5px 1px rgba(120,220,255,.5); }
+.mode-preview .decor-arcade .star { animation: decor-twinkle var(--d, 4s) ease-in-out var(--dl, 0s) infinite; }
+@keyframes decor-twinkle { 0%,100% { opacity: .25; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.15); } }
+
+/* HUD corner-bracket screen frame (the signature) */
+.slide-decor .hud { inset: 30px; opacity: .42; filter: drop-shadow(0 0 5px rgba(var(--t-accent-rgb), .6));
+  background:
+    linear-gradient(var(--t-accent), var(--t-accent)) left top / 52px 2px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) left top / 2px 52px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) right top / 52px 2px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) right top / 2px 52px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) left bottom / 52px 2px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) left bottom / 2px 52px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) right bottom / 52px 2px no-repeat,
+    linear-gradient(var(--t-accent), var(--t-accent)) right bottom / 2px 52px no-repeat; }
+
+/* ─── gold (neon family over the classic black photo background) ─── */
+.decor-gold .glow { inset: 0; background:
+  radial-gradient(50% 60% at 50% -8%, rgba(var(--t-accent-rgb), .20), transparent 62%),
+  radial-gradient(44% 50% at 4% 104%, rgba(var(--t-glow-2-rgb), .26), transparent 64%),
+  radial-gradient(40% 44% at 100% 100%, rgba(var(--t-glow-3-rgb), .10), transparent 64%); }
+.decor-gold .hud { opacity: .6; }
+
+/* ─── confetti (summary) — static scatter while editing, falling in preview ─── */
+.decor-confetti { position: absolute; inset: 0; overflow: hidden; }
+.decor-confetti i { position: absolute; top: var(--top); width: 16px; height: 22px; border-radius: 3px; transform: rotate(var(--rot)); opacity: .9; }
+.decor-confetti i.round { width: 16px; height: 16px; border-radius: 50%; }
+.skin-neon .decor-confetti i { width: 12px; height: 18px; border-radius: 2px; box-shadow: 0 0 10px currentColor; opacity: .8; }
+.mode-preview .decor-confetti i { top: -40px; animation: decor-fall linear infinite; }
+@keyframes decor-fall { 0% { transform: translateY(-40px) rotate(0); } 100% { transform: translateY(1180px) rotate(540deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-preview .decor-confetti i { animation: none; top: var(--top); }
+  .mode-preview .decor-arcade .star { animation: none; }
+}

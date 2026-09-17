@@ -11,6 +11,7 @@ const ROUTES = [
   { name: 'home', pattern: '/' },
   { name: 'editor', pattern: '/edit/:id' },
   { name: 'preview', pattern: '/preview/:id' },
+  { name: 'gallery', pattern: '/gallery' },
 ]
 
 const listeners = new Set()

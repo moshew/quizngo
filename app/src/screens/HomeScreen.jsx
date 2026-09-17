@@ -4,6 +4,7 @@ import { authStore, logout } from '../state/authStore.js'
 import { navigate } from '../router.jsx'
 import * as quizApi from '../api/quizzes.js'
 import { createQuizFromTemplate } from '../model/templates/index.js'
+import { coverQuiz } from '../model/migrate.js'
 import Button, { IconButton } from '../components/Button.jsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
@@ -47,6 +48,9 @@ export default function HomeScreen() {
     try { setQuizzes(await quizApi.listQuizzes()) } catch (err) { setError(err.message) }
   }
   useEffect(() => { load() }, [])
+
+  // Covers render through the quiz's template (and get upgraded on the fly if they predate skins).
+  const covers = useMemo(() => new Map((quizzes || []).map((q) => [q.id, coverQuiz(q)])), [quizzes])
 
   const visible = useMemo(() => {
     if (!quizzes) return []
@@ -179,7 +183,7 @@ export default function HomeScreen() {
             {visible.map((quiz, i) => (
               <article key={quiz.id} className="quiz-card" style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, opacity: busyId === quiz.id ? 0.6 : 1 }}>
                 <div className="quiz-card-thumb" onClick={() => navigate(`/edit/${quiz.id}`)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/edit/${quiz.id}`) }}>
-                  <SlideThumb slide={quiz.cover} lazy />
+                  <SlideThumb slide={covers.get(quiz.id)?.slides[0]} quiz={covers.get(quiz.id)} lazy />
                   <div className="quiz-card-overlay">
                     <Button variant="primary" icon="edit" onClick={(e) => { e.stopPropagation(); navigate(`/edit/${quiz.id}`) }}>{t('common.edit')}</Button>
                     <Button icon="monitor" onClick={(e) => { e.stopPropagation(); navigate(`/preview/${quiz.id}`) }}>{t('common.preview')}</Button>

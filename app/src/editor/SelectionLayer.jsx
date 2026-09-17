@@ -36,11 +36,23 @@ const SelectionLayer = forwardRef(function SelectionLayer({ elements, nodes, oth
   }, [elements, scale])
 
   useImperativeHandle(ref, () => ({
-    startDrag(nativeEvent) {
+    /**
+     * Continue a press on a just-selected element as a drag. Pass the MOUSEDOWN event: Moveable
+     * prevents the default of the event it starts from, and preventing a pointerdown suppresses the
+     * mouseup it later waits for — the element would stay glued to the pointer.
+     * The target switch is asynchronous, so the press may already be over when Moveable is ready;
+     * `wasReleased` covers the time before this call.
+     */
+    startDrag(mouseDownEvent, wasReleased = () => false) {
       const m = moveableRef.current
       if (!m) return
+      let released = false
+      const onUp = () => { released = true }
+      window.addEventListener('mouseup', onUp, true)
       m.waitToChangeTarget().then(() => {
-        try { m.dragStart(nativeEvent) } catch { /* target changed mid-gesture */ }
+        window.removeEventListener('mouseup', onUp, true)
+        if (released || wasReleased()) return // it was a click, not a drag
+        try { m.dragStart(mouseDownEvent) } catch { /* target changed mid-gesture */ }
       })
     },
     updateRect() { moveableRef.current?.updateRect() },

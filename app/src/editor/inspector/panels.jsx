@@ -3,8 +3,9 @@ import { useI18n } from '../../i18n/index.js'
 import { ANSWERS, ANSWER_INDICES, FRAMES, SHAPES, SLIDE_TYPES, LIMITS } from '../../model/constants.js'
 import { assetUrl } from '../../api/client.js'
 import {
-  updateElement, updateElementStyle, updateWidgetProps, deleteElements, duplicateElements, reorderElements, alignElements, toggleLock,
-  updateSlide, setBackground, setSlideType, setSlideHidden, updateQuestion, setCorrectAnswer, setAnswer, setCropping, useEditor,
+  updateElement, updateElementStyle, updateWidgetProps, reorderElements, alignElements,
+  updateSlide, setBackground, setSlideType, setSlideHidden, updateQuestion, setCorrectAnswer, setAnswer, setCropping,
+  resetElementStyle, resetBackground, setQuestionMediaSrc, updateSettings,
 } from '../../state/editorStore.js'
 import { NumberField, Segmented, Slider } from '../../components/Field.jsx'
 import Button, { IconButton } from '../../components/Button.jsx'
@@ -14,7 +15,8 @@ import { AnswerGlyph } from '../render/elements/AnswerView.jsx'
 import { frameClipPathFor } from '../render/frames.js'
 import { shapePath } from '../render/shapes.js'
 import { Section, Row, ToggleRow, usePalette, FontSelect, ShadowSelect, BorderControl } from './controls.jsx'
-import { pickFiles, pickForElement, setQuestionMedia, setAnswerImage, setBackgroundImage } from '../image/useImageUpload.js'
+import { pickFiles, pickForElement, setAnswerImage, setBackgroundImage } from '../image/useImageUpload.js'
+import QuestionForm from './QuestionForm.jsx'
 
 const K = (id) => `insp:${id}`
 
@@ -24,12 +26,11 @@ export function CommonPanel({ elements }) {
   const { t } = useI18n()
   const one = elements.length === 1 ? elements[0] : null
   const ids = elements.map((e) => e.id)
-  const anyLocked = elements.some((e) => e.locked)
   const opacity = one ? one.opacity : elements[0].opacity
   return (
-    <>
+    <Section title={t('inspector.arrange')} icon="move" foldId="arrange" defaultOpen={elements.length > 1}>
       {one && (
-        <Section title={t('inspector.position')}>
+        <>
           <div className="prop-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
             <NumberField prefix="X" value={one.x} onChange={(v) => updateElement(one.id, { x: v }, K(one.id))} disabled={one.locked} />
             <NumberField prefix="Y" value={one.y} onChange={(v) => updateElement(one.id, { y: v }, K(one.id))} disabled={one.locked} />
@@ -43,30 +44,23 @@ export function CommonPanel({ elements }) {
               <IconButton icon="reset" size="sm" label="0°" onClick={() => updateElement(one.id, { rotation: 0 })} />
             </div>
           </div>
-        </Section>
+        </>
       )}
-      <Section title={t('inspector.opacity')}>
-        <div className="row">
-          <Slider min={0} max={100} value={Math.round(opacity * 100)} onChange={(v) => ids.forEach((id) => updateElement(id, { opacity: v / 100 }, K(id)))} />
-          <span className="xs dim mono" style={{ width: 36, textAlign: 'end' }}>{Math.round(opacity * 100)}%</span>
-        </div>
-      </Section>
-      <Section title={t('inspector.layer')}>
-        <div className="row gap-4 wrap">
-          <IconButton icon="bringFront" label={t('editor.layerFront')} onClick={() => reorderElements(ids, 'front')} />
-          <IconButton icon="bringForward" label={t('editor.layerForward')} onClick={() => reorderElements(ids, 'forward')} />
-          <IconButton icon="sendBackward" label={t('editor.layerBackward')} onClick={() => reorderElements(ids, 'backward')} />
-          <IconButton icon="sendBack" label={t('editor.layerBack')} onClick={() => reorderElements(ids, 'back')} />
-          <div className="vdivider" />
-          <IconButton icon="alignCenterH" label={t('editor.alignCenterH')} onClick={() => alignElements(ids, 'centerH')} />
-          <IconButton icon="alignCenterV" label={t('editor.alignCenterV')} onClick={() => alignElements(ids, 'centerV')} />
-          <div className="vdivider" />
-          <IconButton icon={anyLocked ? 'unlock' : 'lock'} label={anyLocked ? t('editor.unlock') : t('editor.lock')} active={anyLocked} onClick={() => toggleLock(ids)} />
-          <IconButton icon="copy" label={t('common.duplicate')} onClick={() => duplicateElements(ids)} />
-          <IconButton icon="trash" label={t('common.delete')} danger onClick={() => deleteElements(ids)} />
-        </div>
-      </Section>
-    </>
+      <Row label={t('inspector.opacity')}>
+        <Slider min={0} max={100} value={Math.round(opacity * 100)} onChange={(v) => ids.forEach((id) => updateElement(id, { opacity: v / 100 }, K(id)))} />
+        <span className="xs dim mono" style={{ width: 36, textAlign: 'end' }}>{Math.round(opacity * 100)}%</span>
+      </Row>
+      <Row label={t('inspector.layer')}>
+        <IconButton icon="bringFront" size="sm" label={t('editor.layerFront')} onClick={() => reorderElements(ids, 'front')} />
+        <IconButton icon="bringForward" size="sm" label={t('editor.layerForward')} onClick={() => reorderElements(ids, 'forward')} />
+        <IconButton icon="sendBackward" size="sm" label={t('editor.layerBackward')} onClick={() => reorderElements(ids, 'backward')} />
+        <IconButton icon="sendBack" size="sm" label={t('editor.layerBack')} onClick={() => reorderElements(ids, 'back')} />
+      </Row>
+      <Row label={t('inspector.alignToSlide')}>
+        <IconButton icon="alignCenterH" size="sm" label={t('editor.alignCenterH')} onClick={() => alignElements(ids, 'centerH')} />
+        <IconButton icon="alignCenterV" size="sm" label={t('editor.alignCenterV')} onClick={() => alignElements(ids, 'centerV')} />
+      </Row>
+    </Section>
   )
 }
 
@@ -100,69 +94,51 @@ function GradientEditor({ bg, onChange }) {
   )
 }
 
+const SLIDE_ICON = { opening: 'flag', question: 'help', statistics: 'barChart', leaderboard: 'trophy', transition: 'slide', summary: 'star' }
+
 export function SlidePanel({ slide, quiz }) {
   const { t } = useI18n()
   const palette = usePalette()
   const bg = slide.background
   const kind = bg?.kind || 'color'
+  const decor = bg?.decor !== false
   const switchKind = (k) => {
     if (k === kind) return
-    if (k === 'color') setBackground(slide.id, { kind: 'color', color: bg.color || bg.gradient?.stops?.[0]?.color || '#1a0a2e' }, null)
-    if (k === 'gradient') setBackground(slide.id, { kind: 'gradient', gradient: bg.gradient || { angle: 160, stops: [{ color: bg.color || '#6B2BFF', at: 0 }, { color: '#FF2E93', at: 100 }] } }, null)
-    if (k === 'image') setBackground(slide.id, { kind: 'image', src: bg.src || '', overlay: 'rgba(0,0,0,0.35)', fit: 'cover', color: bg.color || '#1a0a2e' }, null)
+    if (k === 'color') setBackground(slide.id, { kind: 'color', color: bg.color || bg.gradient?.stops?.[0]?.color || '#1a0a2e', decor }, null)
+    if (k === 'gradient') setBackground(slide.id, { kind: 'gradient', gradient: bg.gradient || { angle: 160, stops: [{ color: bg.color || '#6B2BFF', at: 0 }, { color: '#FF2E93', at: 100 }] }, decor }, null)
+    if (k === 'image') setBackground(slide.id, { kind: 'image', src: bg.src || '', overlay: 'rgba(0,0,0,0.35)', fit: 'cover', color: bg.color || '#1a0a2e', decor: false }, null)
   }
+  const leaderboard = slide.type === 'leaderboard' ? slide.elements.find((el) => el.kind === 'widget' && el.widget === 'leaderboard') : null
+
   return (
     <>
-      <Section title={t('inspector.slideType')}>
-        <select className="select sm" value={slide.type} onChange={(e) => setSlideType(slide.id, e.target.value)}>
-          {SLIDE_TYPES.map((type) => <option key={type} value={type}>{t(`slideTypes.${type}`)}</option>)}
-        </select>
-        <p className="xs dim" style={{ marginTop: 6 }}>{t(`slideTypes.descriptions.${slide.type}`)}</p>
-        <ToggleRow label={t('editor.hideSlide')} checked={slide.hidden} onChange={(v) => setSlideHidden(slide.id, v)} />
-      </Section>
-
-      {slide.type === 'question' && (
-        <Section title={t('editor.correctAnswer')}>
-          <div className="answer-pick">
-            {ANSWER_INDICES.map((i) => (
-              <button key={i} type="button" className={slide.question.correctAnswer === i ? 'active' : ''} style={{ background: ANSWERS[i].color }} onClick={() => setCorrectAnswer(slide.id, i)} aria-label={t('editor.answerN', { n: i })}>
-                <AnswerGlyph index={i} color={i === 3 ? '#1a0a2e' : '#fff'} size={20} />
-              </button>
-            ))}
+      {slide.type === 'question' ? <QuestionForm slide={slide} quiz={quiz} /> : (
+        <Section>
+          <div className="slide-about">
+            <span className={`badge-type type-${slide.type}`}><Icon name={SLIDE_ICON[slide.type]} size={13} /></span>
+            <p>{t(`slideTypes.descriptions.${slide.type}`)}</p>
           </div>
-          <div className="prop-row" style={{ marginTop: 12 }}>
-            <label>{t('editor.timeLimit')}</label>
-            <div className="grow">
-              <select className="select sm" value={slide.question.timeLimit ? 'custom' : 'default'} onChange={(e) => updateQuestion(slide.id, { timeLimit: e.target.value === 'default' ? null : quiz.settings.questionWaitTime }, null)}>
-                <option value="default">{t('editor.useDefault', { n: quiz.settings.questionWaitTime })}</option>
-                <option value="custom">{t('common.custom')}</option>
-              </select>
-              {slide.question.timeLimit && <NumberField value={slide.question.timeLimit} min={LIMITS.questionWaitTime[0]} max={LIMITS.questionWaitTime[1]} onChange={(v) => updateQuestion(slide.id, { timeLimit: v })} suffix="s" />}
-            </div>
-          </div>
-          <div className="prop-row" style={{ marginTop: 8 }}>
-            <label>{t('editor.questionMedia')}</label>
-            <div className="grow image-picker">
-              {slide.question.media?.src ? <img className="preview" src={assetUrl(slide.question.media.src)} alt="" /> : <div className="preview center dim"><Icon name="image" /></div>}
-              <Button size="sm" icon="upload" onClick={() => pickFiles({ onFiles: (f) => setQuestionMedia(slide.id, f[0]) })}>{t('editor.uploadImage')}</Button>
-              {slide.question.media?.src && <IconButton icon="trash" size="sm" label={t('common.remove')} onClick={() => updateQuestion(slide.id, { media: null }, null)} />}
-            </div>
-          </div>
+          {leaderboard && (
+            <Row label={t('inspector.count')}>
+              <NumberField value={quiz.settings.leaderboardSize} min={LIMITS.leaderboardSize[0]} max={LIMITS.leaderboardSize[1]} onChange={(v) => updateSettings({ leaderboardSize: v })} prefix="#" />
+            </Row>
+          )}
+          <p className="xs dim" style={{ marginTop: 8 }}>{t('editor.slideHint')}</p>
         </Section>
       )}
 
-      <Section title={t('inspector.background')}>
+      <Section title={t('inspector.background')} icon="paint" foldId="background">
         <Segmented block value={kind} onChange={switchKind} options={[{ value: 'color', label: t('inspector.solid') }, { value: 'gradient', label: t('inspector.gradient') }, { value: 'image', label: t('inspector.image') }]} />
         <div style={{ height: 10 }} />
         {kind === 'color' && (
           <Row label={t('inspector.color')}>
-            <ColorInput value={bg.color} allowNull={false} palette={palette} onChange={(c) => setBackground(slide.id, { kind: 'color', color: c })} />
+            <ColorInput value={bg.color} allowNull={false} palette={palette} onChange={(c) => setBackground(slide.id, { ...bg, kind: 'color', color: c })} />
             <div className="row gap-4 wrap grow">
-              {palette.slice(0, 8).map((c) => <button key={c} type="button" className="swatch sm" style={{ background: c }} onClick={() => setBackground(slide.id, { kind: 'color', color: c }, null)} aria-label={c} />)}
+              {palette.slice(0, 8).map((c) => <button key={c} type="button" className="swatch sm" style={{ background: c }} onClick={() => setBackground(slide.id, { ...bg, kind: 'color', color: c }, null)} aria-label={c} />)}
             </div>
           </Row>
         )}
-        {kind === 'gradient' && <GradientEditor bg={bg} onChange={(next) => setBackground(slide.id, next)} />}
+        {kind === 'gradient' && <GradientEditor bg={bg} onChange={(next) => setBackground(slide.id, { ...next, decor })} />}
         {kind === 'image' && (
           <>
             <div className="image-picker" style={{ marginBottom: 8 }}>
@@ -175,9 +151,18 @@ export function SlidePanel({ slide, quiz }) {
             </Row>
           </>
         )}
+        <ToggleRow label={t('inspector.decor')} checked={decor} onChange={(v) => setBackground(slide.id, { ...bg, decor: v }, null)} />
+        <Button size="sm" variant="ghost" icon="reset" onClick={() => resetBackground(slide.id)}>{t('inspector.resetBackground')}</Button>
       </Section>
 
-      <Section title={t('editor.notes')}>
+      <Section title={t('inspector.slideOptions')} icon="settings" foldId="slide-options">
+        <Row label={t('inspector.slideType')}>
+          <select className="select sm" value={slide.type} onChange={(e) => setSlideType(slide.id, e.target.value)}>
+            {SLIDE_TYPES.map((type) => <option key={type} value={type}>{t(`slideTypes.${type}`)}</option>)}
+          </select>
+        </Row>
+        <ToggleRow label={t('editor.hideSlide')} checked={slide.hidden} onChange={(v) => setSlideHidden(slide.id, v)} />
+        <div className="prop-label" style={{ margin: '10px 0 6px' }}>{t('editor.notes')}</div>
         <textarea className="textarea" rows={3} value={slide.notes || ''} onChange={(e) => updateSlide(slide.id, { notes: e.target.value }, `notes:${slide.id}`)} />
       </Section>
     </>
@@ -186,14 +171,21 @@ export function SlidePanel({ slide, quiz }) {
 
 // ───────────────────────── Text ─────────────────────────
 
-export function TextPanel({ el }) {
+export function TextPanel({ el, slide }) {
   const { t } = useI18n()
   const palette = usePalette()
   const s = el.style
   const set = (patch, key = K(el.id)) => updateElementStyle(el.id, patch, key)
   return (
     <>
-      <Section title={t('inspector.text')}>
+      <Section>
+        {el.binding === 'question' && slide?.question ? (
+          <textarea className="textarea q-text" rows={3} dir="auto" placeholder={t('questions.questionPlaceholder')} value={slide.question.text} onChange={(e) => updateQuestion(slide.id, { text: e.target.value })} />
+        ) : (
+          <p className="small muted">{el.binding === 'quiz-title' ? t('editor.titleHint') : t('editor.textHint')}</p>
+        )}
+      </Section>
+      <Section title={t('inspector.textStyle')} icon="type" foldId="text-style">
         <Row label={t('inspector.font')}><FontSelect value={s.fontFamily} onChange={(v) => set({ fontFamily: v }, null)} /></Row>
         <Row label={t('inspector.fontSize')}>
           <NumberField value={s.fontSize} min={8} max={400} onChange={(v) => set({ fontSize: v })} />
@@ -212,14 +204,13 @@ export function TextPanel({ el }) {
         <Row label={t('inspector.lineHeight')}><NumberField value={s.lineHeight} min={0.6} max={3} step={0.1} precision={2} onChange={(v) => set({ lineHeight: v })} /></Row>
         <Row label={t('inspector.letterSpacing')}><NumberField value={s.letterSpacing} min={-10} max={60} onChange={(v) => set({ letterSpacing: v })} /></Row>
         <Row label={t('inspector.textShadow')}>
-          <select className="select sm" value={s.textShadow ? 'on' : 'off'} onChange={(e) => set({ textShadow: e.target.value === 'on' ? '0 6px 0 rgba(26,10,46,0.9)' : null }, null)}>
+          <select className="select sm" value={s.textShadow ? 'on' : 'off'} onChange={(e) => set({ textShadow: e.target.value === 'on' ? '0 4px 0 rgba(0,0,0,0.25)' : null }, null)}>
             <option value="off">{t('common.none')}</option>
             <option value="on">Hard</option>
           </select>
         </Row>
-        <ToggleRow label={t('inspector.autoFit')} checked={s.autoFit} onChange={(v) => set({ autoFit: v }, null)} />
-      </Section>
-      <Section title={t('inspector.fill')}>
+        {!el.binding && <ToggleRow label={t('inspector.autoFit')} checked={s.autoFit} onChange={(v) => set({ autoFit: v }, null)} />}
+        <div className="prop-subtitle">{t('inspector.box')}</div>
         <Row label={t('inspector.fill')}><ColorInput value={s.background} palette={palette} onChange={(c) => set({ background: c })} /></Row>
         <Row label={t('inspector.border')}><BorderControl value={s.border} onChange={(b) => set({ border: b })} /></Row>
         <Row label={t('inspector.radius')}><NumberField value={s.borderRadius} min={0} max={400} onChange={(v) => set({ borderRadius: v })} /></Row>
@@ -242,29 +233,33 @@ function FrameTile({ frame, active, onClick }) {
 
 export function ImagePanel({ el, slide }) {
   const { t } = useI18n()
-  const palette = usePalette()
   const set = (patch, key = K(el.id)) => updateElement(el.id, patch, key)
   const f = el.filters
-  const hasSrc = el.binding === 'question-media' ? !!slide.question?.media?.src : !!el.src
+  const bound = el.binding === 'question-media'
+  const hasSrc = bound ? !!slide.question?.media?.src : !!el.src
   return (
     <>
-      <Section title={t('inspector.image')}>
+      <Section>
         <div className="row gap-6 wrap">
-          <Button size="sm" icon="upload" onClick={() => pickForElement(el.id)}>{t('editor.replaceImage')}</Button>
+          <Button size="sm" variant={hasSrc ? 'secondary' : 'primary'} icon="upload" onClick={() => pickForElement(el.id)}>{hasSrc ? t('editor.replaceImage') : t('editor.uploadImage')}</Button>
           <Button size="sm" icon="crop" disabled={!hasSrc} onClick={() => setCropping(el.id)}>{t('editor.crop')}</Button>
-          <IconButton icon="flipH" label={t('editor.flipH')} active={el.flipH} onClick={() => set({ flipH: !el.flipH }, null)} />
-          <IconButton icon="flipV" label={t('editor.flipV')} active={el.flipV} onClick={() => set({ flipV: !el.flipV }, null)} />
+          {bound && hasSrc && <IconButton icon="trash" size="sm" label={t('common.remove')} onClick={() => setQuestionMediaSrc(slide.id, null)} />}
         </div>
+        {bound && <p className="xs dim" style={{ marginTop: 8 }}>{t('editor.questionMediaHint')}</p>}
       </Section>
-      <Section title={t('inspector.frame')}>
+      <Section title={t('inspector.imageStyle')} icon="image" foldId="image-style">
         <div className="tiles">
           {FRAMES.map((frame) => <FrameTile key={frame} frame={frame} active={el.frame === frame} onClick={() => set({ frame }, null)} />)}
         </div>
+        <div style={{ height: 8 }} />
         {el.frame === 'rounded' && <Row label={t('inspector.radius')}><NumberField value={el.borderRadius} min={0} max={500} onChange={(v) => set({ borderRadius: v })} /></Row>}
-        <Row label={t('inspector.border')}><BorderControl value={el.border} onChange={(b) => set({ border: b })} /></Row>
+        <Row label={t('inspector.border')}><BorderControl value={el.border} onChange={(b) => set({ border: b && b.width > 0 ? b : null })} /></Row>
         <Row label={t('inspector.shadow')}><ShadowSelect value={el.shadow} onChange={(v) => set({ shadow: v }, null)} /></Row>
-      </Section>
-      <Section title={t('inspector.filters')} action={<IconButton icon="reset" size="sm" label={t('inspector.resetStyle')} onClick={() => set({ filters: { brightness: 100, contrast: 100, saturate: 100, blur: 0, grayscale: 0, sepia: 0 } }, null)} />}>
+        <Row label={t('inspector.flip')}>
+          <IconButton icon="flipH" size="sm" label={t('editor.flipH')} active={el.flipH} onClick={() => set({ flipH: !el.flipH }, null)} />
+          <IconButton icon="flipV" size="sm" label={t('editor.flipV')} active={el.flipV} onClick={() => set({ flipV: !el.flipV }, null)} />
+        </Row>
+        <div className="prop-subtitle">{t('inspector.filters')}<span className="spacer" /><IconButton icon="reset" size="sm" label={t('inspector.resetFilters')} onClick={() => set({ filters: { brightness: 100, contrast: 100, saturate: 100, blur: 0, grayscale: 0, sepia: 0 } }, null)} /></div>
         {[['brightness', 0, 200], ['contrast', 0, 200], ['saturate', 0, 200], ['blur', 0, 40], ['grayscale', 0, 100], ['sepia', 0, 100]].map(([key, min, max]) => (
           <Row key={key} label={t(`inspector.${key}`)}>
             <Slider min={min} max={max} value={f[key]} onChange={(v) => set({ filters: { ...f, [key]: v } })} />
@@ -284,7 +279,7 @@ export function ShapePanel({ el }) {
   const set = (patch, key = K(el.id)) => updateElement(el.id, patch, key)
   return (
     <>
-      <Section title={t('inspector.shape')}>
+      <Section>
         <div className="tiles" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
           {SHAPES.map((shape) => (
             <button key={shape} type="button" className={`tile ${el.shape === shape ? 'active' : ''}`} onClick={() => set({ shape }, null)} aria-label={t(`inspector.shapes.${shape}`)} data-tip={t(`inspector.shapes.${shape}`)}>
@@ -292,9 +287,10 @@ export function ShapePanel({ el }) {
             </button>
           ))}
         </div>
-      </Section>
-      <Section title={t('inspector.fill')}>
+        <div style={{ height: 10 }} />
         <Row label={t('inspector.fill')}><ColorInput value={el.fill} palette={palette} onChange={(c) => set({ fill: c })} /></Row>
+      </Section>
+      <Section title={t('inspector.shapeStyle')} icon="shapes" foldId="shape-style">
         <Row label={t('inspector.stroke')}>
           <NumberField prefix="W" value={el.stroke.width} min={0} max={60} onChange={(v) => set({ stroke: { ...el.stroke, width: v } })} />
           <ColorInput size="sm" value={el.stroke.color} allowNull={false} palette={palette} onChange={(c) => set({ stroke: { ...el.stroke, color: c } })} />
@@ -309,6 +305,13 @@ export function ShapePanel({ el }) {
 
 // ───────────────────────── Answer ─────────────────────────
 
+/** "As the template says" — shown wherever a look can be overridden. */
+function ResetStyle({ el }) {
+  const { t } = useI18n()
+  const custom = ['background', 'color', 'fontFamily', 'borderRadius', 'border', 'shadow', 'accent'].some((k) => el.style?.[k] !== null && el.style?.[k] !== undefined) || (el.kind === 'answer' && el.style.variant !== 'card')
+  return <Button size="sm" variant="ghost" icon="reset" disabled={!custom} onClick={() => resetElementStyle([el.id])}>{t('inspector.resetStyle')}</Button>
+}
+
 export function AnswerPanel({ el, slide }) {
   const { t } = useI18n()
   const palette = usePalette()
@@ -318,14 +321,11 @@ export function AnswerPanel({ el, slide }) {
   const isCorrect = slide.question.correctAnswer === el.index
   return (
     <>
-      <Section title={<span className="row gap-6"><span style={{ width: 16, height: 16, borderRadius: 4, background: ANSWERS[el.index].color }} />{t('editor.answerN', { n: el.index })}</span>}>
-        <input className="input sm" value={answer.text} placeholder={t('questions.answerPlaceholder', { n: el.index })} onChange={(e) => setAnswer(slide.id, el.index, { text: e.target.value })} />
-        <div className="row gap-6" style={{ marginTop: 8 }}>
+      <Section>
+        <input className="input" dir="auto" value={answer.text} placeholder={t('questions.answerPlaceholder', { n: el.index })} onChange={(e) => setAnswer(slide.id, el.index, { text: e.target.value })} />
+        <div className="row gap-6 wrap" style={{ marginTop: 10 }}>
           <Button size="sm" variant={isCorrect ? 'primary' : 'secondary'} icon="check" onClick={() => setCorrectAnswer(slide.id, el.index)}>{isCorrect ? t('editor.correctAnswer') : t('editor.markCorrect')}</Button>
-        </div>
-        <div className="image-picker" style={{ marginTop: 10 }}>
-          {answer.image?.src ? <img className="preview" src={assetUrl(answer.image.src)} alt="" /> : <div className="preview center dim"><Icon name="image" /></div>}
-          <Button size="sm" icon="upload" onClick={() => pickFiles({ onFiles: (f) => setAnswerImage(slide.id, el.index, f[0]) })}>{t('questions.media')}</Button>
+          <Button size="sm" icon="image" onClick={() => pickFiles({ onFiles: (f) => setAnswerImage(slide.id, el.index, f[0]) })}>{answer.image?.src ? t('editor.replaceImage') : t('questions.media')}</Button>
           {answer.image?.src && <IconButton icon="trash" size="sm" label={t('common.remove')} onClick={() => setAnswer(slide.id, el.index, { image: null }, null)} />}
         </div>
         {answer.image?.src && (
@@ -334,24 +334,22 @@ export function AnswerPanel({ el, slide }) {
           </Row>
         )}
       </Section>
-      <Section title={t('inspector.variant')}>
+      <Section title={t('inspector.design')} icon="palette" foldId="answer-style">
         <Segmented block value={s.variant} onChange={(v) => set({ variant: v }, null)} options={[{ value: 'card', label: t('inspector.card') }, { value: 'pill', label: t('inspector.pill') }, { value: 'flat', label: t('inspector.flat') }]} />
         <div style={{ height: 8 }} />
         <ToggleRow label={t('inspector.showShape')} checked={s.showShape} onChange={(v) => set({ showShape: v }, null)} />
         <ToggleRow label={t('inspector.showIndex')} checked={s.showIndex} onChange={(v) => set({ showIndex: v }, null)} />
-        <Row label={t('inspector.fill')}>
-          <ColorInput value={s.background} palette={palette} onChange={(c) => set({ background: c })} />
-          {s.background && <Button size="sm" variant="ghost" onClick={() => set({ background: null }, null)}>{t('inspector.auto')}</Button>}
-        </Row>
-        <Row label={t('inspector.color')}><ColorInput value={s.color} allowNull={false} palette={palette} onChange={(c) => set({ color: c })} /></Row>
-        <Row label={t('inspector.font')}><FontSelect value={s.fontFamily} onChange={(v) => set({ fontFamily: v }, null)} /></Row>
+        <Row label={t('inspector.fill')}><ColorInput value={s.background} palette={palette} onChange={(c) => set({ background: c })} /></Row>
+        <Row label={t('inspector.color')}><ColorInput value={s.color} palette={palette} onChange={(c) => set({ color: c })} /></Row>
+        <Row label={t('inspector.font')}><FontSelect value={s.fontFamily} allowTemplate onChange={(v) => set({ fontFamily: v }, null)} /></Row>
         <Row label={t('inspector.fontSize')}>
           <NumberField value={s.fontSize} min={8} max={200} onChange={(v) => set({ fontSize: v })} />
           <IconButton icon="bold" size="sm" label="Bold" active={s.bold} onClick={() => set({ bold: !s.bold }, null)} />
         </Row>
         <Row label={t('inspector.radius')}><NumberField value={s.borderRadius} min={0} max={999} onChange={(v) => set({ borderRadius: v })} /></Row>
-        <Row label={t('inspector.border')}><BorderControl value={s.border} onChange={(b) => set({ border: b })} /></Row>
-        <Row label={t('inspector.shadow')}><ShadowSelect value={s.shadow} onChange={(v) => set({ shadow: v }, null)} /></Row>
+        <Row label={t('inspector.border')}><BorderControl allowTemplate value={s.border} onChange={(b) => set({ border: b })} /></Row>
+        <Row label={t('inspector.shadow')}><ShadowSelect allowTemplate value={s.shadow} onChange={(v) => set({ shadow: v }, null)} /></Row>
+        <ResetStyle el={el} />
       </Section>
     </>
   )
@@ -370,8 +368,8 @@ export function WidgetPanel({ el }) {
   const hasLabel = ['game-pin', 'qr-code', 'participants-count', 'timer', 'respondents', 'question-number'].includes(w)
   return (
     <>
-      <Section title={t(`inspector.widgets.${w}`)}>
-        <p className="xs dim" style={{ marginTop: -4, marginBottom: 10 }}>{t(`inspector.widgetHints.${w}`)}</p>
+      <Section>
+        <p className="small muted" style={{ marginBottom: 10 }}>{t(`inspector.widgetHints.${w}`)}</p>
         {hasLabel && (
           <Row label={t('inspector.label')}>
             <input className="input sm" value={p.label || ''} onChange={(e) => setP({ label: e.target.value })} />
@@ -380,7 +378,7 @@ export function WidgetPanel({ el }) {
         )}
         {(w === 'timer' || w === 'respondents') && (
           <Row label={t('inspector.variant')}>
-            <Segmented size="sm" value={p.variant} onChange={(v) => setP({ variant: v }, null)} options={[{ value: 'circle', label: t('inspector.circle') }, { value: 'pill', label: t('inspector.pill') }, { value: 'number', label: t('inspector.number') }]} />
+            <Segmented size="sm" value={p.variant} onChange={(v) => setP({ variant: v }, null)} options={[...(w === 'respondents' ? [{ value: 'box', label: t('inspector.card') }] : []), { value: 'circle', label: t('inspector.circle') }, { value: 'pill', label: t('inspector.pill') }, { value: 'number', label: t('inspector.number') }]} />
           </Row>
         )}
         {w === 'respondents' && <ToggleRow label="18 / 24" checked={p.showTotal} onChange={(v) => setP({ showTotal: v }, null)} />}
@@ -392,17 +390,14 @@ export function WidgetPanel({ el }) {
               <NumberField value={p.columns} min={1} max={6} onChange={(v) => setP({ columns: v })} prefix="C" />
               <NumberField value={p.maxRows} min={1} max={8} onChange={(v) => setP({ maxRows: v })} prefix="R" />
             </Row>
-            <Row label={t('inspector.variant')}>
-              <Segmented size="sm" value={p.avatarStyle} onChange={(v) => setP({ avatarStyle: v }, null)} options={[{ value: 'card', label: t('inspector.card') }, { value: 'pill', label: t('inspector.pill') }, { value: 'glass', label: 'Glass' }]} />
-            </Row>
           </>
         )}
         {w === 'answers-chart' && (
           <>
             <ToggleRow label={t('inspector.showValues')} checked={p.showValues} onChange={(v) => setP({ showValues: v }, null)} />
             <ToggleRow label={t('inspector.showShapes')} checked={p.showShapes} onChange={(v) => setP({ showShapes: v }, null)} />
+            <ToggleRow label={t('inspector.showLabels')} checked={p.showLabels !== false} onChange={(v) => setP({ showLabels: v }, null)} />
             <ToggleRow label={t('editor.questionText')} checked={p.showQuestion} onChange={(v) => setP({ showQuestion: v }, null)} />
-            <Row label={t('inspector.radius')}><NumberField value={p.barRadius} min={0} max={80} onChange={(v) => setP({ barRadius: v })} /></Row>
           </>
         )}
         {w === 'leaderboard' && (
@@ -416,17 +411,16 @@ export function WidgetPanel({ el }) {
           </>
         )}
       </Section>
-      <Section title={t('inspector.variant')}>
-        <Row label={t('inspector.font')}><FontSelect value={s.fontFamily} onChange={(v) => setS({ fontFamily: v }, null)} /></Row>
-        <Row label={t('inspector.color')}>
-          <ColorInput value={s.color} allowNull={false} palette={palette} onChange={(c) => setS({ color: c })} label={t('inspector.color')} />
-          <ColorInput value={s.accent} allowNull={false} palette={palette} onChange={(c) => setS({ accent: c })} label={t('inspector.accent')} />
-          <span className="xs dim">{t('inspector.accent')}</span>
-        </Row>
+      <Section title={t('inspector.design')} icon="palette" foldId="widget-style">
+        <p className="xs dim" style={{ marginBottom: 10 }}>{t('inspector.designHint')}</p>
+        <Row label={t('inspector.font')}><FontSelect value={s.fontFamily} allowTemplate onChange={(v) => setS({ fontFamily: v }, null)} /></Row>
+        <Row label={t('inspector.color')}><ColorInput value={s.color} palette={palette} onChange={(c) => setS({ color: c })} label={t('inspector.color')} /></Row>
+        <Row label={t('inspector.accent')}><ColorInput value={s.accent} palette={palette} onChange={(c) => setS({ accent: c })} label={t('inspector.accent')} /></Row>
         <Row label={t('inspector.fill')}><ColorInput value={s.background} palette={palette} onChange={(c) => setS({ background: c })} /></Row>
-        <Row label={t('inspector.border')}><BorderControl value={s.border} onChange={(b) => setS({ border: b })} /></Row>
+        <Row label={t('inspector.border')}><BorderControl allowTemplate value={s.border} onChange={(b) => setS({ border: b })} /></Row>
         <Row label={t('inspector.radius')}><NumberField value={s.borderRadius} min={0} max={200} onChange={(v) => setS({ borderRadius: v })} /></Row>
-        <Row label={t('inspector.shadow')}><ShadowSelect value={s.shadow} onChange={(v) => setS({ shadow: v }, null)} /></Row>
+        <Row label={t('inspector.shadow')}><ShadowSelect allowTemplate value={s.shadow} onChange={(v) => setS({ shadow: v }, null)} /></Row>
+        <ResetStyle el={el} />
       </Section>
     </>
   )

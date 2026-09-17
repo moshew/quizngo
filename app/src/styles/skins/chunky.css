@@ -1,0 +1,101 @@
+/* ════════════════════════════════════════════════════════════════
+   Skin: CHUNKY — "Magenta Party" host deck
+   Flat fills · hard ink shadows · ink borders · big radii.
+   Re-colored by theme tokens (sunset, ocean, daylight).
+   ════════════════════════════════════════════════════════════════ */
+
+.skin-chunky {
+  --k-border: 5px solid var(--t-ink);
+  --k-border-lg: 7px solid var(--t-ink);
+  --k-s3d-sm: 0 7px 0 var(--t-ink);
+  --k-s3d: 0 12px 0 var(--t-ink), 0 18px 28px rgba(0,0,0,.22);
+  --k-s3d-lg: 0 18px 0 var(--t-ink), 0 34px 52px rgba(0,0,0,.34);
+}
+
+/* ── answer tiles ── */
+.skin-chunky .atile { border: var(--k-border); border-radius: 22px; box-shadow: var(--k-s3d); color: #fff; }
+.skin-chunky .atile .txt { text-shadow: 0 2px 0 rgba(0,0,0,.18); }
+.skin-chunky .atile.c-red { background: var(--c-red); }
+.skin-chunky .atile.c-blue { background: var(--c-blue); }
+.skin-chunky .atile.c-yellow { background: var(--c-yellow); color: var(--t-ink); }
+.skin-chunky .atile.c-green { background: var(--c-green); }
+.skin-chunky .atile.c-yellow .txt, .skin-chunky .atile.is-light .txt { text-shadow: none; }
+.skin-chunky .atile.variant-flat { background: var(--t-surface); color: var(--t-ink); }
+.skin-chunky .atile.variant-flat .txt { text-shadow: none; }
+.skin-chunky .atile.variant-flat.c-red .glyph { color: var(--c-red); }
+.skin-chunky .atile.variant-flat.c-blue .glyph { color: var(--c-blue); }
+.skin-chunky .atile.variant-flat.c-yellow .glyph { color: var(--c-yellow); }
+.skin-chunky .atile.variant-flat.c-green .glyph { color: var(--c-green); }
+.skin-chunky .atile-thumb { border: 4px solid var(--t-ink); }
+.skin-chunky .atile.is-top .atile-media { border-bottom: var(--k-border); background: rgba(0,0,0,.18); }
+
+/* ── join card · QR ── */
+.skin-chunky .wg-join { background: var(--t-surface); color: var(--t-ink); border: var(--k-border); border-radius: 26px; box-shadow: var(--k-s3d); }
+.skin-chunky .wg-join .join-left { color: var(--t-surface-muted); font-weight: 600; }
+.skin-chunky .wg-join .join-left b { color: var(--t-ink); }
+.skin-chunky .wg-join .join-divider { width: 5px; background: var(--t-ink); transform: skewX(-12deg); margin: 0 -2px; }
+.skin-chunky.is-rtl .wg-join .join-divider { transform: skewX(12deg); }
+.skin-chunky .wg-join .lbl { color: var(--t-surface-muted); letter-spacing: .06em; }
+.skin-chunky.is-rtl .wg-join .lbl { letter-spacing: normal; }
+.skin-chunky .wg-qr { background: #fff; color: var(--t-ink); border: var(--k-border); border-radius: 24px; box-shadow: var(--k-s3d); }
+
+/* ── timer · answered · question number ── */
+.skin-chunky .wg-timer .disc { background: var(--w-accent, var(--t-primary)); border: var(--k-border); box-shadow: var(--k-s3d-sm); }
+.skin-chunky .wg-timer .ring { inset: 9%; width: 82%; height: 82%; }
+.skin-chunky .wg-timer .ring-track { stroke: rgba(26,10,46,.18); }
+.skin-chunky .wg-timer .ring-fill { stroke: var(--t-ink); }
+.skin-chunky .wg-timer .num { color: var(--t-ink); }
+.skin-chunky .wg-answered, .skin-chunky .wg-count { background: var(--t-glass); border-radius: 26px; color: #fff; }
+.skin-chunky .wg-answered .n, .skin-chunky .wg-count .n { color: var(--w-accent, var(--t-primary)); }
+.skin-chunky .wg-answered .l, .skin-chunky .wg-count .l { color: rgba(255,255,255,.85); letter-spacing: .08em; }
+.skin-chunky.is-rtl .wg-answered .l, .skin-chunky.is-rtl .wg-count .l { letter-spacing: normal; }
+.skin-chunky .wg-qnum .qnum { background: var(--w-accent, var(--t-primary)); color: var(--t-ink); border: var(--k-border); border-radius: 999px; box-shadow: var(--k-s3d-sm); }
+.skin-chunky .wg-pill { background: var(--w-accent, var(--t-primary)); color: var(--t-ink); border: var(--k-border); box-shadow: var(--k-s3d-sm); }
+.skin-chunky .wg-number { color: var(--t-text); text-shadow: 0 6px 0 rgba(0,0,0,.22); }
+
+/* ── lobby ── */
+.skin-chunky .wg-players .waiting-pill { background: var(--t-glass-strong); color: #fff; border-radius: 20px; }
+.skin-chunky .wg-players .waiting-pill .count { background: var(--t-chip); }
+.skin-chunky .wg-players .pchip { background: var(--t-surface); color: var(--t-ink); border: var(--k-border); border-radius: 18px; box-shadow: var(--k-s3d-sm); }
+.skin-chunky .wg-players .pchip .av { background: var(--t-secondary); border: 3px solid var(--t-ink); border-radius: 12px; }
+.skin-chunky .wg-players .pchip:nth-child(3n) .av { background: var(--t-primary); }
+.skin-chunky .wg-players .pchip:nth-child(3n+1) .av { background: var(--t-danger); }
+
+/* ── results graph ── */
+.skin-chunky .wg-graph .eyebrow { color: var(--w-accent, var(--t-primary)); letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 3px 0 rgba(0,0,0,.2); }
+.skin-chunky.is-rtl .wg-graph .eyebrow { letter-spacing: normal; }
+.skin-chunky .wg-graph .qtext { text-shadow: 0 4px 0 rgba(0,0,0,.22); }
+.skin-chunky .wg-graph .gbar { border: var(--k-border); border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: var(--k-s3d); }
+.skin-chunky .wg-graph .gbar.c-red { background: var(--c-red); }
+.skin-chunky .wg-graph .gbar.c-blue { background: var(--c-blue); }
+.skin-chunky .wg-graph .gbar.c-yellow { background: var(--c-yellow); }
+.skin-chunky .wg-graph .gbar.c-green { background: var(--c-green); }
+.skin-chunky .wg-graph .gcol.dim { opacity: .42; filter: saturate(.7); }
+.skin-chunky .wg-graph .base .glyph.c-yellow { color: var(--c-yellow); }
+.skin-chunky .wg-graph .base .glyph.c-red { color: var(--c-red); }
+.skin-chunky .wg-graph .base .glyph.c-blue { color: var(--c-blue); }
+.skin-chunky .wg-graph .base .glyph.c-green { color: var(--c-green); }
+.skin-chunky .wg-graph .base .glyph svg { filter: drop-shadow(0 3px 0 var(--t-ink)); }
+.skin-chunky .wg-graph .correct-flag { background: var(--t-secondary); color: var(--t-ink); border: var(--k-border); border-radius: 999px; box-shadow: var(--k-s3d-sm); }
+
+/* ── leaderboard ── */
+.skin-chunky .wg-board { padding-bottom: 14px; }
+.skin-chunky .wg-board .row { background: var(--t-surface); color: var(--t-ink); border: var(--k-border); border-radius: min(26px, calc(var(--row) * .3)); box-shadow: var(--k-s3d); }
+.skin-chunky .wg-board .row.lead { background: var(--w-accent, var(--t-primary)); }
+.skin-chunky .wg-board .av { background: var(--tint); border: 4px solid var(--t-ink); border-radius: calc(var(--row) * .17); }
+.skin-chunky .wg-board .row.lead .av { background: #fff; }
+.skin-chunky .wg-board .delta { color: #00945a; background: rgba(46,204,113,.18); border-radius: 999px; }
+
+/* ── podium ── */
+.skin-chunky .wg-podium .medal { filter: drop-shadow(0 8px 10px rgba(0,0,0,.35)); }
+.skin-chunky .wg-podium .av { background: #fff; border: var(--k-border-lg); border-radius: calc(28px * var(--k)); box-shadow: var(--k-s3d); }
+.skin-chunky .wg-podium .p1 .av { background: var(--t-primary); }
+.skin-chunky .wg-podium .p2 .av { background: var(--t-secondary); }
+.skin-chunky .wg-podium .p3 .av { background: var(--t-danger); }
+.skin-chunky .wg-podium .nm { color: var(--t-text); text-shadow: 0 3px 0 rgba(0,0,0,.25); }
+.theme-minimal-light .wg-podium .nm { text-shadow: none; }
+.skin-chunky .wg-podium .sc { color: var(--t-ink); background: var(--t-primary); border: 4px solid var(--t-ink); border-radius: 999px; box-shadow: var(--k-s3d-sm); }
+.skin-chunky .wg-podium .block { border: var(--k-border-lg); border-bottom: 0; border-radius: calc(26px * var(--k)) calc(26px * var(--k)) 0 0; box-shadow: var(--k-s3d-lg); color: var(--t-ink); }
+.skin-chunky .wg-podium .p1 .block { background: var(--t-primary); }
+.skin-chunky .wg-podium .p2 .block { background: var(--t-secondary); }
+.skin-chunky .wg-podium .p3 .block { background: var(--t-danger); color: rgba(255,255,255,.92); }

@@ -1,68 +1,40 @@
-import { gradient, solid } from './base.js'
+import { gradient } from './base.js'
 
 const INK = '#1a0a2e'
 
-const CONFETTI = ['#FFD400', '#B6FF3C', '#FF2E93', '#ffffff', '#6B2BFF', '#2BD68A']
-
+/**
+ * "Magenta Party" — the approved chunky-3D host deck: flat fills, hard ink shadows, ink borders,
+ * big radii. Sunset / Ocean / Daylight are re-colorings of this same skin.
+ */
 export default {
   id: 'magenta-party',
-  preview: { background: 'linear-gradient(160deg,#6B2BFF 0%,#B620C9 60%,#FF2E93 110%)', accent: '#FFD400', ink: INK, text: '#fff', card: '#fff' },
+  skin: 'chunky',
+  decor: 'party',
+  preview: { accent: '#FFD400' },
   fonts: {
-    he: { display: 'Secular One', body: 'Rubik' },
-    ar: { display: 'Rubik', body: 'Rubik' },
-    default: { display: 'Bricolage Grotesque', body: 'Plus Jakarta Sans' },
+    he: { display: 'Rubik', body: 'Heebo', mono: 'Rubik' },
+    ar: { display: 'Rubik', body: 'Rubik', mono: 'Rubik' },
+    default: { display: 'Bricolage Grotesque', body: 'Plus Jakarta Sans', mono: 'Plus Jakarta Sans' },
   },
-  palette: ['#FFD400', '#B6FF3C', '#FF2E93', '#6B2BFF', '#B620C9', '#2BD68A', '#ffffff', INK],
-  colors: {
-    text: '#ffffff',
-    textMuted: 'rgba(255,255,255,0.8)',
-    ink: INK,
-    accent: '#FFD400',
-    accent2: '#B6FF3C',
-    surface: '#ffffff',
-    surfaceText: INK,
+  palette: ['#FFD400', '#B6FF3C', '#FF2E93', '#6B2BFF', '#B620C9', '#ffffff', INK, '#2BD68A'],
+  colors: { text: '#ffffff', textMuted: 'rgba(255,255,255,0.92)', ink: INK, accent: '#FFD400', accent2: '#B6FF3C', eyebrow: '#FFD400' },
+  vars: {
+    '--t-ink': INK,
+    '--t-primary': '#FFD400',
+    '--t-secondary': '#B6FF3C',
+    '--t-danger': '#FF2E93',
+    '--t-text': '#ffffff',
+    '--t-surface': '#ffffff',
+    '--t-surface-muted': '#5b5570',
+    '--t-glass': 'rgba(0,0,0,0.28)',
+    '--t-glass-strong': 'rgba(26,10,46,0.42)',
+    '--t-chip': 'rgba(255,255,255,0.22)',
+    '--t-blob-1': '#8a3bff',
+    '--t-blob-2': '#ff2e93',
+    '--t-ghost': '#ffffff',
+    '--t-ghost-opacity': '0.10',
   },
-  text: { titleShadow: '0 6px 0 rgba(26,10,46,0.9)' },
-  backgrounds: {
-    opening: gradient(160, ['#6B2BFF', 0], ['#B620C9', 60], ['#FF2E93', 110]),
-    question: solid(INK),
-    statistics: gradient(160, ['#2B1A6B', 0], ['#4A23B8', 60], ['#6B2BFF', 110]),
-    leaderboard: gradient(160, ['#2B1A6B', 0], ['#4A23B8', 60], ['#6B2BFF', 110]),
-    transition: gradient(160, ['#6B2BFF', 0], ['#B620C9', 60], ['#FF2E93', 110]),
-    summary: gradient(160, ['#00B36B', 0], ['#2BD68A', 60], ['#B6FF3C', 110]),
-  },
-  answer: {
-    variant: 'card',
-    borderRadius: 24,
-    border: { width: 4, color: INK },
-    shadow: '0 10px 0 #1a0a2e',
-    color: '#ffffff',
-    fontSize: 44,
-    showShape: true,
-    bold: true,
-  },
-  widget: {
-    background: '#ffffff',
-    borderRadius: 28,
-    border: { width: 4, color: INK },
-    shadow: '0 10px 0 #1a0a2e',
-  },
-  widgets: {
-    timerVariant: 'circle',
-    participantsAvatar: 'card',
-  },
-  decorations(type, ctx, { createShape }) {
-    if (!['opening', 'summary', 'transition'].includes(type)) return []
-    const spots = [[120, 300], [1750, 240], [300, 950], [1650, 900], [960, 1000], [1500, 120]]
-    return spots.map(([x, y], i) => createShape({
-      shape: i % 2 ? 'ellipse' : 'rect',
-      x, y, w: 26 + (i % 3) * 8, h: 26 + (i % 3) * 8,
-      rotation: (i * 37) % 90,
-      fill: CONFETTI[i % CONFETTI.length],
-      stroke: { width: 0, color: INK, dash: false },
-      borderRadius: 6,
-      opacity: 0.85,
-      fromTemplate: true,
-    }))
-  },
+  background: gradient(155, ['#6B2BFF', 0], ['#B620C9', 58], ['#FF2E93', 116]),
+  text: { titleShadow: '0 4px 0 rgba(0,0,0,0.22)', eyebrowShadow: '0 3px 0 rgba(0,0,0,0.2)' },
+  image: { border: { width: 7, color: INK }, borderRadius: 28, shadow: '0 18px 0 #1a0a2e, 0 34px 52px rgba(0,0,0,0.34)' },
 }

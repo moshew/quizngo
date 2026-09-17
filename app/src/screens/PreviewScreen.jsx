@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../i18n/index.js'
 import { navigate } from '../router.jsx'
 import * as quizApi from '../api/quizzes.js'
-import { normalizeQuiz } from '../model/schema.js'
+import { upgradeQuiz } from '../model/migrate.js'
 import { SLIDE_W, SLIDE_H } from '../model/constants.js'
 import { sampleLiveData } from '../model/sample.js'
 import SlideRenderer from '../editor/render/SlideRenderer.jsx'
@@ -22,7 +22,7 @@ function useStageSize() {
 /** Full-screen slideshow of a quiz with sample live data. Hidden slides are skipped (as in the game). */
 export default function PreviewScreen({ quizId, quizDoc, startIndex = 0, onExit }) {
   const { t } = useI18n()
-  const [quiz, setQuiz] = useState(quizDoc ? normalizeQuiz(quizDoc) : null)
+  const [quiz, setQuiz] = useState(quizDoc ? upgradeQuiz(quizDoc) : null)
   const [error, setError] = useState(null)
   const [index, setIndex] = useState(startIndex)
   const [showCorrect, setShowCorrect] = useState(false)
@@ -30,7 +30,7 @@ export default function PreviewScreen({ quizId, quizDoc, startIndex = 0, onExit 
 
   useEffect(() => {
     if (quizDoc) return
-    quizApi.getQuiz(quizId).then((q) => setQuiz(normalizeQuiz(q.data))).catch((e) => setError(e.message))
+    quizApi.getQuiz(quizId).then((q) => setQuiz(upgradeQuiz(q.data))).catch((e) => setError(e.message))
   }, [quizId, quizDoc])
 
   const visibleSlides = useMemo(() => (quiz ? quiz.slides.filter((s) => !s.hidden) : []), [quiz])

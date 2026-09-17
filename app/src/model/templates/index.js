@@ -1,14 +1,18 @@
-import { buildLayouts } from './base.js'
+import { buildLayouts } from './layouts.js'
+import { fontsFor } from './base.js'
 import magenta from './magenta.js'
-import classicBlack from './classicBlack.js'
-import ocean from './ocean.js'
+import midnight from './midnight.js'
 import sunset from './sunset.js'
+import ocean from './ocean.js'
+import classicBlack from './classicBlack.js'
 import minimal from './minimal.js'
 import { createEmptyQuiz, createSlide, createQuestion, isRtlLang } from '../schema.js'
+import { QUESTION_LAYOUTS, DEFAULT_QUESTION_LAYOUT } from '../constants.js'
 import { contentT } from '../content-i18n.js'
 import { uid } from '../ids.js'
 
-const THEMES = [magenta, classicBlack, ocean, sunset, minimal]
+// The two approved designs lead; the rest are re-colorings of their skins.
+const THEMES = [magenta, midnight, sunset, ocean, classicBlack, minimal]
 
 export const TEMPLATES = THEMES.map((theme) => ({ ...theme, layouts: buildLayouts(theme) }))
 export const TEMPLATE_IDS = TEMPLATES.map((t) => t.id)
@@ -17,12 +21,19 @@ export function getTemplate(id) {
   return TEMPLATES.find((t) => t.id === id) || TEMPLATES[0]
 }
 
+/** The layout a question slide should use when none was chosen: follow its content. */
+export function autoQuestionLayout(slide) {
+  if (QUESTION_LAYOUTS.includes(slide?.layout)) return slide.layout
+  return slide?.question?.media?.src ? 'banner' : DEFAULT_QUESTION_LAYOUT
+}
+
 /** Build a slide of `type` using the quiz's template (background + layout elements). */
-export function createSlideFromTemplate(quiz, type, { question } = {}) {
+export function createSlideFromTemplate(quiz, type, { question, layout } = {}) {
   const template = getTemplate(quiz.templateId)
-  const layout = template.layouts[type] || template.layouts.transition
-  const background = cloneBackground(template.backgrounds[type] || template.backgrounds.transition)
-  return createSlide(type, { background, elements: layout(quiz), question })
+  const build = template.layouts[type] || template.layouts.transition
+  const background = cloneBackground(template.backgrounds?.[type] || template.background)
+  const resolved = type === 'question' ? (QUESTION_LAYOUTS.includes(layout) ? layout : autoQuestionLayout({ question })) : undefined
+  return createSlide(type, { background, elements: build(quiz, { layout: resolved }), question, layout: resolved })
 }
 
 function sampleQuestion(lang) {
@@ -47,50 +58,86 @@ export function createQuizFromTemplate({ title = '', templateId = 'magenta-party
   return quiz
 }
 
+// Widget props that are the author's content (kept across re-theme / re-layout); everything else
+// — variants, labels the template words differently — comes fresh from the new layout.
+const CARRIED_PROPS = {
+  leaderboard: ['count', 'showAvatar', 'showScore'],
+  'participants-list': ['headerText', 'showCount'],
+  'answers-chart': ['showValues', 'showShapes', 'showLabels', 'showQuestion'],
+  'game-pin': ['showLabel'],
+  'qr-code': ['showLabel'],
+}
+
+function pick(obj, keys) {
+  const out = {}
+  for (const k of keys) if (obj && obj[k] !== undefined) out[k] = obj[k]
+  return out
+}
+
 /**
- * Re-theme an existing quiz. Bound/template elements are replaced by the new template's layout
- * (keeping user-editable widget props); free elements the author added are preserved.
+ * Replace a slide's template-owned elements with `fresh` ones, keeping the author's content:
+ * free elements, edited titles, images/crops, hidden flags and content-like widget props.
  */
-export function applyTemplate(quiz, templateId) {
+function mergeSlide(slide, fresh, { keepBackground = false, legacy = false } = {}) {
+  const owned = new Map()
+  const free = []
+  for (const el of slide.elements) {
+    const role = roleOf(el)
+    if (role) { if (!owned.has(role)) owned.set(role, el); continue }
+    if (el.fromTemplate) continue // decoration of the previous template
+    free.push(el)
+  }
+
+  const merged = fresh.elements.map((el) => {
+    const old = owned.get(roleOf(el))
+    if (!old || old.kind !== el.kind) return el
+    if (el.kind === 'widget') {
+      const carried = legacy ? pick(old.props, ['count']) : pick(old.props, CARRIED_PROPS[el.widget] || [])
+      return { ...el, id: old.id, props: { ...el.props, ...carried }, hidden: old.hidden }
+    }
+    if (el.kind === 'text') return { ...el, id: old.id, html: el.binding || legacy ? el.html : old.html, hidden: old.hidden }
+    if (el.kind === 'image') {
+      // A crop only survives if the new box has the same proportions; otherwise fall back to "fill".
+      const sameAspect = Math.abs(old.w / old.h - el.w / el.h) < 0.01
+      return { ...el, id: old.id, src: old.src, placeholder: old.placeholder, crop: sameAspect ? old.crop : el.crop, hidden: old.hidden }
+    }
+    if (el.kind === 'answer') return { ...el, id: old.id, hidden: old.hidden }
+    return el
+  })
+
+  const next = { ...slide, background: keepBackground ? slide.background : fresh.background, elements: [...merged, ...free] }
+  if (fresh.layout) next.layout = fresh.layout
+  return next
+}
+
+/**
+ * Re-theme an existing quiz. Bound/template elements are replaced by the new template's layout;
+ * question content, the chosen question layout and free elements are preserved.
+ * `legacy` is used by the v1→v2 migration, where old widget props/titles must not leak in.
+ */
+export function applyTemplate(quiz, templateId, { legacy = false } = {}) {
   const next = { ...quiz, templateId }
   next.slides = quiz.slides.map((slide) => {
-    const fresh = createSlideFromTemplate(next, slide.type, { question: slide.question })
-    const freshElements = fresh.elements.map((el) => ({ ...el }))
-    const carriedProps = new Map()
-
-    const free = []
-    for (const el of slide.elements) {
-      const role = roleOf(el)
-      if (role) {
-        carriedProps.set(role, el)
-        continue // replaced by the new layout element with the same role
-      }
-      if (el.fromTemplate) continue // old decoration
-      free.push(el)
-    }
-
-    const merged = freshElements.map((el) => {
-      const old = carriedProps.get(roleOf(el))
-      if (!old) return el
-      // Keep author customizations that are content, not style.
-      if (el.kind === 'widget' && old.kind === 'widget') return { ...el, id: old.id, props: { ...el.props, ...old.props }, hidden: old.hidden }
-      if (el.kind === 'text' && old.kind === 'text') return { ...el, id: old.id, html: old.binding ? el.html : old.html, hidden: old.hidden }
-      if (el.kind === 'image' && old.kind === 'image') return { ...el, id: old.id, src: old.src, placeholder: old.placeholder, crop: old.crop, hidden: old.hidden }
-      if (el.kind === 'answer' && old.kind === 'answer') return { ...el, id: old.id, hidden: old.hidden }
-      return el
-    })
-
-    return { ...slide, background: fresh.background, elements: [...merged, ...free] }
+    const fresh = createSlideFromTemplate(next, slide.type, { question: slide.question, layout: autoQuestionLayout(slide) })
+    return mergeSlide(slide, fresh, { legacy })
   })
   return next
 }
 
-/** A stable role key for elements the template owns (bound text/image, answers, widgets). */
+/** Re-arrange one question slide (SPEC FR-19). Pure: returns the new slide. */
+export function applyQuestionLayout(quiz, slide, layout) {
+  if (slide.type !== 'question' || !QUESTION_LAYOUTS.includes(layout)) return slide
+  const fresh = createSlideFromTemplate(quiz, 'question', { question: slide.question, layout })
+  return mergeSlide(slide, fresh, { keepBackground: true })
+}
+
+/** A stable role key for elements the template owns (bound text/image, titles, answers, widgets). */
 export function roleOf(el) {
   if (!el) return null
   if (el.kind === 'answer') return `answer:${el.index}`
   if (el.kind === 'widget') return `widget:${el.widget}`
   if (el.binding) return `binding:${el.binding}`
+  if (el.kind === 'text' && el.role && el.fromTemplate) return `text:${el.role}`
   return null
 }
 
@@ -98,9 +145,14 @@ function cloneBackground(bg) {
   return JSON.parse(JSON.stringify(bg))
 }
 
-export function templateFonts(quiz) {
+/** The template's own background for a slide type (for "reset background"). */
+export function templateBackground(quiz, type) {
   const template = getTemplate(quiz.templateId)
-  return template.fonts[quiz.language] || template.fonts.default
+  return cloneBackground(template.backgrounds?.[type] || template.background)
+}
+
+export function templateFonts(quiz) {
+  return fontsFor(getTemplate(quiz.templateId), quiz.language)
 }
 
 export { isRtlLang, uid }

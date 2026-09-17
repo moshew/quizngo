@@ -4,22 +4,37 @@ import Button from './Button.jsx'
 import SlideThumb from './SlideThumb.jsx'
 import Icon from './Icon.jsx'
 import { useI18n, CONTENT_LANGUAGES } from '../i18n/index.js'
-import { TEMPLATES, createQuizFromTemplate } from '../model/templates/index.js'
+import { TEMPLATES, createQuizFromTemplate, applyTemplate } from '../model/templates/index.js'
+
+const STRIP_TYPES = ['question', 'statistics', 'summary']
+
+/** The slides a template card shows: a hero + one of each kind the audience will see most. */
+function previewSlides(quiz) {
+  const hero = quiz.slides[0]
+  const strip = STRIP_TYPES.map((type) => quiz.slides.find((s) => s.type === type && s !== hero)).filter(Boolean)
+  return { hero, strip }
+}
 
 /**
  * Template gallery. In "create" mode it also collects a title + content language and calls
- * onCreate({ title, templateId, language }). In "apply" mode it calls onApply(templateId).
+ * onCreate({ title, templateId, language }). In "apply" mode (pass `quiz`) every card previews
+ * the author's own quiz in that template and it calls onApply(templateId).
  */
-export default function TemplatePicker({ open, onClose, mode = 'create', currentTemplateId, onCreate, onApply, busy = false, defaultLanguage }) {
+export default function TemplatePicker({ open, onClose, mode = 'create', quiz: sourceQuiz, currentTemplateId, onCreate, onApply, busy = false, defaultLanguage }) {
   const { t, lang } = useI18n()
   const [templateId, setTemplateId] = useState(currentTemplateId || TEMPLATES[0].id)
   const [title, setTitle] = useState('')
   const [language, setLanguage] = useState(defaultLanguage || lang)
 
-  // Preview every template with the typed title so the picker is honest about the result.
+  // Honest previews: the typed title (create) or the author's real content (apply).
   const previews = useMemo(
-    () => TEMPLATES.map((tpl) => ({ tpl, quiz: createQuizFromTemplate({ title: title || t('templates.quizTitle'), templateId: tpl.id, language }) })),
-    [title, language, t],
+    () => TEMPLATES.map((tpl) => {
+      const quiz = mode === 'apply' && sourceQuiz
+        ? applyTemplate(sourceQuiz, tpl.id)
+        : createQuizFromTemplate({ title: title || t('templates.quizTitle'), templateId: tpl.id, language })
+      return { tpl, quiz, ...previewSlides(quiz) }
+    }),
+    [mode, sourceQuiz, title, language, t],
   )
 
   const submit = () => {
@@ -58,19 +73,24 @@ export default function TemplatePicker({ open, onClose, mode = 'create', current
         </div>
       )}
       <div className="tpl-grid">
-        {previews.map(({ tpl, quiz }) => (
+        {previews.map(({ tpl, quiz, hero, strip }) => (
           <button
             key={tpl.id}
             type="button"
             className={`tpl-card ${templateId === tpl.id ? 'active' : ''}`}
+            data-template={tpl.id}
             onClick={() => setTemplateId(tpl.id)}
             onDoubleClick={submit}
           >
-            <SlideThumb slide={quiz.slides[0]} quiz={quiz} className="tpl-thumb" />
+            <SlideThumb slide={hero} quiz={quiz} className="tpl-thumb" />
+            <div className="tpl-strip">
+              {strip.map((slide) => <SlideThumb key={slide.id} slide={slide} quiz={quiz} lazy />)}
+            </div>
             <div className="tpl-card-body">
               <div className="row">
                 <span className="tpl-dot" style={{ background: tpl.preview.accent }} />
                 <strong className="grow truncate">{t(`templates.names.${tpl.id}`)}</strong>
+                {currentTemplateId === tpl.id && mode === 'apply' && <span className="chip">{t('templates.current')}</span>}
                 {templateId === tpl.id && <Icon name="check" size={16} />}
               </div>
               <div className="small muted">{t(`templates.descriptions.${tpl.id}`)}</div>

@@ -3,24 +3,27 @@ import { ANSWERS, ANSWER_INDICES } from '../../../model/constants.js'
 import { effectiveTimeLimit, previousQuestionSlide, questionNumber, questionSlides, slideIndexById } from '../../../model/schema.js'
 import { sampleLiveData, formatPin } from '../../../model/sample.js'
 import { contentT } from '../../../model/content-i18n.js'
-import { isLightColor, withAlpha } from '../color.js'
-import { AnswerGlyph } from './AnswerView.jsx'
+import { isLightColor } from '../color.js'
+import { AnswerGlyph, skinOverrides } from './AnswerView.jsx'
 
-function surfaceStyle(style) {
-  const border = style.border && style.border.width > 0 ? `${style.border.width}px solid ${style.border.color}` : undefined
-  return {
-    background: style.background || undefined,
-    borderRadius: style.borderRadius,
-    border,
-    boxShadow: style.shadow || undefined,
-    fontFamily: `"${style.fontFamily}", "Rubik", sans-serif`,
-  }
+/**
+ * Dynamic game widgets. Each renders ONE semantic markup; the template's skin draws it
+ * (styles/skins/*.css). Sizes are expressed relative to the element box through the
+ * `--w / --h / --m` variables so widgets stay resizable. Author overrides (non-null style
+ * fields) are applied inline on the widget's main surface.
+ */
+
+function boxVars(el) {
+  return { '--w': `${el.w}px`, '--h': `${el.h}px`, '--m': `${Math.min(el.w, el.h)}px` }
 }
 
-/** Foreground color that reads on the widget surface. */
-function fgFor(style) {
-  if (style.background && isLightColor(style.background)) return style.ink || '#1a0a2e'
-  return style.color || '#ffffff'
+/** Inline overrides for a widget surface (+ readable foreground on an author-picked light fill). */
+function surface(style) {
+  const out = skinOverrides(style)
+  if (style.background && !style.color) out.color = isLightColor(style.background) ? (style.ink || 'var(--t-ink)') : '#ffffff'
+  if (style.accent) out['--w-accent'] = style.accent
+  if (style.ink) out['--w-ink'] = style.ink
+  return out
 }
 
 export default function WidgetView({ el, quiz, slide, mode, liveData }) {
@@ -28,8 +31,7 @@ export default function WidgetView({ el, quiz, slide, mode, liveData }) {
   const data = useMemo(() => liveData || sampleLiveData(lang), [liveData, lang])
   const props = el.props || {}
   const style = el.style || {}
-  const fg = fgFor(style)
-  const ctx = { el, quiz, slide, props, style, fg, data, lang, mode, t: (k, p) => contentT(lang, k, p) }
+  const ctx = { el, quiz, slide, props, style, data, lang, mode, vars: boxVars(el), t: (k, p) => contentT(lang, k, p) }
 
   switch (el.widget) {
     case 'game-pin': return <GamePin {...ctx} />
@@ -45,35 +47,48 @@ export default function WidgetView({ el, quiz, slide, mode, liveData }) {
   }
 }
 
-// ───────────────────────── Simple value cards ─────────────────────────
+// ───────────────────────── Join card (game PIN) ─────────────────────────
 
-function GamePin({ el, props, style, fg, data }) {
+function GamePin({ el, props, style, data, vars, t }) {
   const digits = formatPin(data.gamePin)
+  const host = String(data.joinUrl || '').replace(/^https?:\/\//, '').replace(/\/$/, '')
+  const withUrl = props.showJoinUrl && host && el.w / el.h >= 3
   return (
-    <div className="wg wg-pin" style={{ ...surfaceStyle(style), color: fg }}>
-      {props.showLabel && props.label && <div className="wg-label" style={{ fontSize: el.h * 0.16 }}>{props.label}</div>}
-      <div className="wg-value ltr" style={{ fontSize: el.h * (props.showLabel && props.label ? 0.5 : 0.62), letterSpacing: el.h * 0.02 }}>{digits}</div>
+    <div className={`wg wg-join ${withUrl ? 'has-url' : ''}`} style={{ ...vars, ...surface(style) }}>
+      {withUrl && (
+        <>
+          <div className="join-left">
+            <div className="sm">{t('joinAt')}<b className="ltr">{host}</b></div>
+            <div className="sm">{t('joinOr')}</div>
+          </div>
+          <div className="join-divider" />
+        </>
+      )}
+      <div className="join-right">
+        {props.showLabel && <div className="lbl">{props.label || t('pinLabel')}</div>}
+        <div className="pin ltr">{digits}</div>
+      </div>
     </div>
   )
 }
 
-function ParticipantsCount({ el, props, style, fg, data, t }) {
+function ParticipantsCount({ props, style, data, vars, t }) {
   return (
-    <div className="wg wg-count" style={{ ...surfaceStyle(style), color: fg }}>
-      <div className="wg-value" style={{ fontSize: el.h * 0.58 }}>{data.participantsCount}</div>
-      {props.showLabel && <div className="wg-label" style={{ fontSize: el.h * 0.2 }}>{props.label || t('participants')}</div>}
+    <div className="wg wg-count" style={{ ...vars, ...surface(style) }}>
+      <span className="n ltr">{data.participantsCount}</span>
+      {props.showLabel && <span className="l">{props.label || t('participants')}</span>}
     </div>
   )
 }
 
-function QuestionNumber({ el, quiz, slide, props, style, fg, t }) {
+function QuestionNumber({ quiz, slide, props, style, vars, t }) {
   const n = questionNumber(quiz, slide?.id) || 1
   const total = Math.max(questionSlides(quiz).length, 1)
   const pattern = props.label || t('questionOf', { n: '{{n}}', total: '{{total}}' })
   const text = pattern.replace('{{n}}', n).replace('{{total}}', total)
   return (
-    <div className="wg wg-qnum" style={{ ...surfaceStyle(style), color: fg, fontSize: el.h * 0.5, borderRadius: style.borderRadius }}>
-      <span dir="auto">{text}</span>
+    <div className="wg wg-qnum" style={vars}>
+      <span className="qnum" dir="auto" style={surface(style)}>{text}</span>
     </div>
   )
 }
@@ -104,272 +119,220 @@ function pseudoQrModules(seed, size = 25) {
   return grid
 }
 
-export function QrSvg({ seed = 'quizngo', size = 200, dark = '#1a0a2e', light = '#ffffff' }) {
+export function QrSvg({ seed = 'quizngo', dark = '#1a0a2e', light = '#ffffff' }) {
   const modules = useMemo(() => pseudoQrModules(seed), [seed])
   const n = modules.length
-  const cell = size / (n + 4)
   const rects = []
   modules.forEach((row, y) => row.forEach((on, x) => {
-    if (on) rects.push(<rect key={`${x}-${y}`} x={(x + 2) * cell} y={(y + 2) * cell} width={cell} height={cell} fill={dark} />)
+    if (on) rects.push(<rect key={`${x}-${y}`} x={x + 1} y={y + 1} width={1.02} height={1.02} fill={dark} />)
   }))
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} shapeRendering="crispEdges" aria-hidden="true">
-      <rect width={size} height={size} fill={light} />
+    <svg viewBox={`0 0 ${n + 2} ${n + 2}`} shapeRendering="crispEdges" aria-hidden="true">
+      <rect width={n + 2} height={n + 2} fill={light} />
       {rects}
     </svg>
   )
 }
 
-function QrCode({ el, props, style, fg, data }) {
-  const labelH = props.showLabel && props.label ? el.h * 0.16 : 0
-  const pad = Math.min(el.w, el.h) * 0.08
-  const qrSize = Math.max(20, Math.min(el.w - pad * 2, el.h - labelH - pad * 2))
-  const lightSurface = style.background && isLightColor(style.background)
+function QrCode({ props, style, data, vars }) {
+  const labeled = props.showLabel && props.label
   return (
-    <div className="wg wg-qr" style={{ ...surfaceStyle(style), color: fg, padding: pad }}>
-      <div className="wg-qr-box" style={{ width: qrSize, height: qrSize, borderRadius: Math.min(style.borderRadius * 0.5, 18), background: '#fff', padding: lightSurface ? 0 : qrSize * 0.04 }}>
-        <QrSvg seed={data.joinUrl + data.gamePin} size={lightSurface ? qrSize : qrSize * 0.92} dark={style.ink || '#1a0a2e'} />
-      </div>
-      {props.showLabel && props.label && <div className="wg-label" style={{ fontSize: labelH * 0.55 }}>{props.label}</div>}
+    <div className={`wg wg-qr ${labeled ? 'has-label' : ''}`} style={{ ...vars, ...surface(style) }}>
+      <div className="qr-box"><QrSvg seed={data.joinUrl + data.gamePin} dark="#0b0614" /></div>
+      {labeled && <div className="lbl">{props.label}</div>}
     </div>
   )
 }
 
-// ───────────────────────── Timer / respondents (ring) ─────────────────────────
+// ───────────────────────── Timer / answered ─────────────────────────
 
-function Ring({ size, value, max, color, track, fg, label, labelSize, children, stroke }) {
-  const r = size / 2 - stroke / 2 - 2
-  const c = 2 * Math.PI * r
-  const ratio = max ? Math.min(1, Math.max(0, value / max)) : 1
+function Ring({ ratio }) {
+  const r = 43, c = 2 * Math.PI * r
   return (
-    <div className="wg-ring" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c * (1 - ratio)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      </svg>
-      <div className="wg-ring-center" style={{ color: fg }}>
-        {children}
-        {label && <div className="wg-label" style={{ fontSize: labelSize }}>{label}</div>}
-      </div>
-    </div>
+    <svg className="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle className="ring-track" cx="50" cy="50" r={r} />
+      <circle className="ring-fill" cx="50" cy="50" r={r} strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, Math.max(0, ratio)))} transform="rotate(-90 50 50)" />
+    </svg>
   )
 }
 
-function Timer({ el, quiz, slide, props, style, fg, data }) {
+const ClockIcon = () => <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+const PeopleIcon = () => <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /></svg>
+
+function Timer({ quiz, slide, props, style, data, vars }) {
   const total = effectiveTimeLimit(quiz, slide)
   const value = data.timeLeft ?? total
-  const size = Math.min(el.w, el.h)
+  // In the editor the clock is full; show a partly used ring so the design reads as a timer.
+  const ratio = data.timeLeft == null ? 0.78 : total ? value / total : 1
   const variant = props.variant || 'circle'
-  if (variant === 'number') {
-    return <div className="wg wg-number" style={{ color: style.color, fontFamily: `"${style.fontFamily}", sans-serif`, fontSize: el.h * 0.8 }}>{value}</div>
-  }
-  if (variant === 'pill') {
-    return (
-      <div className="wg wg-pill" style={{ ...surfaceStyle(style), color: fg, borderRadius: 999, fontSize: el.h * 0.5 }}>
-        <svg width={el.h * 0.45} height={el.h * 0.45} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
-        <span className="ltr">{value}</span>
-      </div>
-    )
-  }
-  const stroke = Math.max(8, size * 0.075)
+  if (variant === 'number') return <div className="wg wg-number ltr" style={{ ...vars, ...surface(style) }}>{value}</div>
+  if (variant === 'pill') return <div className="wg wg-pill" style={{ ...vars, ...surface(style) }}><ClockIcon /><span className="ltr">{value}</span></div>
   return (
-    <div className="wg wg-circle" style={{ ...surfaceStyle(style), borderRadius: '50%', width: size, height: size }}>
-      <Ring size={size} value={value} max={total} color={style.accent} track={withAlpha(fg, 0.15)} fg={fg} stroke={stroke} label={props.label} labelSize={size * 0.11}>
-        <div className="wg-value ltr" style={{ fontSize: size * (props.label ? 0.36 : 0.44) }}>{value}</div>
-      </Ring>
+    <div className="wg wg-timer" style={vars}>
+      <div className="timer">
+        <div className="disc" style={surface(style)} />
+        <Ring ratio={ratio} />
+        <div className="num ltr">{value}{props.label && <small>{props.label}</small>}</div>
+      </div>
     </div>
   )
 }
 
-function Respondents({ el, props, style, fg, data }) {
+function Respondents({ props, style, data, vars }) {
   const answered = data.respondents ?? 0
   const total = data.participantsCount ?? 0
-  const size = Math.min(el.w, el.h)
-  const variant = props.variant || 'circle'
   const text = props.showTotal ? `${answered}/${total}` : `${answered}`
-  if (variant === 'number') {
-    return <div className="wg wg-number ltr" style={{ color: style.color, fontFamily: `"${style.fontFamily}", sans-serif`, fontSize: el.h * 0.7 }}>{text}</div>
-  }
-  if (variant === 'pill') {
+  const variant = props.variant || 'box'
+  if (variant === 'number') return <div className="wg wg-number ltr" style={{ ...vars, ...surface(style) }}>{text}</div>
+  if (variant === 'pill') return <div className="wg wg-pill" style={{ ...vars, ...surface(style) }}><PeopleIcon /><span className="ltr">{text}</span>{props.label && <small>{props.label}</small>}</div>
+  if (variant === 'circle') {
     return (
-      <div className="wg wg-pill" style={{ ...surfaceStyle(style), color: fg, borderRadius: 999, fontSize: el.h * 0.45 }}>
-        <svg width={el.h * 0.45} height={el.h * 0.45} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /></svg>
-        <span className="ltr">{text}</span>
-        {props.label && <span style={{ fontSize: el.h * 0.28, opacity: 0.8 }}>{props.label}</span>}
+      <div className="wg wg-timer" style={vars}>
+        <div className="timer">
+          <div className="disc" style={surface(style)} />
+          <Ring ratio={total ? answered / total : 0} />
+          <div className={`num ltr ${props.showTotal ? 'is-long' : ''}`}>{text}{props.label && <small>{props.label}</small>}</div>
+        </div>
       </div>
     )
   }
-  const stroke = Math.max(8, size * 0.075)
   return (
-    <div className="wg wg-circle" style={{ ...surfaceStyle(style), borderRadius: '50%', width: size, height: size }}>
-      <Ring size={size} value={answered} max={total} color={style.accent} track={withAlpha(fg, 0.15)} fg={fg} stroke={stroke} label={props.label} labelSize={size * 0.11}>
-        <div className="wg-value ltr" style={{ fontSize: size * (props.showTotal ? 0.24 : 0.4) }}>{text}</div>
-      </Ring>
+    <div className={`wg wg-answered ${props.showTotal ? 'is-long' : ''}`} style={{ ...vars, ...surface(style) }}>
+      <span className="n ltr">{text}</span>
+      {props.label && <span className="l">{props.label}</span>}
     </div>
   )
 }
 
-// ───────────────────────── Participants list ─────────────────────────
+// ───────────────────────── Lobby: players ─────────────────────────
 
-function avatarStyleFor(kind, style) {
-  switch (kind) {
-    case 'pill':
-      return { background: 'rgba(0,0,0,0.55)', color: '#fff', border: `3px solid ${style.accent}`, borderRadius: 999, boxShadow: '0 8px 20px rgba(0,0,0,0.35)' }
-    case 'glass':
-      return { background: 'rgba(255,255,255,0.16)', color: '#fff', border: '2px solid rgba(255,255,255,0.45)', borderRadius: 22, boxShadow: '0 8px 20px rgba(0,0,0,0.18)', backdropFilter: 'blur(6px)' }
-    case 'card':
-    default:
-      return { background: '#fff', color: style.ink || '#1a0a2e', border: `3px solid ${style.ink || '#1a0a2e'}`, borderRadius: 20, boxShadow: `0 5px 0 ${style.ink || '#1a0a2e'}` }
-  }
-}
-
-function ParticipantsList({ el, props, style, fg, data, t }) {
-  const columns = Math.max(1, Math.min(6, props.columns || 3))
+function ParticipantsList({ el, props, style, data, vars, t }) {
+  const columns = Math.max(1, Math.min(8, props.columns || 5))
   const maxRows = Math.max(1, Math.min(8, props.maxRows || 4))
   const shown = data.participants.slice(0, columns * maxRows)
-  const pad = Math.min(el.w, el.h) * 0.045
-  const headerH = props.headerText || props.showCount ? el.h * 0.13 : 0
-  const gap = pad * 0.6
-  const gridH = el.h - pad * 2 - headerH
-  const cellH = Math.min(96, (gridH - gap * (maxRows - 1)) / maxRows)
-  const avatar = avatarStyleFor(props.avatarStyle, style)
-  const fontSize = cellH * 0.36
-
+  const hasHeader = !!(props.headerText || props.showCount)
+  const headerH = hasHeader ? Math.min(96, el.h * 0.18) : 0
+  const gap = 18
+  const chipH = Math.max(34, Math.min(78, (el.h - headerH - (hasHeader ? 30 : 0) - gap * (maxRows - 1)) / maxRows))
   return (
-    <div className="wg wg-plist" style={{ ...surfaceStyle(style), color: fg, padding: pad, gap: pad * 0.6 }}>
-      {headerH > 0 && (
-        <div className="wg-plist-header" style={{ height: headerH, fontSize: headerH * 0.48 }}>
-          <span className="truncate" dir="auto">{props.headerText}</span>
-          {props.showCount && (
-            <span className="wg-plist-count" style={{ background: style.accent, color: style.ink || '#1a0a2e', fontSize: headerH * 0.42, borderRadius: 999, padding: `0 ${headerH * 0.4}px`, height: headerH * 0.8 }}>
-              <span className="ltr">{data.participantsCount}</span>
-            </span>
-          )}
+    <div className="wg wg-players" style={{ ...vars, '--chip': `${chipH}px`, '--head': `${headerH}px` }}>
+      {hasHeader && (
+        <div className="waiting-pill">
+          <span className="emoji">👾</span>
+          {props.headerText && <span dir="auto">{props.headerText}</span>}
+          {props.showCount && <span className="count"><b className="ltr">{data.participantsCount}</b>&nbsp;{t('playersIn')}</span>}
         </div>
       )}
-      <div className="wg-plist-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap, alignContent: 'start' }}>
+      <div className="player-grid" style={{ gap, maxWidth: columns * (chipH * 3.7 + gap) }}>
         {shown.map((p) => (
-          <div key={p.id} className="wg-avatar" style={{ ...avatar, height: cellH, fontSize, paddingInline: cellH * 0.18, gap: cellH * 0.16 }}>
-            <span className="wg-avatar-icon" style={{ width: cellH * 0.64, height: cellH * 0.64, fontSize: cellH * 0.38, borderRadius: props.avatarStyle === 'pill' ? '50%' : cellH * 0.18, border: `2px solid ${avatar.color === '#fff' ? 'rgba(255,255,255,0.5)' : style.ink || '#1a0a2e'}` }}>{p.icon}</span>
-            <span className="truncate" dir="auto">{p.nickname}</span>
+          <div key={p.id} className="pchip" style={surface(style)}>
+            <span className="av">{p.icon}</span>
+            <span className="nm" dir="auto">{p.nickname}</span>
           </div>
         ))}
-        {shown.length === 0 && <div className="dim" style={{ gridColumn: '1 / -1', fontSize: fontSize }}>{t('waitingForPlayers')}</div>}
       </div>
     </div>
   )
 }
 
-// ───────────────────────── Answers chart ─────────────────────────
+// ───────────────────────── Results graph ─────────────────────────
 
-function AnswersChart({ el, quiz, slide, props, style, fg, data, lang }) {
+function AnswersChart({ el, quiz, slide, props, style, data, lang, mode, vars, t }) {
   const dist = data.distribution || {}
   const max = Math.max(1, ...ANSWER_INDICES.map((i) => dist[i] || 0))
-  const pad = Math.min(el.w, el.h) * 0.05
   const idx = slideIndexById(quiz, slide?.id)
-  const prev = props.showQuestion ? previousQuestionSlide(quiz, idx) : null
-  const qText = prev?.question?.text || (props.showQuestion ? contentT(lang, 'sampleQuestion') : '')
-  const questionH = props.showQuestion ? el.h * 0.16 : 0
-  const glyphH = props.showShapes ? el.h * 0.12 : 0
-  const valueH = props.showValues ? el.h * 0.1 : 0
-  const barsH = el.h - pad * 2 - questionH - glyphH - valueH
-  const correct = prev?.question?.correctAnswer
+  const prev = previousQuestionSlide(quiz, idx)
+  const prevNumber = prev ? questionNumber(quiz, prev.id) : 1
+  const question = prev?.question
+  // On the projector an unwritten question shows nothing rather than the editor's placeholder.
+  const qText = question?.text || (mode === 'preview' ? '' : contentT(lang, 'sampleQuestion'))
+  const correct = question?.correctAnswer ?? (mode === 'preview' ? null : 1)
+
+  const headH = props.showQuestion ? Math.min(190, el.h * 0.2) : 0
+  const countH = props.showValues ? 82 : 0
+  const flagH = 66
+  const baseH = props.showShapes || props.showLabels ? 84 : 0
+  const barsH = Math.max(60, el.h - headH - countH - flagH - baseH)
 
   return (
-    <div className="wg wg-chart" style={{ ...surfaceStyle(style), color: fg, padding: pad }}>
+    <div className="wg wg-graph" style={{ ...vars, ...surface(style) }}>
       {props.showQuestion && (
-        <div className="wg-chart-question truncate" dir="auto" style={{ height: questionH, fontSize: questionH * 0.42 }}>{qText}</div>
+        <div className="graph-head" style={{ height: headH }}>
+          <div className="eyebrow">{t('resultsEyebrow', { n: prevNumber })}</div>
+          <div className="qtext" dir="auto">{qText}</div>
+        </div>
       )}
-      <div className="wg-chart-bars" style={{ height: barsH + valueH, gap: pad }}>
+      <div className="graph">
         {ANSWER_INDICES.map((i) => {
           const v = dist[i] || 0
-          const h = Math.max(barsH * 0.03, (v / max) * barsH)
-          const dim = correct && correct !== i
+          const h = Math.max(barsH * 0.07, (v / max) * barsH)
+          const label = question?.answers?.[i - 1]?.text || contentT(lang, 'sampleAnswer', { n: i })
           return (
-            <div key={i} className="wg-chart-col">
-              {props.showValues && <div className="wg-chart-value ltr" style={{ height: valueH, fontSize: valueH * 0.75 }}>{v}</div>}
-              <div className="wg-chart-bar" style={{ height: h, background: ANSWERS[i].color, borderRadius: `${props.barRadius}px ${props.barRadius}px 6px 6px`, opacity: dim ? 0.55 : 1, boxShadow: `0 6px 0 ${ANSWERS[i].dark}` }}>
-                {correct === i && <span className="wg-chart-check" style={{ fontSize: Math.min(h, el.w * 0.06) * 0.6 }}>✓</span>}
-              </div>
+            <div key={i} className={`gcol ${correct && correct !== i ? 'dim' : ''}`}>
+              {correct === i && <div className="correct-flag">✓ {t('correct')}</div>}
+              {props.showValues && <div className="gcount ltr">{v}</div>}
+              <div className={`gbar c-${ANSWERS[i].name}`} style={{ height: h, borderTopLeftRadius: props.barRadius, borderTopRightRadius: props.barRadius }} />
+              {baseH > 0 && (
+                <div className="base" style={{ height: baseH }}>
+                  {props.showShapes && <span className={`glyph c-${ANSWERS[i].name}`}><AnswerGlyph index={i} /></span>}
+                  {props.showLabels !== false && <span className="lbl" dir="auto">{label}</span>}
+                </div>
+              )}
             </div>
           )
         })}
       </div>
-      {props.showShapes && (
-        <div className="wg-chart-glyphs" style={{ height: glyphH, gap: pad }}>
-          {ANSWER_INDICES.map((i) => (
-            <div key={i} className="wg-chart-col">
-              <span className="wg-chart-glyph" style={{ background: ANSWERS[i].color, width: glyphH * 0.8, height: glyphH * 0.8, borderRadius: glyphH * 0.22 }}>
-                <AnswerGlyph index={i} color={i === 3 ? '#1a0a2e' : '#fff'} size={glyphH * 0.5} />
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
 
-// ───────────────────────── Leaderboard ─────────────────────────
+// ───────────────────────── Leaderboard / podium ─────────────────────────
 
-function Leaderboard({ el, props, style, fg, data, t }) {
+const AVATAR_TINTS = ['var(--t-surface, #fff)', 'var(--t-secondary)', 'var(--t-danger)', 'var(--t-primary)']
+
+function Leaderboard({ el, props, style, data, vars, t }) {
   const count = Math.max(1, Math.min(10, props.count || 5))
   const rows = data.leaderboard.slice(0, count)
-  const pad = Math.min(el.w, el.h) * 0.04
-  const lightSurface = style.background && isLightColor(style.background)
 
   if (props.variant === 'podium') {
     const top = rows.slice(0, 3)
-    const order = [top[1], top[0], top[2]]
-    const heights = [0.5, 0.7, 0.4]
-    const usableH = el.h - pad * 2
-    const nameH = usableH * 0.14
-    const tileSize = Math.min(el.w / 3 * 0.42, usableH * 0.22)
+    const order = [[top[1], 2], [top[0], 1], [top[2], 3]]
+    const medals = { 1: '🏆', 2: '🥈', 3: '🥉' }
+    // Column anatomy follows the design (blocks 336/252/190 on a 1080 slide), scaled to the box.
+    const k = Math.min(1, el.h / 844, el.w / 1000)
     return (
-      <div className="wg wg-podium" style={{ color: fg, padding: pad, gap: pad, fontFamily: `"${style.fontFamily}", sans-serif` }}>
-        {order.map((p, i) => {
-          const rank = i === 1 ? 1 : i === 0 ? 2 : 3
-          if (!p) return <div key={rank} className="wg-podium-col" />
-          const blockH = usableH * heights[i] * 0.85
-          return (
-            <div key={rank} className="wg-podium-col">
-              <span className="wg-podium-avatar" style={{ width: tileSize, height: tileSize, fontSize: tileSize * 0.55, background: rank === 1 ? style.accent : '#fff', border: `4px solid ${style.ink || '#1a0a2e'}`, borderRadius: tileSize * 0.28, boxShadow: `0 8px 0 ${style.ink || '#1a0a2e'}` }}>{p.icon}</span>
-              <div className="wg-podium-name truncate" dir="auto" style={{ fontSize: nameH * 0.55, height: nameH }}>{p.nickname}</div>
-              <div className="wg-podium-block" style={{ height: blockH, background: style.background || 'rgba(255,255,255,0.14)', border: style.border && style.border.width ? `${style.border.width}px solid ${style.border.color}` : undefined, borderRadius: `${style.borderRadius}px ${style.borderRadius}px 0 0`, boxShadow: style.shadow || undefined, color: lightSurface ? style.ink : fg }}>
-                <div className="wg-podium-rank" style={{ fontSize: blockH * 0.32 }}>{rank}</div>
-                {props.showScore && <div className="wg-podium-score ltr" style={{ fontSize: blockH * 0.14 }}>{p.score.toLocaleString()} {t('points')}</div>}
-              </div>
-            </div>
-          )
-        })}
+      <div className="wg wg-podium" style={{ ...vars, '--k': k }}>
+        {order.map(([p, rank]) => (
+          <div key={rank} className={`pod p${rank}`}>
+            {p && (
+              <>
+                <div className="medal">{medals[rank]}</div>
+                {props.showAvatar && <div className="av">{p.icon}</div>}
+                <div className="nm" dir="auto">{p.nickname}</div>
+                {props.showScore && <div className="sc ltr">{p.score.toLocaleString()}</div>}
+              </>
+            )}
+            <div className="block" style={surface(style)}>{rank}</div>
+          </div>
+        ))}
       </div>
     )
   }
 
-  const gap = pad * 0.5
-  const rowH = Math.min(110, (el.h - pad * 2 - gap * (count - 1)) / count)
-  const rowStyle = {
-    background: style.background || 'rgba(255,255,255,0.12)',
-    color: lightSurface ? style.ink : fg,
-    border: style.border && style.border.width ? `${style.border.width}px solid ${style.border.color}` : undefined,
-    borderRadius: Math.min(style.borderRadius, rowH / 2),
-    boxShadow: style.shadow || undefined,
-    height: rowH,
-    fontSize: rowH * 0.4,
-    paddingInline: rowH * 0.25,
-    gap: rowH * 0.22,
-  }
+  const gap = Math.min(26, el.h * 0.03)
+  const rowH = Math.max(40, Math.min(132, (el.h - 14 - gap * (count - 1)) / count))
   return (
-    <div className="wg wg-lb" style={{ padding: pad, gap, fontFamily: `"${style.fontFamily}", sans-serif` }}>
+    <div className="wg wg-board" style={{ ...vars, '--row': `${rowH}px`, gap }}>
       {rows.map((p, i) => (
-        <div key={p.id} className={`wg-lb-row ${i === 0 ? 'is-first' : ''}`} style={rowStyle}>
-          <span className="wg-lb-rank" style={{ width: rowH * 0.62, height: rowH * 0.62, fontSize: rowH * 0.32, background: i === 0 ? style.accent : withAlpha(rowStyle.color, 0.12), color: i === 0 ? style.ink || '#1a0a2e' : 'inherit', borderRadius: rowH * 0.2 }}>{i + 1}</span>
-          {props.showAvatar && <span className="wg-lb-avatar" style={{ fontSize: rowH * 0.42 }}>{p.icon}</span>}
-          <span className="wg-lb-name truncate grow" dir="auto">{p.nickname}</span>
-          {props.showScore && <span className="wg-lb-score ltr" style={{ fontSize: rowH * 0.34 }}>{p.score.toLocaleString()}</span>}
+        <div key={p.id} className={`row ${i === 0 ? 'lead' : ''}`} style={surface(style)}>
+          <span className="rk ltr">{i + 1}</span>
+          {props.showAvatar && <span className="av" style={{ '--tint': AVATAR_TINTS[i % AVATAR_TINTS.length] }}>{p.icon}</span>}
+          <span className="nm" dir="auto">{p.nickname}</span>
+          {p.delta ? <span className="delta ltr">+{p.delta}</span> : null}
+          {props.showScore && <span className="sc ltr">{p.score.toLocaleString()}</span>}
         </div>
       ))}
+      {rows.length === 0 && <div className="row is-empty">{t('waitingForPlayers')}</div>}
     </div>
   )
 }

@@ -82,6 +82,43 @@
 - [x] `app/README.md`, עדכון [AGENTS.md](../AGENTS.md) (קישור לאיפיון, פורטים), `.vscode/tasks.json` (install/start ל-`app` ול-`app/server`), `.gitignore` בשורש.
 - [x] `npm run build` נקי; בדיקת עשן API; בדיקת שמירה/טעינה מקצה לקצה.
 
+## גרסה 1.1 — פישוט העורך + תבניות מעוצבות ([SPEC §16](SPEC.md))
+
+### שלב 10 — מנוע Skins ועיטורים (FR-18)
+- [x] `model/constants.js` — `SCHEMA_VERSION = 2`, `QUESTION_LAYOUTS`, גופן `Space Mono`; `index.html` — טעינת Space Mono.
+- [x] `model/schema.js` — ברירות מחדל של סגנון תשובה/widget הופכות ל-`null` ("לפי התבנית"); `slide.layout`; `background.decor`.
+- [x] `model/fit.js` — `fitFontSize()` דטרמיניסטי לטקסט שאלה ותשובות.
+- [x] `editor/render/SlideDecor.jsx` + `styles/skins/decor.css` — שכבות העיטור של שתי המשפחות (כולל קונפטי בסיכום, אנימציות רק ב-preview).
+- [x] `editor/render/SlideRenderer.jsx` — מחלקות `skin-*/theme-*/type-*`, הזרקת טוקנים כ-CSS variables, רינדור `SlideDecor`.
+- [x] `AnswerView.jsx` / `WidgetView.jsx` — markup סמנטי אחד לכל רכיב, overrides בלבד כ-inline style; `TextView.jsx` — כיווץ אוטומטי לטקסט שאלה.
+- [x] `styles/skins/chunky.css`, `styles/skins/neon.css` — תשובות + 9 widgets (join-card, QR, משתתפים, טיימר, עונים, מספר שאלה, גרף, מובילים, פודיום).
+
+### שלב 11 — תבניות ופריסות (FR-03, FR-19)
+- [x] `model/templates/layouts.js` — פריסות משותפות לפי הגיאומטריה של העיצובים/PPTX: פתיחה, שאלה ×4 (`text`/`banner`/`side`/`image-answers`), התפלגות, מובילים, מעבר, סיכום; שיקוף RTL.
+- [x] `model/templates/{magenta,midnight,sunset,ocean,classicBlack,minimal}.js` — skin + טוקנים + רקע + decor + גופנים לכל שפה.
+- [x] `model/templates/index.js` — `createSlideFromTemplate(quiz, type, {layout})`, `applyTemplate` שומר `slide.layout`, `setSlideLayout()`.
+- [x] `model/migrate.js` — `upgradeQuiz()` (v1→v2) + שימוש בעורך, ב-Preview ובספרייה (cover).
+- [x] `state/editorStore.js` — `setQuestionLayout`, אוטומציית פריסה בהוספת/הסרת תמונת שאלה, `resetElementStyle`, `resetBackground`.
+- [x] `components/TemplatePicker.jsx` — כרטיס עם שקף ראשי + 3 קטנים; מצב "החל" על תוכן החידון; `TemplateSwitcher` משותף לסרגל העליון ולהגדרות.
+- [x] `tests/model.test.mjs` — 6 תבניות × 4 פריסות בתוך הקנבס, שמירת תוכן בהחלפת פריסה/תבנית, מיגרציה v1→v2, `fitFontSize`.
+
+### שלב 12 — פישוט העורך (FR-04, FR-20)
+- [x] `editor/TopBar.jsx` — 8 פקדים + תפריט ⋯; "תצוגה מקדימה" כפעולה ראשית; כפתור "תבנית".
+- [x] `editor/InsertBar.jsx` — 4 פקדים, גריד צורות; הסרת "תשובה"/"רקע".
+- [x] `editor/inspector/controls.jsx` — `Section` מתקפל עם זיכרון ב-localStorage.
+- [x] `editor/inspector/QuestionForm.jsx` — טופס השאלה + בוחר פריסה + "אחרי השאלה" + "החזר תשובה חסרה".
+- [x] `editor/inspector/panels.jsx` + `Inspector.jsx` — תוכן גלוי, "עיצוב" ו"מיקום וגודל" מקופלים, פעולות מהירות בכותרת, "אפס לסגנון התבנית".
+- [x] `editor/text/TextToolbar.jsx` — גרסה מקוצרת + "עוד"; `Canvas.jsx` — תפריט הקשר מקוצר, סרגל זום של 3 פקדים, רמז פתיחה חד-פעמי.
+- [x] `i18n/he.js`, `i18n/en.js` — מחרוזות חדשות; עדכון שמות/תיאורי תבניות.
+
+### שלב 13 — אימות
+- [x] `npm test` (19 בדיקות), `npm run build`.
+- [x] סיור Playwright: 6 תבניות × כל סוגי השקפים × (he, en) דרך `/app/gallery`, 4 פריסות שאלה + Undo, החלפת תבנית, Preview, מיגרציה של חידון קיים (קריאה בלבד), כל הפאנלים/מקטעים/תפריטים/דיאלוגים — 0 שגיאות קונסול.
+- [x] FR-20: תשובה נבחרת = 32 פקדים גלויים במסך (קודם ~61), 8 בפאנל הימני (קודם ~33).
+- [x] תיקון באג גרירה משלב א' שנחשף בסיור: לחיצה על רכיב לא-נבחר השאירה אותו "דבוק" לסמן (Moveable ביטל את ה-`pointerdown` ולכן לא קיבל `mouseup`). כעת הגרירה המתוכנתת מתחילה מ-`mousedown`, רק כשהבחירה השתנתה בלחיצה הזו, וגם בלחיצה ראשונה.
+- [x] בדיקה חיה ב-https://quizngo.online/app/ (ללא שינוי nginx).
+- [x] עדכון `README.md`.
+
 ## שלבים עתידיים (מחוץ להיקף שלב א')
 
 - SSO (OIDC provider), הרשאות ברמת חידון.

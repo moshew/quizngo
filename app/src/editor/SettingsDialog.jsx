@@ -1,19 +1,16 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useI18n, CONTENT_LANGUAGES } from '../i18n/index.js'
 import { LIMITS } from '../model/constants.js'
-import { useEditor, updateSettings, updateQuizMeta, applyTemplateToQuiz } from '../state/editorStore.js'
+import { useEditor, updateSettings, updateQuizMeta } from '../state/editorStore.js'
 import { getTemplate } from '../model/templates/index.js'
 import Modal from '../components/Modal.jsx'
 import Button from '../components/Button.jsx'
 import { NumberField } from '../components/Field.jsx'
-import TemplatePicker from '../components/TemplatePicker.jsx'
-import { toast } from '../components/Toast.jsx'
+import TemplateSwitcher from '../components/TemplateSwitcher.jsx'
 
 export default function SettingsDialog({ onClose }) {
   const { t } = useI18n()
   const quiz = useEditor((s) => s.quiz)
-  const [picker, setPicker] = useState(false)
-  const [confirmTemplate, setConfirmTemplate] = useState(null)
   const template = getTemplate(quiz.templateId)
 
   return (
@@ -58,19 +55,11 @@ export default function SettingsDialog({ onClose }) {
                 <strong>{t(`templates.names.${template.id}`)}</strong>
               </div>
             </div>
-            <Button icon="paint" onClick={() => setPicker(true)}>{t('settings.changeTemplate')}</Button>
+            <TemplateSwitcher>{(open) => <Button icon="palette" onClick={open}>{t('settings.changeTemplate')}</Button>}</TemplateSwitcher>
           </div>
         </div>
       </Modal>
 
-      {picker && (
-        <TemplatePicker open mode="apply" currentTemplateId={quiz.templateId} onClose={() => setPicker(false)} onApply={(id) => { setPicker(false); if (id !== quiz.templateId) setConfirmTemplate(id) }} />
-      )}
-
-      <Modal open={!!confirmTemplate} onClose={() => setConfirmTemplate(null)} size="sm" title={t('templates.applyTitle', { name: confirmTemplate ? t(`templates.names.${confirmTemplate}`) : '' })}
-        footer={<><Button variant="ghost" onClick={() => setConfirmTemplate(null)}>{t('common.cancel')}</Button><Button variant="primary" icon="paint" onClick={() => { applyTemplateToQuiz(confirmTemplate); setConfirmTemplate(null); toast.success(t('templates.applied')) }}>{t('common.apply')}</Button></>}>
-        <p className="muted">{t('templates.applyBody')}</p>
-      </Modal>
     </>
   )
 }

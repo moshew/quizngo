@@ -53,7 +53,8 @@
 .skeleton-card { height: 300px; }
 
 /* Template picker */
-.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.tpl-strip { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding-top: 3px; background: #0d0716; }
 .tpl-card { display: flex; flex-direction: column; background: var(--ui-bg-3); border: 2px solid var(--ui-border); border-radius: var(--ui-radius-lg); overflow: hidden; text-align: start; transition: transform 160ms var(--ui-ease), border-color 160ms, box-shadow 160ms; }
 .tpl-card:hover { transform: translateY(-3px); border-color: var(--ui-border-strong); }
 .tpl-card.active { border-color: var(--ui-accent); box-shadow: 0 0 0 3px var(--ui-accent-soft), var(--ui-shadow); }
