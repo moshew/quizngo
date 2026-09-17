@@ -52,6 +52,7 @@ export default {
         gameId: 'מזהה משחק',
         participantsCount: 'מספר משתתפים',
         participantsList: 'רשימת משתתפים',
+        participantsHeader: 'קבע ככותרת משתתפים',
         qrCode: 'QR Code',
         questionTime: 'זמן שאלה',
         respondersCount: 'מספר עונים',
@@ -141,6 +142,8 @@ export default {
         addParticipantsList: 'שגיאה בהוספת רשימת משתתפים',
         addAnswersDistribution: 'שגיאה בהוספת פילוג תשובות',
         addLeaderboard: 'שגיאה בהוספת טבלת מובילים',
+        setParticipantsHeader: 'שגיאה בקביעת כותרת המשתתפים',
+        selectShapeFirst: 'אנא בחר אובייקט תחילה',
         selectSlideFirst: 'אנא בחר שקף תחילה'
     },
 

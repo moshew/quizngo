@@ -52,6 +52,7 @@ export default {
         gameId: '游戏ID',
         participantsCount: '参与人数',
         participantsList: '参与者列表',
+        participantsHeader: 'Set as Participants Header',
         qrCode: '二维码',
         questionTime: '答题时间',
         respondersCount: '回答人数',
@@ -131,6 +132,8 @@ export default {
         addParticipantsList: '添加参与者列表错误',
         addAnswersDistribution: '添加答案分布错误',
         addLeaderboard: '添加排行榜错误',
+        setParticipantsHeader: 'Error setting participants header',
+        selectShapeFirst: 'Please select an object first',
         selectSlideFirst: '请先选择一张幻灯片',
     },
 

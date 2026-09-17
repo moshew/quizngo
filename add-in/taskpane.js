@@ -54,7 +54,8 @@ import {
 } from './modules/elements/question_timer.js';
 import {
     insertParticipantsListButton,
-    insertParticipantsNumButton
+    insertParticipantsNumButton,
+    linkLiveParticipantsCount
 } from './modules/elements/participants_management.js';
 import {
     addAnswersDistribution, 
@@ -1007,6 +1008,7 @@ function renderActionsTab() {
         { label: t('actions.gameId'), icon: 'Game', onclick: insertGameIdButton },
         { label: t('actions.participantsCount'), icon: 'PeopleAdd', onclick: insertParticipantsNumButton },
         { label: t('actions.participantsList'), icon: 'ContactList', onclick: insertParticipantsListButton },
+        { label: t('actions.linkLiveCount'), icon: 'Tag', onclick: linkLiveParticipantsCount },
         { label: t('actions.qrCode'), icon: 'QRCode', onclick: insertQrCodeButton },
 
         // Game Control

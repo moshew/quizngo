@@ -52,6 +52,7 @@ export default {
         gameId: 'गेम ID',
         participantsCount: 'प्रतिभागी संख्या',
         participantsList: 'प्रतिभागी सूची',
+        participantsHeader: 'Set as Participants Header',
         qrCode: 'QR कोड',
         questionTime: 'प्रश्न समय',
         respondersCount: 'जवाब देने वालों की संख्या',
@@ -131,6 +132,8 @@ export default {
         addParticipantsList: 'प्रतिभागियों की सूची जोड़ने में त्रुटि',
         addAnswersDistribution: 'उत्तर वितरण जोड़ने में त्रुटि',
         addLeaderboard: 'लीडरबोर्ड जोड़ने में त्रुटि',
+        setParticipantsHeader: 'Error setting participants header',
+        selectShapeFirst: 'Please select an object first',
         selectSlideFirst: 'कृपया पहले एक स्लाइड चुनें',
     },
 

@@ -52,6 +52,7 @@ export default {
         gameId: 'Spiel-ID',
         participantsCount: 'Teilnehmeranzahl',
         participantsList: 'Teilnehmerliste',
+        participantsHeader: 'Set as Participants Header',
         qrCode: 'QR-Code',
         questionTime: 'Fragezeit',
         respondersCount: 'Anzahl Antworten',
@@ -131,6 +132,8 @@ export default {
         addParticipantsList: 'Fehler beim Hinzufügen der Teilnehmerliste',
         addAnswersDistribution: 'Fehler beim Hinzufügen der Antwortverteilung',
         addLeaderboard: 'Fehler beim Hinzufügen der Bestenliste',
+        setParticipantsHeader: 'Error setting participants header',
+        selectShapeFirst: 'Please select an object first',
         selectSlideFirst: 'Bitte wählen Sie zuerst eine Folie aus',
     },
 

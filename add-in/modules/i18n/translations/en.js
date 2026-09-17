@@ -52,6 +52,7 @@ export default {
         gameId: 'Game ID',
         participantsCount: 'Participants Count',
         participantsList: 'Participants List',
+        participantsHeader: 'Set as Participants Header',
         qrCode: 'QR Code',
         questionTime: 'Question Time',
         respondersCount: 'Responders Count',
@@ -141,6 +142,8 @@ export default {
         addParticipantsList: 'Error adding participants list',
         addAnswersDistribution: 'Error adding answers distribution',
         addLeaderboard: 'Error adding leaderboard',
+        setParticipantsHeader: 'Error setting participants header',
+        selectShapeFirst: 'Please select an object first',
         selectSlideFirst: 'Please select a slide first'
     },
 

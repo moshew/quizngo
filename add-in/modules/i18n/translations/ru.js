@@ -52,6 +52,7 @@ export default {
         gameId: 'ID игры',
         participantsCount: 'Количество участников',
         participantsList: 'Список участников',
+        participantsHeader: 'Set as Participants Header',
         qrCode: 'QR-код',
         questionTime: 'Время вопроса',
         respondersCount: 'Количество ответов',
@@ -131,6 +132,8 @@ export default {
         addParticipantsList: 'Ошибка добавления списка участников',
         addAnswersDistribution: 'Ошибка добавления распределения ответов',
         addLeaderboard: 'Ошибка добавления таблицы лидеров',
+        setParticipantsHeader: 'Error setting participants header',
+        selectShapeFirst: 'Please select an object first',
         selectSlideFirst: 'Пожалуйста, сначала выберите слайд',
     },
 

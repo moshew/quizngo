@@ -37,8 +37,134 @@ const FAKE_PLAYERS = [
   { id: 'p30', name: 'רינה מצליח' }
 ]
 
-// Load Balancer URL - used to resolve game PIN to server
-const LB_URL = import.meta.env.VITE_LB_URL || 'https://srv.quizngo.online'
+// Load Balancer URL - use the Vite proxy in dev to avoid browser CORS.
+const DEFAULT_LB_URL = 'https://srv.quizngo.online'
+const LB_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_LB_URL || DEFAULT_LB_URL).replace(/\/+$/, '')
+
+const INITIAL_GAME_STATUS = {
+  active: false,
+  gameStarted: false,
+  language: 'en',
+}
+
+const GAME_STATUS_POLL_MS = 1500
+const LOAD_GAME_STATUS_ATTEMPTS = 5
+const LOAD_GAME_STATUS_RETRY_DELAY_MS = 600
+
+const SERVER_CODE_MESSAGES = {
+  GAME_HAS_NOT_STARTED_YET_PLEASE_WAIT_FOR_THE_HOST: 'המשחק עדיין לא התחיל. יש להמתין למארח.',
+  NAME_ALREADY_IN_USE: 'השם "{{name}}" כבר בשימוש.',
+  NO_ACTIVE_GAME_FOUND_WITH_PIN: 'לא נמצא משחק פעיל עם הקוד {{gamePin}}.',
+  GAME_PIN_NOT_FOUND: 'קוד המשחק לא נמצא.',
+  GAME_SERVER_IS_UNAVAILABLE: 'שרת המשחק אינו זמין כרגע.',
+  ROOM_NOT_FOUND_ADD_IN_MUST_CREATE_ROOM_FIRST: 'החדר לא נמצא. יש ליצור חדר תחילה בתוסף.',
+  PLAYER_NOT_FOUND_PLEASE_JOIN_THE_GAME_AGAIN: 'השחקן לא נמצא. יש להצטרף מחדש.',
+  PLAYER_IS_DISCONNECTED_PLEASE_RECONNECT: 'השחקן מנותק. יש להתחבר מחדש.',
+  INVALID_GAME_PIN: 'קוד המשחק אינו תקין.',
+  GAME_CLOSED: 'המשחק נסגר.',
+  NO_ACTIVE_SERVERS_AVAILABLE: 'אין כרגע שרתי משחק זמינים.',
+  SERVER_ERROR: 'שגיאת שרת פנימית.',
+}
+
+function normalizePin(value = '') {
+  return String(value).replace(/[^0-9]/g, '')
+}
+
+function formatGamePin(value = '') {
+  const cleanPin = normalizePin(value)
+  if (cleanPin.length <= 3) {
+    return cleanPin
+  }
+  return `${cleanPin.slice(0, 3)}-${cleanPin.slice(3, 6)}`
+}
+
+function normalizeBaseUrl(url = '') {
+  return String(url).trim().replace(/\/+$/, '')
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function formatServerMessage(message, fallback = 'שגיאת שרת') {
+  if (!message) return fallback
+  if (typeof message === 'string') return message
+
+  if (typeof message === 'object') {
+    const code = typeof message.code === 'string' ? message.code.toUpperCase() : ''
+    if (!code) return fallback
+
+    const params = message.params || {}
+    const template = SERVER_CODE_MESSAGES[code] || code.replace(/_/g, ' ').toLowerCase()
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+      params[key] !== undefined ? String(params[key]) : '',
+    )
+  }
+
+  return fallback
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options)
+
+  let payload = null
+  try {
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok || payload?.status === 'error') {
+    const error = new Error(
+      formatServerMessage(payload?.message, payload?.error || `Request failed (${response.status})`),
+    )
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  return payload
+}
+
+async function fetchGameStatus(pin, baseUrl) {
+  const cleanPin = normalizePin(pin)
+  const cleanBaseUrl = normalizeBaseUrl(baseUrl)
+
+  if (cleanPin.length !== 6 || !cleanBaseUrl) {
+    return { ...INITIAL_GAME_STATUS, gamePin: cleanPin, serverUrl: cleanBaseUrl }
+  }
+
+  const payload = await requestJson(`${cleanBaseUrl}/?check_active_game&game_pin=${cleanPin}`)
+
+  return {
+    ...INITIAL_GAME_STATUS,
+    ...payload,
+    active: Boolean(payload.active),
+    gameStarted: Boolean(payload.gameStarted),
+    gamePin: cleanPin,
+    serverUrl: cleanBaseUrl,
+  }
+}
+
+async function fetchGameStatusWithRetry(pin, baseUrl, attempts = 1) {
+  let latestStatus = null
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    latestStatus = await fetchGameStatus(pin, baseUrl)
+
+    if (latestStatus.active) {
+      return latestStatus
+    }
+
+    if (attempt < attempts) {
+      await delay(LOAD_GAME_STATUS_RETRY_DELAY_MS)
+    }
+  }
+
+  return latestStatus || { ...INITIAL_GAME_STATUS, gamePin: normalizePin(pin), serverUrl: normalizeBaseUrl(baseUrl) }
+}
 
 function App() {
   const [connectedPlayers, setConnectedPlayers] = useState(new Set())
@@ -48,6 +174,7 @@ function App() {
   const [loading, setLoading] = useState({})
   const [loadingGamePin, setLoadingGamePin] = useState(false)
   const [serverUrl, setServerUrl] = useState(null) // Resolved game server URL
+  const [gameStatus, setGameStatus] = useState(INITIAL_GAME_STATUS)
   
   // Answer time state
   const [isAnswerTime, setIsAnswerTime] = useState(false) // Are we in answer time?
@@ -60,31 +187,90 @@ function App() {
 
   // Resolve server URL via LB when game PIN changes
   useEffect(() => {
-    if (!gamePin) {
-      setServerUrl(null)
-      return
-    }
-    const cleanPin = gamePin.replace(/-/g, '')
-    if (cleanPin.length !== 6) return
+    let cancelled = false
 
-    fetch(`${LB_URL}/api/resolve/${cleanPin}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          setServerUrl(data.server_url)
-          console.log('Server resolved via LB:', data.server_url)
-        } else {
-          // Failed to resolve - clear server URL
-          setServerUrl(null)
-          console.error('Failed to resolve PIN:', data.message)
-        }
-      })
-      .catch(err => {
-        // Network error or invalid response - clear server URL
+    async function resolveServerUrl() {
+      if (!gamePin) {
         setServerUrl(null)
-        console.error('Failed to resolve PIN via LB:', err)
-      })
+        setGameStatus(INITIAL_GAME_STATUS)
+        return
+      }
+
+      const cleanPin = normalizePin(gamePin)
+      if (cleanPin.length !== 6) {
+        setServerUrl(null)
+        setGameStatus(INITIAL_GAME_STATUS)
+        return
+      }
+
+      try {
+        const data = await requestJson(`${LB_URL}/api/resolve/${cleanPin}`)
+        if (cancelled) return
+
+        const resolvedServerUrl = normalizeBaseUrl(data.server_url)
+        setServerUrl(resolvedServerUrl)
+        console.log('Server resolved via LB:', resolvedServerUrl)
+      } catch (error) {
+        if (cancelled) return
+
+        setServerUrl(null)
+        setGameStatus(INITIAL_GAME_STATUS)
+        console.error('Failed to resolve PIN via LB:', error)
+      }
+    }
+
+    resolveServerUrl()
+
+    return () => {
+      cancelled = true
+    }
   }, [gamePin])
+
+  const refreshGameStatus = async (pin = gamePin, baseUrl = serverUrl) => {
+    const status = await fetchGameStatus(pin, baseUrl)
+    setGameStatus(status)
+    return status
+  }
+
+  // Keep the simulator in sync while a freshly-created room is waiting for Admin start.
+  useEffect(() => {
+    const cleanPin = normalizePin(gamePin)
+    const cleanServerUrl = normalizeBaseUrl(serverUrl)
+
+    if (cleanPin.length !== 6 || !cleanServerUrl) {
+      setGameStatus(INITIAL_GAME_STATUS)
+      return undefined
+    }
+
+    let cancelled = false
+
+    async function pollStatus() {
+      try {
+        const status = await fetchGameStatus(cleanPin, cleanServerUrl)
+        if (!cancelled) {
+          setGameStatus(status)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGameStatus(prev => ({
+            ...prev,
+            active: false,
+            gameStarted: false,
+            message: error.message,
+          }))
+          console.warn(`⚠️ Failed to refresh game status for ${cleanPin}:`, error)
+        }
+      }
+    }
+
+    pollStatus()
+    const intervalId = window.setInterval(pollStatus, GAME_STATUS_POLL_MS)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [gamePin, serverUrl])
 
   // Reset simulator when game PIN changes
   useEffect(() => {
@@ -108,6 +294,7 @@ function App() {
     setIsAnswerTime(false)
     setPlayerAnswers({})
     setPlayerResults({})
+    setCurrentQuestionTimestamp(null)
   }, [gamePin]) // Only when gamePin changes
 
   // Cleanup all sockets on unmount ONLY
@@ -120,25 +307,71 @@ function App() {
     }
   }, []) // Empty deps - only run on unmount
 
+  const resetSimulatorSessionAfterGameClosed = (closeData = {}) => {
+    const reasonCode = closeData?.reason?.code || closeData?.message?.params?.reason || 'unknown'
+    console.log(`🧹 Clearing simulator session after game close (reason: ${reasonCode})`)
+
+    Object.values(playerSocketsRef.current).forEach(socket => {
+      if (socket) socket.disconnect()
+    })
+
+    playerSocketsRef.current = {}
+    setGamePin('')
+    setServerUrl(null)
+    setGameStatus(INITIAL_GAME_STATUS)
+    setConnectedPlayers(new Set())
+    setPlayerUIDs({})
+    setPlayerSockets({})
+    setLoading({})
+    setIsAnswerTime(false)
+    setPlayerAnswers({})
+    setPlayerResults({})
+    setCurrentQuestionTimestamp(null)
+  }
+
+  const handleGameClosed = (player, closeData = {}) => {
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+    console.log(`🚫 GAME CLOSED for ${player.name}!`)
+    console.log('📦 Data:', closeData)
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+
+    resetSimulatorSessionAfterGameClosed(closeData)
+  }
+
   // חיבור משתתף
   const connectPlayer = async (player) => {
     if (!gamePin || gamePin.trim() === '') {
       alert('יש להזין Game PIN קודם!')
       return
     }
+
+    if (!serverUrl) {
+      alert('השרת של המשחק עדיין לא אותר. לחץ על "טען משחק" או המתן רגע.')
+      return
+    }
     
     setLoading(prev => ({ ...prev, [player.id]: true }))
+    let playerSocket = null
     
     try {
       console.log(`📥 Connecting player: ${player.name} to game PIN: ${gamePin}`)
       
       // Remove hyphen from game PIN before sending to server
-      const cleanGamePin = gamePin.replace(/-/g, '')
-      const playerIcon = PLAYER_ICONS[player.id] || '👤'; // Default if not found
+      const cleanGamePin = normalizePin(gamePin)
+      const playerIcon = PLAYER_ICONS[player.id] || '👤' // Default if not found
+      const latestStatus = await refreshGameStatus(cleanGamePin, serverUrl)
+
+      if (!latestStatus.active) {
+        throw new Error('לא נמצא משחק פעיל עם הקוד הזה.')
+      }
+
+      if (!latestStatus.gameStarted) {
+        throw new Error('המשחק נטען, אבל עדיין לא התחיל. לחץ Start ב-Admin ואז נסה שוב.')
+      }
       
       // 1. Create WebSocket FIRST to get socketId
       console.log(`🔌 Creating WebSocket for player: ${player.name}`)
-      const playerSocket = io(serverUrl, {
+      playerSocket = io(serverUrl, {
         transports: ['websocket', 'polling'],
         reconnection: false,
         forceNew: true
@@ -155,7 +388,7 @@ function App() {
       console.log(`✅ WebSocket connected for ${player.name}, socketId: ${playerSocket.id}`)
 
       // 2. Send single REST request with socketId to join AND register to room
-      const response = await fetch(`${serverUrl}/?join_player`, {
+      const data = await requestJson(`${serverUrl}/?join_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,140 +401,95 @@ function App() {
         })
       })
 
-      const data = await response.json()
       console.log(`✅ Player connected:`, data)
 
-      if (response.ok && data.uid) {
-        // Store the UID for this player
-        setPlayerUIDs(prev => ({ ...prev, [player.id]: data.uid }))
-        setConnectedPlayers(prev => new Set([...prev, player.id]))
-        console.log(`💾 Stored UID for ${player.name}: ${data.uid}, socket registered to room ${data.gamePin}`)
-
-        // Handle mid-game join: check game state from response
-        const gameState = data.gameState || 'waiting'
-        if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
-          console.log(`⏱️ Mid-question join for ${player.name}: ${data.remainingTime}s remaining`)
-          setIsAnswerTime(true)
-          setCurrentQuestionTimestamp(data.syncData?.timestamp || null)
-        } else {
-          // waiting / results / any other state — ensure answer mode is off
-          setIsAnswerTime(false)
-          if (gameState === 'results') {
-            console.log(`📊 ${player.name} joined between questions, waiting for next question`)
-          }
-        }
-
-        // Setup socket event handlers (socket was already created and connected above)
-        playerSocket.on('disconnect', () => {
-          console.log(`❌ WebSocket disconnected for ${player.name}`)
-        })
-
-        // Answer time events
-        playerSocket.on('answer_time_started', (answerData) => {
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          console.log(`🎯 ANSWER TIME STARTED! (detected by ${player.name})`)
-          console.log('📦 Data:', answerData)
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          
-          setIsAnswerTime(true)
-          
-          // Only reset answers/results if this is a NEW question (different timestamp)
-          setCurrentQuestionTimestamp(prev => {
-            if (prev !== answerData.timestamp) {
-              console.log(`🆕 New question detected, resetting state`)
-              setPlayerAnswers({}) // Reset answers for new question
-              setPlayerResults({}) // Reset results for new question
-            } else {
-              console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
-            }
-            return answerData.timestamp
-          })
-        })
-                // Game closed event - reset player to "join" state
-        playerSocket.on('game_closed', (closeData) => {
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          console.log(`🚫 GAME CLOSED for ${player.name}!`)
-          console.log('📦 Data:', closeData)
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          
-          // Disconnect this player's socket
-          playerSocket.disconnect()
-          
-          // Remove from ref
-          delete playerSocketsRef.current[player.id]
-          
-          // Reset player to "join" state - clear UID so they need to rejoin
-          setPlayerUIDs(prev => {
-            const newUIDs = { ...prev }
-            delete newUIDs[player.id]
-            return newUIDs
-          })
-          
-          // Remove from connected players
-          setConnectedPlayers(prev => {
-            const newSet = new Set(prev)
-            newSet.delete(player.id)
-            return newSet
-          })
-          
-          // Remove socket from state
-          setPlayerSockets(prev => {
-            const newSockets = { ...prev }
-            delete newSockets[player.id]
-            return newSockets
-          })
-          
-          // Clear answer state
-          setPlayerAnswers(prev => {
-            const newAnswers = { ...prev }
-            delete newAnswers[player.id]
-            return newAnswers
-          })
-          
-          setPlayerResults(prev => {
-            const newResults = { ...prev }
-            delete newResults[player.id]
-            return newResults
-          })
-          
-          console.log(`✅ ${player.name} reset to JOIN state due to game_closed (reason: ${closeData.reason})`)
-        })
-        // Player results event
-        playerSocket.on('player_results', (resultsData) => {
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          console.log(`📊 PLAYER RESULTS RECEIVED by ${player.name}!`)
-          console.log('📦 Data:', resultsData)
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          
-          // Store results by userId directly, we'll map to playerId in the render
-          setPlayerResults(prev => ({
-            ...prev,
-            [resultsData.userId]: {
-              questionScore: resultsData.questionScore,
-              cumulativeScore: resultsData.cumulativeScore,
-              rank: resultsData.rank,
-              isCorrect: resultsData.isCorrect,
-              answered: resultsData.answered,
-              nickname: resultsData.nickname
-            }
-          }))
-          
-          console.log(`✅ Stored results for userId ${resultsData.userId}:`, resultsData)
-          
-          // When we receive results, it means answer time has ended
-          setIsAnswerTime(false)
-        })
-
-        // Store the socket for this player in both state and ref
-        playerSocketsRef.current[player.id] = playerSocket
-        setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
-        
-      } else {
-        // Join failed - disconnect the socket we created
-        playerSocket.disconnect()
-        alert(`שגיאה בחיבור ${player.name}: ${data.message || data.error}`)
+      if (!data.uid) {
+        throw new Error('Server response is missing player UID')
       }
+
+      // Store the UID for this player
+      setPlayerUIDs(prev => ({ ...prev, [player.id]: data.uid }))
+      setConnectedPlayers(prev => new Set([...prev, player.id]))
+      console.log(`💾 Stored UID for ${player.name}: ${data.uid}, socket registered to room ${data.gamePin}`)
+
+      // Handle mid-game join: check game state from response
+      const gameState = data.gameState || 'waiting'
+      if (gameState === 'answering' && data.needsSync && data.remainingTime > 0) {
+        console.log(`⏱️ Mid-question join for ${player.name}: ${data.remainingTime}s remaining`)
+        setIsAnswerTime(true)
+        setCurrentQuestionTimestamp(data.syncData?.timestamp || null)
+      } else {
+        // waiting / results / any other state — ensure answer mode is off
+        setIsAnswerTime(false)
+        if (gameState === 'results') {
+          console.log(`📊 ${player.name} joined between questions, waiting for next question`)
+        }
+      }
+
+      // Setup socket event handlers (socket was already created and connected above)
+      playerSocket.on('disconnect', () => {
+        console.log(`❌ WebSocket disconnected for ${player.name}`)
+      })
+
+      // Answer time events
+      playerSocket.on('answer_time_started', (answerData) => {
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+        console.log(`🎯 ANSWER TIME STARTED! (detected by ${player.name})`)
+        console.log('📦 Data:', answerData)
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+
+        setIsAnswerTime(true)
+
+        // Only reset answers/results if this is a NEW question (different timestamp)
+        setCurrentQuestionTimestamp(prev => {
+          if (prev !== answerData.timestamp) {
+            console.log(`🆕 New question detected, resetting state`)
+            setPlayerAnswers({}) // Reset answers for new question
+            setPlayerResults({}) // Reset results for new question
+          } else {
+            console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
+          }
+          return answerData.timestamp
+        })
+        })
+
+      // Game closed/ended event - clear the simulator PIN so "load game" fetches the current one.
+      playerSocket.on('game_closed', (closeData) => handleGameClosed(player, closeData))
+      playerSocket.on('game_ended', (closeData) => handleGameClosed(player, closeData))
+
+      // Player results event
+      playerSocket.on('player_results', (resultsData) => {
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+        console.log(`📊 PLAYER RESULTS RECEIVED by ${player.name}!`)
+        console.log('📦 Data:', resultsData)
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+
+        // Store results by userId directly, we'll map to playerId in the render
+        setPlayerResults(prev => ({
+          ...prev,
+          [resultsData.userId]: {
+            questionScore: resultsData.questionScore,
+            cumulativeScore: resultsData.cumulativeScore,
+            rank: resultsData.rank,
+            isCorrect: resultsData.isCorrect,
+            answered: resultsData.answered,
+            nickname: resultsData.nickname
+          }
+        }))
+
+        console.log(`✅ Stored results for userId ${resultsData.userId}:`, resultsData)
+
+        // When we receive results, it means answer time has ended
+        setIsAnswerTime(false)
+      })
+
+      // Store the socket for this player in both state and ref
+      playerSocketsRef.current[player.id] = playerSocket
+      setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
     } catch (error) {
+      if (playerSocket) {
+        playerSocket.disconnect()
+      }
       console.error(`❌ Error connecting player:`, error)
       alert(`שגיאה בחיבור ${player.name}: ${error.message}`)
     } finally {
@@ -326,30 +514,10 @@ function App() {
     setLoading(prev => ({ ...prev, [player.id]: true }))
     
     try {
-      console.log(`📤 Disconnecting player: ${player.name} (UID: ${uid})`)
-      
-      // 1. Call leave_player endpoint to check if we should remove permanently (Lobby) or just disconnect
-      let shouldRemoveUID = false;
-      
-      try {
-        const response = await fetch(`${serverUrl}/?leave_player&uid=${uid}`, {
-          method: 'POST'
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ Leave response for ${player.name}:`, data);
-          if (data.removed) {
-            shouldRemoveUID = true;
-            console.log(`🧹 Server indicated permanent removal for ${player.name} (Lobby)`);
-          }
-        }
-      } catch (err) {
-        console.warn(`⚠️ Failed to call leave_player endpoint:`, err);
-        // Continue with local disconnect anyway
-      }
+      console.log(`📤 Temporarily disconnecting player: ${player.name} (UID: ${uid})`)
 
-      // 2. Disconnect socket
+      // Disconnecting the socket aligns with the server's reconnect model:
+      // the player stays in the registry with connected=false and can rejoin with the same UID.
       const playerSocket = playerSockets[player.id]
       if (playerSocket) {
         console.log(`🔌 Closing WebSocket for ${player.name} (connected: ${playerSocket.connected})`)
@@ -370,22 +538,12 @@ function App() {
         newSet.delete(player.id)
         return newSet
       })
-      
-      // 3. Clear UID if server said so (Lobby mode)
-      if (shouldRemoveUID) {
-         setPlayerUIDs(prev => {
-            const newUIDs = { ...prev }
-            delete newUIDs[player.id]
-            return newUIDs
-         })
-         console.log(`🧹 Cleared UID for ${player.name} - Reset to JOIN state`);
-      } else {
-         console.log(`💾 Note: We keep playerUIDs[player.id] so they can reconnect!`);
-      }
+
+      console.log(`💾 Preserved UID for ${player.name} so reconnect can restore the session`)
 
     } catch (error) {
       console.error(`❌ Error disconnecting player:`, error)
-      alert('שגיאה בניתוק ${player.name}: ${error.message}')
+      alert(`שגיאה בניתוק ${player.name}: ${error.message}`)
     } finally {
       setLoading(prev => ({ ...prev, [player.id]: false }))
     }
@@ -397,6 +555,11 @@ function App() {
       alert('יש להזין Game PIN קודם!')
       return
     }
+
+    if (!serverUrl) {
+      alert('השרת של המשחק עדיין לא אותר. לחץ על "טען משחק" או המתן רגע.')
+      return
+    }
     
     // Get the existing UID for this player
     const uid = playerUIDs[player.id]
@@ -406,15 +569,25 @@ function App() {
     }
     
     setLoading(prev => ({ ...prev, [player.id]: true }))
+    let playerSocket = null
     
     try {
       console.log(`🔄 Reconnecting player: ${player.name} (UID: ${uid})`)
       
-      const cleanGamePin = gamePin.replace(/-/g, '')
+      const cleanGamePin = normalizePin(gamePin)
+      const latestStatus = await refreshGameStatus(cleanGamePin, serverUrl)
+
+      if (!latestStatus.active) {
+        throw new Error('לא נמצא משחק פעיל עם הקוד הזה.')
+      }
+
+      if (!latestStatus.gameStarted) {
+        throw new Error('המשחק נטען, אבל עדיין לא התחיל. לחץ Start ב-Admin ואז נסה שוב.')
+      }
       
       // 1. Create WebSocket FIRST to get socketId
       console.log(`🔌 Creating WebSocket for reconnected player: ${player.name}`)
-      const playerSocket = io(serverUrl, {
+      playerSocket = io(serverUrl, {
         transports: ['websocket', 'polling'],
         reconnection: false,
         forceNew: true
@@ -430,7 +603,7 @@ function App() {
       console.log(`✅ WebSocket connected for ${player.name}, socketId: ${playerSocket.id}`)
 
       // 2. Send single REST request with socketId to rejoin AND register to room
-      const response = await fetch(`${serverUrl}/rejoin_player`, {
+      const data = await requestJson(`${serverUrl}/rejoin_player`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -442,139 +615,84 @@ function App() {
         })
       })
 
-      const data = await response.json()
       console.log(`✅ Rejoin response:`, data)
 
-      if (response.ok && data.status === 'success') {
-        console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.gamePin}`)
-        
-        // Handle sync data if player reconnected during answer time
-        const gameState = data.gameState || 'waiting'
-        if (gameState === 'answering' && data.syncData && data.remainingTime > 0) {
-          console.log(`🔄 Received sync data for ${player.name}: ${data.remainingTime}s remaining`, data.syncData)
-          setIsAnswerTime(true)
-          setCurrentQuestionTimestamp(data.syncData.timestamp)
-        } else {
-          // waiting / results / any other state — ensure answer mode is off
-          setIsAnswerTime(false)
-        }
+      console.log(`💾 Player ${player.name} rejoined, socket registered to room ${data.gamePin}`)
 
-        // Setup socket event handlers
-        playerSocket.on('disconnect', () => {
-          console.log(`❌ WebSocket disconnected for ${player.name}`)
-        })
-
-        // Listen for answer_time_started to restore game state
-        playerSocket.on('answer_time_started', (answerData) => {
-          console.log(`⏰ Answer time started for ${player.name}:`, answerData)
-          
-          setIsAnswerTime(true)
-          
-          // Only reset answers/results if this is a NEW question (different timestamp)
-          setCurrentQuestionTimestamp(prev => {
-            if (prev !== answerData.timestamp) {
-              console.log(`🆕 New question detected, resetting state`)
-              setPlayerAnswers({}) // Reset answers for new question
-              setPlayerResults({}) // Reset results for new question
-            } else {
-              console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
-            }
-            return answerData.timestamp
-          })
-        })
-
-        // Listen for player results
-        playerSocket.on('player_results', (resultsData) => {
-          console.log(`📊 Results for ${player.name}:`, resultsData)
-          
-          // Store results by userId, we'll map to playerId in render
-          setPlayerResults(prev => ({
-            ...prev,
-            [resultsData.userId]: resultsData
-          }))
-          
-          // When we receive results, it means answer time has ended
-          setIsAnswerTime(false)
-        })
-
-        // Game closed event - reset player to "join" state
-        playerSocket.on('game_closed', (closeData) => {
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          console.log(`🚫 GAME CLOSED for ${player.name}!`)
-          console.log('📦 Data:', closeData)
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-          
-          // Disconnect this player's socket
-          playerSocket.disconnect()
-          
-          // Remove from ref
-          delete playerSocketsRef.current[player.id]
-          
-          // Reset player to "join" state - clear UID so they need to rejoin
-          setPlayerUIDs(prev => {
-            const newUIDs = { ...prev }
-            delete newUIDs[player.id]
-            return newUIDs
-          })
-          
-          // Remove from connected players
-          setConnectedPlayers(prev => {
-            const newSet = new Set(prev)
-            newSet.delete(player.id)
-            return newSet
-          })
-          
-          // Remove socket from state
-          setPlayerSockets(prev => {
-            const newSockets = { ...prev }
-            delete newSockets[player.id]
-            return newSockets
-          })
-          
-          // Clear answer state
-          setPlayerAnswers(prev => {
-            const newAnswers = { ...prev }
-            delete newAnswers[player.id]
-            return newAnswers
-          })
-          
-          setPlayerResults(prev => {
-            const newResults = { ...prev }
-            delete newResults[player.id]
-            return newResults
-          })
-          
-          console.log(`✅ ${player.name} reset to JOIN state due to game_closed (reason: ${closeData.reason})`)
-        })
-
-        // Store socket in ref AND state
-        playerSocketsRef.current[player.id] = playerSocket
-        setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
-        
-        // Mark as connected
-        setConnectedPlayers(prev => new Set(prev).add(player.id))
-        
+      // Handle sync data if player reconnected during answer time
+      const gameState = data.gameState || 'waiting'
+      if (gameState === 'answering' && data.syncData && data.remainingTime > 0) {
+        console.log(`🔄 Received sync data for ${player.name}: ${data.remainingTime}s remaining`, data.syncData)
+        setIsAnswerTime(true)
+        setCurrentQuestionTimestamp(data.syncData.timestamp)
       } else {
-        console.warn(`❌ Rejoin failed with status ${response.status}: ${data.message}`)
-        
-        // Rejoin failed - disconnect the socket we created
-        playerSocket.disconnect()
-        
-        // If player not found (404), clear UID so they can join fresh
-        if (response.status === 404) {
-          console.log(`🧹 Player ${player.name} not found on server, clearing UID to allow fresh join`)
-          setPlayerUIDs(prev => {
-            const newUIDs = { ...prev }
-            delete newUIDs[player.id]
-            return newUIDs
-          })
-          alert(`שגיאה בהתחברות מחדש: השחקן לא נמצא בשרת (ייתכן שנמחק). אנא בצע הצטרפות מחדש.`) 
-        } else {
-          alert(`שגיאה בהתחברות מחדש: ${data.message || 'שגיאה לא ידועה'}`)
-        }
+        // waiting / results / any other state — ensure answer mode is off
+        setIsAnswerTime(false)
       }
+
+      // Setup socket event handlers
+      playerSocket.on('disconnect', () => {
+        console.log(`❌ WebSocket disconnected for ${player.name}`)
+      })
+
+      // Listen for answer_time_started to restore game state
+      playerSocket.on('answer_time_started', (answerData) => {
+        console.log(`⏰ Answer time started for ${player.name}:`, answerData)
+
+        setIsAnswerTime(true)
+
+        // Only reset answers/results if this is a NEW question (different timestamp)
+        setCurrentQuestionTimestamp(prev => {
+          if (prev !== answerData.timestamp) {
+            console.log(`🆕 New question detected, resetting state`)
+            setPlayerAnswers({}) // Reset answers for new question
+            setPlayerResults({}) // Reset results for new question
+          } else {
+            console.log(`🔄 Same question (reconnection sync), keeping existing answers`)
+          }
+          return answerData.timestamp
+        })
+      })
+
+      // Listen for player results
+      playerSocket.on('player_results', (resultsData) => {
+        console.log(`📊 Results for ${player.name}:`, resultsData)
+
+        // Store results by userId, we'll map to playerId in render
+        setPlayerResults(prev => ({
+          ...prev,
+          [resultsData.userId]: resultsData
+        }))
+
+        // When we receive results, it means answer time has ended
+        setIsAnswerTime(false)
+      })
+
+      // Game closed/ended event - clear the simulator PIN so "load game" fetches the current one.
+      playerSocket.on('game_closed', (closeData) => handleGameClosed(player, closeData))
+      playerSocket.on('game_ended', (closeData) => handleGameClosed(player, closeData))
+
+      // Store socket in ref AND state
+      playerSocketsRef.current[player.id] = playerSocket
+      setPlayerSockets(prev => ({ ...prev, [player.id]: playerSocket }))
+
+      // Mark as connected
+      setConnectedPlayers(prev => new Set(prev).add(player.id))
     } catch (error) {
+      if (playerSocket) {
+        playerSocket.disconnect()
+      }
       console.error(`❌ Error reconnecting player:`, error)
+
+      if (error.status === 404) {
+        console.log(`🧹 Player ${player.name} not found on server, clearing UID to allow fresh join`)
+        setPlayerUIDs(prev => {
+          const newUIDs = { ...prev }
+          delete newUIDs[player.id]
+          return newUIDs
+        })
+      }
+
       alert(`שגיאה בהתחברות מחדש ${player.name}: ${error.message}`)
     } finally {
       setLoading(prev => ({ ...prev, [player.id]: false }))
@@ -583,37 +701,59 @@ function App() {
   
   // טעינת משחק אוטומטי
   const loadGamePin = async () => {
-    // אם כבר הוזן PIN תקין - השתמש בו ואל תביא מה-LB
-    if (gamePin && gamePin.replace(/-/g, '').length === 6) {
-      console.log(`✅ Using existing PIN: ${gamePin}`)
-      return
-    }
-
     setLoadingGamePin(true)
     try {
       console.log('Loading active games from LB...')
-      const response = await fetch(`${LB_URL}/api/admin/pins`)
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch active games')
-      }
-      
-      const data = await response.json()
+      const data = await requestJson(`${LB_URL}/api/admin/pins`)
       console.log('📥 Received games:', data)
-      
-      if (data.status === 'success' && data.pins && data.pins.length > 0) {
-        // קח את ה-PIN האחרון (המשחק החדש ביותר לפי assigned_at)
-        const latestGame = data.pins.reduce((a, b) => a.assigned_at > b.assigned_at ? a : b)
-        const pin = latestGame.game_pin
 
-        // עיצוב עם קו מפריד
-        const formattedPin = `${pin.slice(0, 3)}-${pin.slice(3)}`
+      const sortedPins = Array.isArray(data.pins)
+        ? [...data.pins].sort((a, b) => Number(b.assigned_at || 0) - Number(a.assigned_at || 0))
+        : []
 
-        console.log(`✅ Loading latest game PIN: ${formattedPin}`)
-        setGamePin(formattedPin)
-      } else {
+      if (!sortedPins.length) {
         alert('אין משחקים פעילים כרגע')
+        return
       }
+
+      let selectedGame = null
+
+      for (const [index, pinMapping] of sortedPins.entries()) {
+        const pin = normalizePin(pinMapping.game_pin)
+        const candidateServerUrl = normalizeBaseUrl(pinMapping.server_address)
+
+        if (pin.length !== 6 || !candidateServerUrl) {
+          continue
+        }
+
+        try {
+          const attempts = index === 0 ? LOAD_GAME_STATUS_ATTEMPTS : 1
+          const latestGameStatus = await fetchGameStatusWithRetry(pin, candidateServerUrl, attempts)
+
+          if (latestGameStatus.active) {
+            selectedGame = {
+              pin,
+              serverUrl: candidateServerUrl,
+              status: latestGameStatus,
+            }
+            break
+          }
+        } catch (error) {
+          console.warn(`⚠️ Failed to validate game PIN ${pin}:`, error)
+        }
+      }
+
+      if (!selectedGame) {
+        alert('לא נמצא כרגע משחק פעיל לטעינה')
+        return
+      }
+
+      const formattedPin = formatGamePin(selectedGame.pin)
+
+      console.log(`✅ Loading latest active game PIN: ${formattedPin}`)
+      setGameStatus(selectedGame.status)
+      setServerUrl(selectedGame.serverUrl)
+      setGamePin(formattedPin)
     } catch (error) {
       console.error('❌ Error loading game PIN:', error)
       alert(`שגיאה בטעינת משחק: ${error.message}`)
@@ -621,9 +761,22 @@ function App() {
       setLoadingGamePin(false)
     }
   }
+
+  const cleanDisplayedPin = normalizePin(gamePin)
+  const hasValidGamePin = cleanDisplayedPin.length === 6
+  const canJoinGame = hasValidGamePin && Boolean(serverUrl) && gameStatus.active && gameStatus.gameStarted
+  const gameStatusText = !hasValidGamePin
+    ? ''
+    : !serverUrl
+      ? 'מחפש שרת למשחק...'
+      : !gameStatus.active
+        ? 'ה-PIN נטען, אבל החדר עדיין לא מוכן בשרת.'
+        : gameStatus.gameStarted
+          ? 'המשחק פעיל ומוכן להצטרפות.'
+          : 'המשחק נטען וממתין ללחיצה על Start ב-Admin.'
   
   // שליחת תשובה
-  const submitAnswer = (player, answerIndex) => {
+  const submitAnswer = async (player, answerIndex) => {
     if (!isAnswerTime) {
       alert('זמן המענה לא פעיל!')
       return
@@ -644,31 +797,26 @@ function App() {
     console.log(`   Using userId: ${uid}`)
     
     // Send answer to server via REST API (only userId needed, gamePin already stored in server)
-    fetch(`${serverUrl}/submit_answer`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        userId: uid,
-        answerIndex: answerIndex,
-        timestamp: Date.now()
+    try {
+      await requestJson(`${serverUrl}/submit_answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: uid,
+          answerIndex: answerIndex,
+          timestamp: Date.now()
+        })
       })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.status === 'success') {
-        // Update local state
-        setPlayerAnswers(prev => ({ ...prev, [player.id]: answerIndex }))
-        console.log(`✅ Answer sent for ${player.name}`)
-      } else {
-        alert(`שגיאה: ${data.message}`)
-      }
-    })
-    .catch(error => {
+
+      // Update local state
+      setPlayerAnswers(prev => ({ ...prev, [player.id]: answerIndex }))
+      console.log(`✅ Answer sent for ${player.name}`)
+    } catch (error) {
       console.error('Error sending answer:', error)
-      alert('שגיאה בשליחת התשובה!')
-    })
+      alert(`שגיאה בשליחת התשובה: ${error.message}`)
+    }
   }
 
   return (
@@ -747,6 +895,11 @@ function App() {
               {loadingGamePin ? '⏳ טוען...' : '📥 טען משחק'}
             </button>
           </div>
+          {gameStatusText && (
+            <div className={`game-status-line ${canJoinGame ? 'ready' : 'waiting'}`}>
+              {gameStatusText}
+            </div>
+          )}
         </div>
         <div className="info-card">
           <div className="info-label">מחוברים מהסימולטור:</div>
@@ -758,7 +911,7 @@ function App() {
         {FAKE_PLAYERS.map(player => {
           const isConnected = connectedPlayers.has(player.id)
           const isLoading = loading[player.id]
-          const isDisabled = !gamePin || gamePin.replace(/-/g, '').length !== 6 || !serverUrl
+          const isDisabled = !canJoinGame
           const playerAnswer = playerAnswers[player.id]
           
           // Get results by userId (not playerId)
@@ -975,9 +1128,3 @@ function App() {
 }
 
 export default App
-
-
-
-
-
-

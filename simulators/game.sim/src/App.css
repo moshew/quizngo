@@ -63,6 +63,21 @@ body {
   color: #667eea;
 }
 
+.game-status-line {
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.game-status-line.ready {
+  color: #10b981;
+}
+
+.game-status-line.waiting {
+  color: #f59e0b;
+}
+
 /* Controls */
 .controls {
   text-align: center;
@@ -255,7 +270,6 @@ body {
     grid-template-columns: 1fr;
   }
 }
-
 
 
 

@@ -52,6 +52,7 @@ export default {
         gameId: 'ゲームID',
         participantsCount: '参加者数',
         participantsList: '参加者リスト',
+        participantsHeader: 'Set as Participants Header',
         qrCode: 'QRコード',
         questionTime: '質問時間',
         respondersCount: '回答者数',
@@ -131,6 +132,8 @@ export default {
         addParticipantsList: '参加者リスト追加エラー',
         addAnswersDistribution: '回答分布追加エラー',
         addLeaderboard: 'リーダーボード追加エラー',
+        setParticipantsHeader: 'Error setting participants header',
+        selectShapeFirst: 'Please select an object first',
         selectSlideFirst: '先にスライドを選択してください',
     },
 

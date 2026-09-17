@@ -302,6 +302,65 @@ try {
 }
 ```
 
+### PowerPoint text alignment gotcha
+
+`PowerPoint.TextVerticalAlignment` has values that look vertical-only, but the `*Centered`
+variants also center the text frame contents horizontally as a group. Do not combine
+`middleCentered`, `topCentered`, or `bottomCentered` with a separate left/right paragraph
+alignment when text must stay pinned to one side.
+
+```javascript
+// Good: vertical centering and horizontal side anchoring are separate.
+shape.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+shape.textFrame.textRange.paragraphFormat.alignment = PowerPoint.ParagraphAlignment.left;
+
+// Avoid for side-pinned text: this can keep the visible text centered.
+shape.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middleCentered;
+shape.textFrame.textRange.paragraphFormat.alignment = PowerPoint.ParagraphAlignment.left;
+```
+
+This matters for participant avatar templates: the `Preview`/name text should use
+vertical `middle` plus paragraph `left`/`right`, while icon text can use paragraph
+`center` inside a smaller live icon textbox.
+
+### PowerPoint groups and participant templates
+
+Participant-list updates scan inside PowerPoint groups (`ShapeGroup.shapes`) as well
+as top-level slide shapes. If a tagged header shape is inside a group, the outer
+group is moved as one visual unit. This lets designers group the "Waiting for
+players..." visual with its tagged helper shape without losing dynamic placement.
+
+**Using a generic object as the header:** grouping alone does *not* make a custom
+visual the header — the header is identified only by the `quizngo-header=true` tag,
+which PowerPoint's UI can't add to an arbitrary shape/group. Use the **"Set as
+Participants Header"** action (`setSelectionAsParticipantsHeader()` in
+`participants_management.js`): select your custom shape/group and it gets tagged
+`quizngo-header=true` + `quizngo-header-role=title`, while the default generated
+header (title + count placeholders) on that slide is deleted so it isn't
+duplicated. A numeric-only child (e.g. a live "2") is auto-detected as the count.
+
+For live values, prefer tagging the exact text shape that should change. The
+participant header also has a compatibility helper: numeric-only text shapes
+inside a tagged header group are detected and tagged as
+`quizngo-participants-num=true` at runtime, so custom grouped waiting bars can
+keep their visible count in sync. When such an embedded count is found, an older
+standalone header count is cleared to avoid duplicate visible numbers.
+
+Avatar templates may group all background/decor shapes. Keep icon and name as
+separate `quizngo-avatar-role=icon` and `quizngo-avatar-role=name` text shapes
+when they should remain live; the grouped background/decor is rendered to PNG
+when `PowerPoint.Shape.getImageAsBase64` is available. The generated PNG is
+inserted as a rectangle with `ShapeFill.setImage`, because
+`ShapeCollection.addPicture` is a preview-only API. If image rendering is not
+available, all tagged background/decor parts are recreated as PowerPoint shapes
+as a visual fallback.
+
+Generated avatar cards carry a `quizngo-avatar-render-key` fingerprint. If the
+template geometry, background image, or icon/name text styling changes, the
+participant cards are rebuilt instead of reused. If the host does not support
+`PowerPointApi 1.10`, the system falls back to PowerPoint shapes but still uses
+the fingerprint so template edits propagate.
+
 ### ❌ DON'T
 ```javascript
 // Don't skip context.sync()

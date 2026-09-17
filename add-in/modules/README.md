@@ -122,6 +122,7 @@ modules/
 - `insertParticipantsNumButton()` - Insert count placeholder
 - `updateParticipantsListInSlides()` - Update participant list
 - `insertParticipantsListButton()` - Insert list placeholder
+- `setSelectionAsParticipantsHeader()` - Tag the selected generic shape/group as the participants header (replaces the default one)
 - `resetParticipantsNumInSlides()` - Reset counts to 0
 
 #### `question_timer.js` - Timer & Respondents
