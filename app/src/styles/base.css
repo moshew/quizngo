@@ -1,0 +1,77 @@
+/* ── Reset ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+html { overflow: hidden; overscroll-behavior: none; }
+body {
+  margin: 0;
+  font-family: var(--ui-font);
+  font-size: var(--ui-fs);
+  line-height: 1.45;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+button:disabled { cursor: not-allowed; }
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; }
+h1, h2, h3, h4, p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+hr { border: 0; border-top: 1px solid var(--ui-border); margin: 0; }
+::selection { background: rgba(161,107,255,0.45); }
+
+:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; border-radius: 4px; }
+[contenteditable]:focus-visible { outline: none; }
+
+/* Scrollbars */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); background-clip: padding-box; border: 2px solid transparent; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Utilities ─────────────────────────────────────────────────── */
+.row { display: flex; align-items: center; gap: 8px; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.wrap { flex-wrap: wrap; }
+.gap-4 { gap: 4px; } .gap-6 { gap: 6px; } .gap-12 { gap: 12px; } .gap-16 { gap: 16px; }
+.muted { color: var(--ui-text-2); }
+.dim { color: var(--ui-text-3); }
+.small { font-size: var(--ui-fs-sm); }
+.xs { font-size: var(--ui-fs-xs); }
+.bold { font-weight: 700; }
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.center { display: flex; align-items: center; justify-content: center; }
+.ltr { direction: ltr; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.fade-in { animation: ui-fade-in var(--ui-dur) var(--ui-ease); }
+.pop-in { animation: ui-pop-in 220ms var(--ui-ease); }
+.slide-up { animation: ui-slide-up 220ms var(--ui-ease); }
+
+/* ── Brand screens (login / gallery hero) ──────────────────────── */
+.brand-bg {
+  position: relative;
+  background: var(--qng-bg-idle);
+  overflow: hidden;
+}
+.brand-bg::before, .brand-bg::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: .55;
+  pointer-events: none;
+}
+.brand-bg::before { width: 520px; height: 520px; background: #FFD400; inset-block-start: -180px; inset-inline-end: -140px; }
+.brand-bg::after  { width: 460px; height: 460px; background: #6B2BFF; inset-block-end: -200px; inset-inline-start: -160px; }
+
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.confetti i {
+  position: absolute; display: block; width: 12px; height: 12px; border-radius: 3px;
+  opacity: .7; animation: ui-float 4.5s ease-in-out infinite;
+}

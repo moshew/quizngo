@@ -19,6 +19,7 @@ For specific behavior, prefer focused docs instead of guessing:
 - Dynamic tags/buttons: [instructions/DYNAMIC_BUTTONS_TAGS_GUIDE.md](instructions/DYNAMIC_BUTTONS_TAGS_GUIDE.md)
 - Dashboard target behavior: [dashboard/SYSTEM_SPEC.md](dashboard/SYSTEM_SPEC.md)
 - Known backend bottlenecks: [srv/BOTTLENECK_ANALYSIS.md](srv/BOTTLENECK_ANALYSIS.md)
+- Web quiz editor (Studio) spec & plan: [app/SPEC.md](app/SPEC.md), [app/PLAN.md](app/PLAN.md), [app/README.md](app/README.md)
 
 ## 2) Reliable Dev Commands
 
@@ -41,6 +42,8 @@ Default local ports:
 - `admin`: 3002
 - `dashboard`: 5010
 - `simulators/game.sim`: 3001
+- `app` (Studio editor UI): 3004
+- `app/server` (Studio API): 5020
 
 ## 3) System Boundaries (Do Not Blur)
 
@@ -49,6 +52,7 @@ Default local ports:
 - `game` and `admin` resolve via LB and then communicate with assigned `srv`.
 - `dashboard` is ops-facing and calls LB admin endpoints directly.
 - `add-in` orchestrates PowerPoint-side game flow and content updates.
+- `app` + `app/server` are the web replacement for PowerPoint authoring: they own quiz documents and image assets, and do not talk to `srv`/`srv-lb` (game hosting from the web app is a later stage).
 
 ## 4) Repo Conventions That Matter
 

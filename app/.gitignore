@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+npm-debug.log*
+
+# API server
+server/.venv/
+server/data/
+server/__pycache__/
+server/**/__pycache__/
+server/logs/
